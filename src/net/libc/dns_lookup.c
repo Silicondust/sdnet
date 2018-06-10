@@ -1,5 +1,5 @@
 /*
- * ./src/net/libc/dns_lookup.c
+ * dns_lookup.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -84,7 +84,7 @@ static bool dns_lookup_gethostbyname_execute(void *arg)
 	dns->callback_result = ntohl(sock_addr->sin_addr.s_addr);
 	freeaddrinfo(sock_info);
 
-	DEBUG_INFO("dns_lookup_gethostbylabel: %s = %v", dns->name_to_lookup, dns->callback_result);
+	DEBUG_TRACE("dns_lookup_gethostbylabel: %s = %v", dns->name_to_lookup, dns->callback_result);
 	return true;
 }
 

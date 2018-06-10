@@ -1,5 +1,5 @@
 /*
- * ./src/timer/windows/timer.h
+ * timer.h
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

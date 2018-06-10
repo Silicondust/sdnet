@@ -1,5 +1,5 @@
 /*
- * ./src/file/windows/dir_utils.c
+ * dir_utils.c
  *
  * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -20,6 +20,7 @@ THIS_FILE("dir_utils");
 
 struct dir_t {
 	HANDLE find_handle;
+	struct dirent result;
 	uint16_t search_pattern_wstr[0];
 };
 
@@ -56,32 +57,30 @@ static unsigned char readdir_file_attributes_to_type(DWORD file_attributes)
 	return DT_REG;
 }
 
-int readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)
+struct dirent *readdir(DIR *dirp)
 {
 	WIN32_FIND_DATAW find_file_data;
 
 	if (dirp->find_handle == INVALID_HANDLE_VALUE) {
 		dirp->find_handle = FindFirstFileW((wchar_t *)dirp->search_pattern_wstr, &find_file_data);
 		if (dirp->find_handle == INVALID_HANDLE_VALUE) {
-			*result = NULL;
-			return 0;
+			return NULL;
 		}
 
-		entry->d_type = readdir_file_attributes_to_type(find_file_data.dwFileAttributes);
-		str_utf16_to_utf8(entry->d_name, entry->d_name + sizeof(entry->d_name), (uint16_t *)find_file_data.cFileName);
-		*result = entry;
-		return 0;
+		struct dirent *result = &dirp->result;
+		result->d_type = readdir_file_attributes_to_type(find_file_data.dwFileAttributes);
+		str_utf16_to_utf8(result->d_name, result->d_name + sizeof(result->d_name), (uint16_t *)find_file_data.cFileName);
+		return result;
 	}
 
 	if (!FindNextFileW(dirp->find_handle, &find_file_data)) {
-		*result = NULL;
-		return 0;
+		return NULL;
 	}
 
-	entry->d_type = readdir_file_attributes_to_type(find_file_data.dwFileAttributes);
-	str_utf16_to_utf8(entry->d_name, entry->d_name + sizeof(entry->d_name), (uint16_t *)find_file_data.cFileName);
-	*result = entry;
-	return 0;
+	struct dirent *result = &dirp->result;
+	result->d_type = readdir_file_attributes_to_type(find_file_data.dwFileAttributes);
+	str_utf16_to_utf8(result->d_name, result->d_name + sizeof(result->d_name), (uint16_t *)find_file_data.cFileName);
+	return result;
 }
 
 void rewinddir(DIR *dirp)

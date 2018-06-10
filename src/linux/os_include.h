@@ -1,5 +1,5 @@
 /*
- * ./src/linux/os_include.h
+ * os_include.h
  *
  * Copyright © 2007-2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -51,6 +51,10 @@
 
 #define min(a, b) ((a) <= (b) ? (a) : (b))
 #define max(a, b) ((a) >= (b) ? (a) : (b))
+
+#if !defined(alignas)
+#define alignas(n) __attribute__((aligned(n)))
+#endif
 
 #ifndef __addr_t_defined
 #define __addr_t_defined

@@ -1,5 +1,5 @@
 /*
- * ./src/web/url.h
+ * url.h
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -33,3 +33,5 @@ extern bool url_parse_nb(struct url_t *output, struct netbuf *nb);
 extern bool url_parse_nb_with_base(struct url_t *output, struct url_t *base, struct netbuf *nb);
 
 extern bool url_append_parameter(struct url_t *url, const char *name, const char *value);
+
+extern bool url_compare(struct url_t *a, struct url_t *b);

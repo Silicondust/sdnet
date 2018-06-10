@@ -1,5 +1,5 @@
 /*
- * ./src/text/char_utf8.c
+ * char_utf8.c
  *
  * Copyright © 2008 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

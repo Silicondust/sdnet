@@ -1,5 +1,5 @@
 /*
- * ./src/appfs/bsd/appfs.c
+ * appfs.c
  *
  * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

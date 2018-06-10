@@ -1,5 +1,5 @@
 /*
- * ./src/thread/windows/thread.c
+ * thread.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

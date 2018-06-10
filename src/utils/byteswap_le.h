@@ -1,5 +1,5 @@
 /*
- * ./src/utils/byteswap_le.h
+ * byteswap_le.h
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

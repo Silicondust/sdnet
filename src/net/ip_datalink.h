@@ -1,5 +1,5 @@
 /*
- * ./src/net/ip_datalink.h
+ * ip_datalink.h
  *
  * Copyright © 2007-2015 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

@@ -1,5 +1,5 @@
 /*
- * ./src/crypto/windows/crypto.h
+ * crypto.h
  *
  * Copyright © 2017 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

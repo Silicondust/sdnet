@@ -1,5 +1,5 @@
 /*
- * ./src/file/bsd/dir_change_notification.c
+ * dir_change_notification.c
  *
  * Copyright © 2014-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

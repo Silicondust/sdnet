@@ -1,5 +1,5 @@
 /*
- * ./src/thread/long_task.c
+ * long_task.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -42,7 +42,7 @@ static void long_task_execute(void)
 	void *arg = (void *)mqueue_read_handle(long_task_manager.mqueue);
 	mqueue_read_complete(long_task_manager.mqueue);
 
-	DEBUG_INFO("executing long task %p", execute);
+	DEBUG_TRACE("executing long task %p", execute);
 	bool result = execute(arg);
 
 	long_task_result_func_t on_result = (result) ? on_success : on_error;
@@ -74,7 +74,7 @@ static void long_task_thread_start(void *arg)
 bool long_task_enqueue(long_task_execute_func_t execute, long_task_result_func_t on_success, long_task_result_func_t on_error, void *arg)
 {
 	DEBUG_ASSERT(thread_is_main_thread(), "long_task_enqueue called from unsupported thread");
-	DEBUG_INFO("long_task_enqueue %p", execute);
+	DEBUG_TRACE("long_task_enqueue %p", execute);
 
 	if (!mqueue_write_request(long_task_manager.mqueue, long_task_execute, 4 * MQUEUE_SIZEOF(void *))) {
 		DEBUG_WARN("queue full");

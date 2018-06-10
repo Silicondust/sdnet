@@ -1,5 +1,5 @@
 /*
- * ./src/timer/oneshot.c
+ * oneshot.c
  *
  * Copyright © 2007-2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

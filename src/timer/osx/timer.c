@@ -1,5 +1,5 @@
 /*
- * ./src/timer/osx/timer.c
+ * timer.c
  *
  * Copyright © 2008-2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

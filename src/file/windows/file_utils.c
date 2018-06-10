@@ -1,5 +1,5 @@
 /*
- * ./src/file/windows/file_utils.c
+ * file_utils.c
  *
  * Copyright © 2014-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

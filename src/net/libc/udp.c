@@ -1,5 +1,5 @@
 /*
- * ./src/net/libc/udp.c
+ * udp.c
  *
  * Copyright © 2007-2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -40,7 +40,9 @@ static struct udp_manager_t udp_manager;
 static void udp_socket_trigger_poll(void)
 {
 	uint8_t v = 0;
-	write(udp_manager.socket_poll_trigger_fd, &v, 1);
+	if (write(udp_manager.socket_poll_trigger_fd, &v, 1) != 1) {
+		DEBUG_WARN("udp trigger failed");
+	}
 }
 
 udp_error_t udp_socket_send_netbuf(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
@@ -306,7 +308,9 @@ static void udp_manager_thread_execute(void *arg)
 		struct pollfd *poll_fds = udp_manager.socket_poll_fds;
 		if (poll_fds->revents) {
 			uint8_t dummy[32];
-			read(poll_fds->fd, dummy, sizeof(dummy));
+			if (read(poll_fds->fd, dummy, sizeof(dummy)) < 0) {
+				/* Nothing needs to be done on error */
+			}
 		}
 
 		poll_fds++;

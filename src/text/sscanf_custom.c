@@ -1,5 +1,5 @@
 /*
- * ./src/text/sscanf_custom.c
+ * sscanf_custom.c
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

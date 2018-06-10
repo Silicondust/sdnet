@@ -1,5 +1,5 @@
 /*
- * ./src/net/igmp.h
+ * igmp.h
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

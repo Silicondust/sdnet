@@ -1,5 +1,5 @@
 /*
- * ./src/unix_time/bsd/unix_time.c
+ * unix_time.c
  *
  * Copyright © 2015 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

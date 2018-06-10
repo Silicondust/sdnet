@@ -1,5 +1,5 @@
 /*
- * ./src/crypto/rc5.c
+ * rc5.c
  *
  * Copyright © 2018 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

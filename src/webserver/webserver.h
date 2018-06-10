@@ -1,5 +1,5 @@
 /*
- * ./src/webserver/webserver.h
+ * webserver.h
  *
  * Copyright © 2011-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

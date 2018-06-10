@@ -1,5 +1,5 @@
 /*
- * ./src/utils/hmap.c
+ * hmap.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

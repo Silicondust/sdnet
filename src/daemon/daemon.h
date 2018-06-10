@@ -1,5 +1,5 @@
 /*
- * ./src/daemon/daemon.h
+ * daemon.h
  *
  * Copyright © 2015 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

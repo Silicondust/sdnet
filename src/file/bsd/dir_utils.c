@@ -1,5 +1,5 @@
 /*
- * ./src/file/bsd/dir_utils.c
+ * dir_utils.c
  *
  * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

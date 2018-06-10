@@ -1,5 +1,5 @@
 /*
- * ./src/file/filename_utils.c
+ * filename_utils.c
  *
  * Copyright © 2015 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

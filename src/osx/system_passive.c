@@ -1,5 +1,5 @@
 /*
- * ./src/osx/system_passive.c
+ * system_passive.c
  *
  * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

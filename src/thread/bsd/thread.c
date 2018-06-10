@@ -1,5 +1,5 @@
 /*
- * ./src/thread/bsd/thread.c
+ * thread.c
  *
  * Copyright © 2012-2015 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

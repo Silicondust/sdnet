@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/gena_service.c
+ * gena_service.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

@@ -1,5 +1,5 @@
 /*
- * ./src/text/sprintf_custom.c
+ * sprintf_custom.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

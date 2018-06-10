@@ -1,5 +1,5 @@
 /*
- * ./src/net/libc/tcp.h
+ * tcp.h
  *
  * Copyright © 2007-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -21,10 +21,12 @@ struct tcp_connection {
 	int sock;
 	uint8_t ttl;
 	uint8_t tos;
+	bool recv_event_received_while_paused;
 	bool close_event_received;
 	bool close_after_sending;
 	bool app_closed;
 	volatile bool dead;
+	volatile bool recv_paused;
 	volatile struct netbuf *send_nb;
 	size_t max_recv_nb_size;
 	size_t send_buffer_size;

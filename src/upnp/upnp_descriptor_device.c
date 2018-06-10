@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/upnp_descriptor_device.c
+ * upnp_descriptor_device.c
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

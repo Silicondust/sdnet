@@ -1,5 +1,5 @@
 /*
- * ./src/net/windows/tcp.h
+ * tcp.h
  *
  * Copyright © 2007-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

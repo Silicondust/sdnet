@@ -1,5 +1,5 @@
 /*
- * ./src/flash/flash_spi25.c
+ * flash_spi25.c
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

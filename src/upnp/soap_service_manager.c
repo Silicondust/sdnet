@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/soap_service_manager.c
+ * soap_service_manager.c
  *
  * Copyright © 2011-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

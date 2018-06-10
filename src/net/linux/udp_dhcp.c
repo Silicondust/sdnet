@@ -1,5 +1,5 @@
 /*
- * ./src/net/linux/udp_dhcp.c
+ * udp_dhcp.c
  *
  * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

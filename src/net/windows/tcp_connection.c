@@ -1,5 +1,5 @@
 /*
- * ./src/net/windows/tcp_connection.c
+ * tcp_connection.c
  *
  * Copyright © 2007-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -35,10 +35,12 @@ struct tcp_connection {
 	HANDLE event_handle;
 	uint8_t ttl;
 	uint8_t tos;
+	bool recv_event_received_while_paused;
 	bool close_event_received;
 	bool close_after_sending;
 	bool app_closed;
 	volatile bool dead;
+	volatile bool recv_paused;
 	volatile struct netbuf *send_nb;
 	size_t max_recv_nb_size;
 	size_t send_buffer_size;
@@ -164,6 +166,21 @@ uint16_t tcp_connection_get_remote_port(struct tcp_connection *tc)
 	socklen_t addr_len = sizeof(remote_addr);
 	getpeername(tc->sock, (struct sockaddr *)&remote_addr, &addr_len);
 	return ntohs(remote_addr.sin_port);
+}
+
+void tcp_connection_pause_recv(struct tcp_connection *tc)
+{
+	tc->recv_paused = true;
+}
+
+void tcp_connection_resume_recv(struct tcp_connection *tc)
+{
+	if (!tc->recv_paused || tc->app_closed) {
+		return;
+	}
+
+	tc->recv_paused = false;
+	SetEvent(tcp_manager.connection_poll_signal);
 }
 
 tcp_error_t tcp_connection_can_send(struct tcp_connection *tc)
@@ -373,7 +390,7 @@ static void tcp_connection_thread_est(struct tcp_connection *tc, WSANETWORKEVENT
 	}
 
 	if (network_events->lNetworkEvents & FD_WRITE) {
-		DEBUG_INFO("connection established");
+		DEBUG_TRACE("connection established");
 		tcp_manager.network_ok_indication = true;
 		tc->established_timeout = 0;
 
@@ -399,26 +416,28 @@ static void tcp_connection_thread_est(struct tcp_connection *tc, WSANETWORKEVENT
 
 static void tcp_connection_thread_normal(struct tcp_connection *tc, WSANETWORKEVENTS *network_events)
 {
+	if (tc->send_nb) {
+		tcp_connection_thread_send(tc);
+	}
+
 	if (network_events->lNetworkEvents & FD_CLOSE) {
 		tc->close_event_received = true;
 	}
 
-	if (tc->close_event_received) {
-		if (network_events->lNetworkEvents & FD_READ) {
-			tcp_connection_thread_recv(tc);
+	if ((network_events->lNetworkEvents & FD_READ) || tc->recv_event_received_while_paused) {
+		if (tc->recv_paused) {
+			tc->recv_event_received_while_paused = true;
 			return;
 		}
 
-		tc->dead = true;
+		tc->recv_event_received_while_paused = false;
+		tcp_connection_thread_recv(tc);
 		return;
 	}
 
-	if (network_events->lNetworkEvents & FD_READ) {
-		tcp_connection_thread_recv(tc);
-	}
-
-	if (tc->send_nb) {
-		tcp_connection_thread_send(tc);
+	if (tc->close_event_received) {
+		tc->dead = true;
+		return;
 	}
 }
 

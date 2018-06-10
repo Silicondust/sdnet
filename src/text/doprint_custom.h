@@ -1,5 +1,5 @@
 /*
- * ./src/text/doprint_custom.h
+ * doprint_custom.h
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

@@ -1,5 +1,5 @@
 /*
- * ./src/net/libc/tcp_connection.c
+ * tcp_connection.c
  *
  * Copyright © 2007-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -27,7 +27,9 @@ THIS_FILE("tcp_connection");
 void tcp_connection_trigger_poll(void)
 {
 	uint8_t v = 0;
-	write(tcp_manager.connection_poll_trigger_fd, &v, 1);
+	if (write(tcp_manager.connection_poll_trigger_fd, &v, 1) != 1) {
+		DEBUG_WARN("tcp connection trigger failed");
+	}
 }
 
 struct tcp_connection *tcp_connection_ref(struct tcp_connection *tc)
@@ -128,6 +130,21 @@ uint16_t tcp_connection_get_remote_port(struct tcp_connection *tc)
 	socklen_t addr_len = sizeof(remote_addr);
 	getpeername(tc->sock, (struct sockaddr *)&remote_addr, &addr_len);
 	return ntohs(remote_addr.sin_port);
+}
+
+void tcp_connection_pause_recv(struct tcp_connection *tc)
+{
+	tc->recv_paused = true;
+}
+
+void tcp_connection_resume_recv(struct tcp_connection *tc)
+{
+	if (!tc->recv_paused || tc->app_closed) {
+		return;
+	}
+
+	tc->recv_paused = false;
+	tcp_connection_trigger_poll();
 }
 
 tcp_error_t tcp_connection_can_send(struct tcp_connection *tc)
@@ -473,6 +490,26 @@ static void tcp_connection_thread_delete_connection_from_poll_fds(struct pollfd 
 	memmove(poll_fds, poll_fds + 1, move_count * sizeof(struct pollfd));
 }
 
+static inline void tcp_connection_update_send_event_mask(struct tcp_connection *tc, struct pollfd *poll_fds)
+{
+	if (UNLIKELY(tc->send_nb)) {
+		poll_fds->events |= POLLOUT;
+		return;
+	}
+
+	poll_fds->events &= ~POLLOUT;
+}
+
+static inline void tcp_connection_update_recv_event_mask(struct tcp_connection *tc, struct pollfd *poll_fds)
+{
+	if (UNLIKELY(tc->recv_event_received_while_paused)) {
+		poll_fds->events &= ~POLLIN;
+		return;
+	}
+
+	poll_fds->events |= POLLIN;
+}
+
 static void tcp_connection_thread_execute_est(struct tcp_connection *tc, struct pollfd *poll_fds)
 {
 	if (poll_fds->revents & (POLLERR | POLLHUP | POLLNVAL)) {
@@ -482,10 +519,11 @@ static void tcp_connection_thread_execute_est(struct tcp_connection *tc, struct 
 	}
 
 	if (poll_fds->revents & POLLOUT) {
-		DEBUG_INFO("connection established");
+		DEBUG_TRACE("connection established");
 		tcp_manager.network_ok_indication = true;
 		tc->established_timeout = 0;
-		poll_fds->events = POLLIN;
+		tcp_connection_update_send_event_mask(tc, poll_fds);
+		tcp_connection_update_recv_event_mask(tc, poll_fds);
 
 		if (tc->est_callback && !tc->app_closed) {
 			thread_main_enter();
@@ -505,31 +543,31 @@ static void tcp_connection_thread_execute_est(struct tcp_connection *tc, struct 
 
 static void tcp_connection_thread_execute_active(struct tcp_connection *tc, struct pollfd *poll_fds)
 {
+	if (tc->send_nb) {
+		tcp_connection_thread_send(tc);
+		tcp_connection_update_send_event_mask(tc, poll_fds);
+	}
+
 	if (poll_fds->revents & (POLLERR | POLLHUP | POLLNVAL)) {
 		tc->close_event_received = true;
 	}
 
-	if (tc->close_event_received) {
-		if (poll_fds->revents & POLLIN) {
-			tcp_connection_thread_recv(tc);
+	if ((poll_fds->revents & POLLIN) || tc->recv_event_received_while_paused) {
+		if (tc->recv_paused) {
+			tc->recv_event_received_while_paused = true;
+			tcp_connection_update_recv_event_mask(tc, poll_fds);
 			return;
 		}
 
-		tc->dead = true;
+		tc->recv_event_received_while_paused = false;
+		tcp_connection_update_recv_event_mask(tc, poll_fds);
+		tcp_connection_thread_recv(tc);
 		return;
 	}
 
-	if (poll_fds->revents & POLLIN) {
-		tcp_connection_thread_recv(tc);
-	}
-
-	if (tc->send_nb) {
-		tcp_connection_thread_send(tc);
-		if (tc->send_nb) {
-			poll_fds->events = POLLIN | POLLOUT;
-		} else {
-			poll_fds->events = POLLIN;
-		}
+	if (tc->close_event_received) {
+		tc->dead = true;
+		return;
 	}
 }
 
@@ -548,7 +586,9 @@ void tcp_connection_thread_execute(void *arg)
 		struct pollfd *poll_fds = tcp_manager.connection_poll_fds;
 		if (poll_fds->revents) {
 			uint8_t dummy[32];
-			read(poll_fds->fd, dummy, sizeof(dummy));
+			if (read(poll_fds->fd, dummy, sizeof(dummy)) < 0) {
+				/* Nothing needs to be done on error */
+			}
 		}
 
 		poll_fds++;

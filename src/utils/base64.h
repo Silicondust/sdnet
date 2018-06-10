@@ -1,5 +1,5 @@
 /*
- * ./src/utils/base64.h
+ * base64.h
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

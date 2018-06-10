@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/soap_action.c
+ * soap_action.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

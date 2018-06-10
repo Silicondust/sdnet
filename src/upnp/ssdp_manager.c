@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/ssdp_manager.c
+ * ssdp_manager.c
  *
  * Copyright © 2011-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

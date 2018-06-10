@@ -1,5 +1,5 @@
 /*
- * ./src/os_enums.h
+ * os_enums.h
  *
  * Copyright © 2012-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

@@ -1,5 +1,5 @@
 /*
- * ./src/default/netbuf.c
+ * netbuf.c
  *
  * Copyright © 2007-2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -348,7 +348,6 @@ addr_t netbuf_fwd_strstr(struct netbuf *nb, const char *s)
 	return (addr_t)strstr((char *)nb->pos, s);
 }
 
-#if !defined(WIN32)
 addr_t netbuf_fwd_strcasestr(struct netbuf *nb, const char *s)
 {
 	DEBUG_ASSERT(nb->end + 1 <= nb->limit, "no space for netbuf string termination (%p %p)", nb->end, nb->limit);
@@ -356,7 +355,6 @@ addr_t netbuf_fwd_strcasestr(struct netbuf *nb, const char *s)
 
 	return (addr_t)strcasestr((char *)nb->pos, s);
 }
-#endif
 
 int netbuf_fwd_memcmp(struct netbuf *nb, const void *s, size_t count)
 {

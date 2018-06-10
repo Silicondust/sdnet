@@ -1,5 +1,5 @@
 /*
- * ./src/utils/mem_int.h
+ * mem_int.h
  *
  * Copyright © 2011,2018 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

@@ -1,5 +1,5 @@
 /*
- * ./src/net/dns_lookup.c
+ * dns_lookup.c
  *
  * Copyright © 2012-2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

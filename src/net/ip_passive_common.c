@@ -1,5 +1,5 @@
 /*
- * ./src/net/ip_passive_common.c
+ * ip_passive_common.c
  *
  * Copyright © 2012-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

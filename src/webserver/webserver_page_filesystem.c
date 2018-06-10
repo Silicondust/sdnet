@@ -1,5 +1,5 @@
 /*
- * ./src/webserver/webserver_page_filesystem.c
+ * webserver_page_filesystem.c
  *
  * Copyright © 2011-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

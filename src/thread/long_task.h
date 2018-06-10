@@ -1,5 +1,5 @@
 /*
- * ./src/thread/long_task.h
+ * long_task.h
  *
  * Copyright © 2010 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

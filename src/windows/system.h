@@ -1,5 +1,5 @@
 /*
- * ./src/windows/system.h
+ * system.h
  *
  * Copyright © 2007 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

@@ -1,5 +1,5 @@
 /*
- * ./src/utils/dlist.h
+ * dlist.h
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

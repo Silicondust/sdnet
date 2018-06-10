@@ -1,5 +1,5 @@
 /*
- * ./src/log.h
+ * log.h
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -18,8 +18,8 @@ extern void log_warning(const char *class_name, const char *fmt, ...);
 extern void log_info(const char *class_name, const char *fmt, ...);
 extern void log_trace(const char *class_name, const char *fmt, ...);
 extern void log_vtrace(const char *class_name, const char *fmt, va_list ap);
-extern void log_trace_dump_array(const char *class_name, uint8_t *data, size_t length);
-extern void log_trace_dump_netbuf(const char *class_name, struct netbuf *nb);
+extern void log_trace_dump_array(const char *class_name, const char *prefix, uint8_t *data, size_t length);
+extern void log_trace_dump_netbuf(const char *class_name, const char *prefix, struct netbuf *nb);
 
 extern struct log_reader_t *log_reader_alloc(struct log_manager_t *log_manager);
 extern void log_reader_free(struct log_reader_t *reader);

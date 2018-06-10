@@ -1,5 +1,5 @@
 /*
- * ./src/web/xml_parser.c
+ * xml_parser.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

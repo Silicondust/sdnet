@@ -1,5 +1,5 @@
 /*
- * ./src/linux/arch_generic.c
+ * arch_generic.c
  *
  * Copyright © 2017 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

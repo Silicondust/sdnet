@@ -246,5 +246,8 @@
     <ClCompile Include="..\timer\windows\timer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="strcasestr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

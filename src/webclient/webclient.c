@@ -1,5 +1,5 @@
 /*
- * ./src/webclient/webclient.c
+ * webclient.c
  *
  * Copyright © 2014-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -31,12 +31,25 @@ struct webclient_connection_t {
 	struct oneshot timer;
 	size_t max_recv_nb_size;
 	uint16_t http_result;
+	bool redirect_url_updated;
 	int refs;
 
+	webclient_connection_redirect_callback_t redirect_callback;
 	webclient_connection_post_callback_t post_callback;
 	webclient_connection_data_callback_t data_callback;
 	webclient_connection_complete_callback_t complete_callback;
 	void *callback_arg;
+
+	struct webclient_connection_stats_t stats;
+	uint64_t stats_last_pause_time;
+};
+
+static bool webclient_connection_execute_start(struct webclient_connection_t *connection);
+static http_parser_error_t webserver_connection_redirect_http_location(void *arg, struct netbuf *nb);
+
+static const struct http_parser_tag_lookup_t webclient_connection_redirect_http_tag_list[] = {
+	{"Location", webserver_connection_redirect_http_location},
+	{NULL, NULL}
 };
 
 static void webclient_connection_ref_internal(struct webclient_connection_t *connection)
@@ -93,6 +106,13 @@ void webclient_connection_release(struct webclient_connection_t *connection)
 
 static void webclient_connection_signal_complete(struct webclient_connection_t *connection, uint8_t result, uint16_t http_error, const char *error_str)
 {
+	connection->stats.complete_time = timer_get_ticks();
+
+	if (connection->stats_last_pause_time > 0) {
+		connection->stats.paused_duration += connection->stats.complete_time - connection->stats_last_pause_time;
+		connection->stats_last_pause_time = 0;
+	}
+
 	webclient_connection_ref_internal(connection);
 
 	if (connection->complete_callback) {
@@ -127,6 +147,40 @@ static void webclient_connection_conn_close(void *arg, tcp_close_reason_t reason
 	webclient_connection_signal_complete(connection, WEBCLIENT_RESULT_SUCCESS, 0, "success");
 }
 
+static http_parser_error_t webserver_connection_redirect_http_location(void *arg, struct netbuf *nb)
+{
+	struct webclient_connection_t *connection = (struct webclient_connection_t *)arg;
+
+	struct url_t url;
+	memset(&url, 0, sizeof(struct url_t));
+	if (!url_parse_nb_with_base(&url, &connection->url, nb)) {
+		return HTTP_PARSER_OK;
+	}
+
+	if (url_compare(&url, &connection->url)) {
+		DEBUG_WARN("redirect loop");
+		return HTTP_PARSER_OK;
+	}
+
+	connection->url = url;
+	connection->redirect_url_updated = true;
+	return HTTP_PARSER_OK;
+}
+
+static uint16_t webclient_connection_is_http_result_redirect(struct webclient_connection_t *connection)
+{
+	switch (connection->http_result) {
+	case 301:
+	case 302:
+	case 307:
+	case 308:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
 static http_parser_error_t webclient_connection_http_event(void *arg, http_parser_event_t event, struct netbuf *nb)
 {
 	struct webclient_connection_t *connection = (struct webclient_connection_t *)arg;
@@ -135,9 +189,44 @@ static http_parser_error_t webclient_connection_http_event(void *arg, http_parse
 	switch (event) {
 	case HTTP_PARSER_EVENT_STATUS_CODE:
 		connection->http_result = (uint16_t)netbuf_fwd_strtoul(nb, NULL, 10);
+
+		if (webclient_connection_is_http_result_redirect(connection)) {
+			http_parser_set_tag_list(connection->http_parser, webclient_connection_redirect_http_tag_list, connection);
+			return HTTP_PARSER_OK;
+		}
+
 		return HTTP_PARSER_OK;
 
 	case HTTP_PARSER_EVENT_HEADER_COMPLETE:
+		connection->stats.header_complete_time = timer_get_ticks();
+
+		if (webclient_connection_is_http_result_redirect(connection)) {
+			if (!connection->redirect_url_updated) {
+				DEBUG_WARN("webclient_connection_http_event: redirect without location");
+				sprintf_custom(error_str, error_str + sizeof(error_str), "http error %u", connection->http_result);
+				webclient_connection_signal_complete(connection, WEBCLIENT_RESULT_NON_200_RESULT, connection->http_result, error_str);
+				return HTTP_PARSER_ESTOP;
+			}
+
+			if (connection->redirect_callback) {
+				webclient_connection_ref_internal(connection);
+				connection->redirect_callback(connection->callback_arg, connection, &connection->url);
+				if (webclient_connection_deref_internal(connection) == 0) {
+					return HTTP_PARSER_ESTOP;
+				}
+			}
+
+			DEBUG_INFO("webclient_connection_http_event: redirecting to new url");
+			connection->stats.redirect_count++;
+			if (!webclient_connection_execute_start(connection)) {
+				sprintf_custom(error_str, error_str + sizeof(error_str), "http error %u", connection->http_result);
+				webclient_connection_signal_complete(connection, WEBCLIENT_RESULT_NON_200_RESULT, connection->http_result, error_str);
+				return HTTP_PARSER_ESTOP;
+			}
+
+			return HTTP_PARSER_ESTOP;
+		}
+
 		if (connection->post_callback && WEBCLIENT_USE_EXPECT_100_CONTINUE && (connection->http_result == 100)) {
 			DEBUG_TRACE("webclient_connection_http_event: 100");
 			http_parser_reset(connection->http_parser);
@@ -159,6 +248,12 @@ static http_parser_error_t webclient_connection_http_event(void *arg, http_parse
 		return HTTP_PARSER_ESTOP;
 
 	case HTTP_PARSER_EVENT_DATA:
+		if (connection->stats.data_start_time == 0) {
+			connection->stats.data_start_time = timer_get_ticks();
+		}
+
+		connection->stats.download_size += netbuf_get_remaining(nb);
+
 		webclient_connection_ref_internal(connection);
 		if (connection->data_callback) {
 			connection->data_callback(connection->callback_arg, connection, nb);
@@ -166,10 +261,12 @@ static http_parser_error_t webclient_connection_http_event(void *arg, http_parse
 		if (webclient_connection_deref_internal(connection) == 0) {
 			return HTTP_PARSER_ESTOP;
 		}
+
 		return HTTP_PARSER_OK;
 
 	case HTTP_PARSER_EVENT_DATA_COMPLETE:
-		DEBUG_INFO("webclient_connection_http_event: data complete");
+		DEBUG_TRACE("webclient_connection_http_event: data complete");
+		connection->stats.data_complete_time = timer_get_ticks();
 		webclient_connection_signal_complete(connection, WEBCLIENT_RESULT_SUCCESS, 0, "success");
 		return HTTP_PARSER_ESTOP;
 
@@ -195,7 +292,8 @@ static void webclient_connection_conn_recv(void *arg, struct netbuf *nb)
 static void webclient_connection_conn_established(void *arg)
 {
 	struct webclient_connection_t *connection = (struct webclient_connection_t *)arg;
-	DEBUG_INFO("webclient_connection_conn_established");
+	DEBUG_TRACE("webclient_connection_conn_established");
+	connection->stats.establish_time = timer_get_ticks();
 
 	struct netbuf *header_nb = netbuf_alloc();
 	if (!header_nb) {
@@ -244,12 +342,20 @@ static void webclient_connection_conn_established(void *arg)
 
 static bool webclient_connection_execute_connect(struct webclient_connection_t *connection)
 {
-	connection->http_parser = http_parser_alloc(webclient_connection_http_event, connection);
 	if (!connection->http_parser) {
-		return false;
+		connection->http_parser = http_parser_alloc(webclient_connection_http_event, connection);
+		if (!connection->http_parser) {
+			return false;
+		}
 	}
 
+	http_parser_reset(connection->http_parser);
 	http_parser_set_tag_list(connection->http_parser, connection->http_tag_list, connection->callback_arg);
+
+	if (connection->conn) {
+		tcp_connection_close(connection->conn);
+		tcp_connection_deref(connection->conn);
+	}
 
 	connection->conn = tcp_connection_alloc();
 	if (!connection->conn) {
@@ -274,6 +380,7 @@ static bool webclient_connection_execute_connect(struct webclient_connection_t *
 static void webclient_connection_execute_dns_callback(void *arg, ipv4_addr_t ip, ticks_t expire_time)
 {
 	struct webclient_connection_t *connection = (struct webclient_connection_t *)arg;
+	connection->stats.dns_time = timer_get_ticks();
 
 	dns_lookup_deref(connection->dns_lookup);
 	connection->dns_lookup = NULL;
@@ -294,10 +401,11 @@ static void webclient_connection_execute_dns_callback(void *arg, ipv4_addr_t ip,
 
 static bool webclient_connection_execute_dns(struct webclient_connection_t *connection)
 {
-	connection->dns_lookup = dns_lookup_alloc();
 	if (!connection->dns_lookup) {
-		DEBUG_WARN("out of memory");
-		return false;
+		connection->dns_lookup = dns_lookup_alloc();
+		if (!connection->dns_lookup) {
+			return false;
+		}
 	}
 
 	if (!dns_lookup_gethostbyname(connection->dns_lookup, connection->url.dns_name, webclient_connection_execute_dns_callback, connection)) {
@@ -308,8 +416,26 @@ static bool webclient_connection_execute_dns(struct webclient_connection_t *conn
 	return true;
 }
 
+static bool webclient_connection_execute_start(struct webclient_connection_t *connection)
+{
+	connection->stats.start_time = timer_get_ticks();
+	connection->stats.dns_time = 0;
+	connection->stats.establish_time = 0;
+	connection->stats.header_complete_time = 0;
+
+	if (connection->url.ip_addr == 0) {
+		return webclient_connection_execute_dns(connection);
+	} else {
+		return webclient_connection_execute_connect(connection);
+	}
+}
+
 bool webclient_connection_can_post_data(struct webclient_connection_t *connection)
 {
+	if (!connection->conn) {
+		return false;
+	}
+
 	return tcp_connection_can_send(connection->conn) == TCP_OK;
 }
 
@@ -335,8 +461,44 @@ bool webclient_connection_post_data(struct webclient_connection_t *connection, s
 	return true;
 }
 
+void webclient_connection_pause_recv(struct webclient_connection_t *connection)
+{
+	if (!connection->conn) {
+		return;
+	}
+
+	if (connection->stats_last_pause_time == 0) {
+		connection->stats_last_pause_time = timer_get_ticks();
+	}
+
+	tcp_connection_pause_recv(connection->conn);
+}
+
+void webclient_connection_resume_recv(struct webclient_connection_t *connection)
+{
+	if (!connection->conn) {
+		return;
+	}
+
+	if (connection->stats_last_pause_time > 0) {
+		connection->stats.paused_duration += timer_get_ticks() - connection->stats_last_pause_time;
+		connection->stats_last_pause_time = 0;
+	}
+
+	tcp_connection_resume_recv(connection->conn);
+}
+
+struct webclient_connection_stats_t *webclient_connection_get_stats(struct webclient_connection_t *connection)
+{
+	return &connection->stats;
+}
+
 ipv4_addr_t webclient_connection_get_local_ip(struct webclient_connection_t *connection)
 {
+	if (!connection->conn) {
+		return 0;
+	}
+
 	return tcp_connection_get_local_addr(connection->conn);
 }
 
@@ -369,7 +531,7 @@ void webclient_connection_set_callback_arg(struct webclient_connection_t *connec
 	connection->callback_arg = callback_arg;
 }
 
-struct webclient_connection_t *webclient_connection_execute_post(struct url_t *url, const char *additional_header_lines, webclient_connection_post_callback_t post_callback, const struct http_parser_tag_lookup_t *http_tag_list, webclient_connection_data_callback_t data_callback, webclient_connection_complete_callback_t complete_callback, void *callback_arg)
+struct webclient_connection_t *webclient_connection_execute_post(struct url_t *url, const char *additional_header_lines, const struct http_parser_tag_lookup_t *http_tag_list, webclient_connection_redirect_callback_t redirect_callback, webclient_connection_post_callback_t post_callback, webclient_connection_data_callback_t data_callback, webclient_connection_complete_callback_t complete_callback, void *callback_arg)
 {
 	struct webclient_connection_t *connection = (struct webclient_connection_t *)heap_alloc_and_zero(sizeof(struct webclient_connection_t), PKG_OS, MEM_TYPE_OS_WEBCLIENT_CONNECTION);
 	if (!connection) {
@@ -379,8 +541,9 @@ struct webclient_connection_t *webclient_connection_execute_post(struct url_t *u
 
 	connection->refs = 1;
 	connection->url = *url;
-	connection->post_callback = post_callback;
 	connection->http_tag_list = http_tag_list;
+	connection->redirect_callback = redirect_callback;
+	connection->post_callback = post_callback;
 	connection->data_callback = data_callback;
 	connection->complete_callback = complete_callback;
 	connection->callback_arg = callback_arg;
@@ -396,23 +559,18 @@ struct webclient_connection_t *webclient_connection_execute_post(struct url_t *u
 	oneshot_init(&connection->timer);
 	oneshot_attach(&connection->timer, WEBCLIENT_CONNECTION_TIMEOUT, webclient_connection_timeout, connection);
 
-	if (connection->url.ip_addr == 0) {
-		if (!webclient_connection_execute_dns(connection)) {
-			webclient_connection_release(connection);
-			return NULL;
-		}
-	} else {
-		if (!webclient_connection_execute_connect(connection)) {
-			webclient_connection_release(connection);
-			return NULL;
-		}
+	connection->stats.first_start_time = timer_get_ticks();
+
+	if (!webclient_connection_execute_start(connection)) {
+		webclient_connection_release(connection);
+		return NULL;
 	}
 
 	return connection;
 }
 
-struct webclient_connection_t *webclient_connection_execute_get(struct url_t *url, const char *additional_header_lines, const struct http_parser_tag_lookup_t *http_tag_list, webclient_connection_data_callback_t data_callback, webclient_connection_complete_callback_t complete_callback, void *callback_arg)
+struct webclient_connection_t *webclient_connection_execute_get(struct url_t *url, const char *additional_header_lines, const struct http_parser_tag_lookup_t *http_tag_list, webclient_connection_redirect_callback_t redirect_callback, webclient_connection_data_callback_t data_callback, webclient_connection_complete_callback_t complete_callback, void *callback_arg)
 {
-	return webclient_connection_execute_post(url, additional_header_lines, NULL, http_tag_list, data_callback, complete_callback, callback_arg);
+	return webclient_connection_execute_post(url, additional_header_lines, http_tag_list, redirect_callback, NULL, data_callback, complete_callback, callback_arg);
 }
 

@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/gena.h
+ * gena.h
  *
  * Copyright © 2011-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

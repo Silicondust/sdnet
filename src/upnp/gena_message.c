@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/gena_message.c
+ * gena_message.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

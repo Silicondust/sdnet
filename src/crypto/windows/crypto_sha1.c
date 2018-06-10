@@ -1,5 +1,5 @@
 /*
- * ./src/crypto/windows/crypto_sha1.c
+ * crypto_sha1.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

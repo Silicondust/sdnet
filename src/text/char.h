@@ -1,5 +1,5 @@
 /*
- * ./src/text/char.h
+ * char.h
  *
  * Copyright © 2013-2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

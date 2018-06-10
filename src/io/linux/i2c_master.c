@@ -1,5 +1,5 @@
 /*
- * ./src/io/linux/i2c_master.c
+ * i2c_master.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

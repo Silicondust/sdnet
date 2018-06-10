@@ -1,5 +1,5 @@
 /*
- * ./src/flash/flash.h
+ * flash.h
  *
  * Copyright © 2012-2017 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

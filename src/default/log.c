@@ -1,5 +1,5 @@
 /*
- * ./src/default/log.c
+ * log.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -157,7 +157,7 @@ void log_vtrace(const char *class_name, const char *fmt, va_list ap)
 	log_vappend(NULL, class_name, fmt, ap);
 }
 
-void log_trace_dump_array(const char *class_name, uint8_t *data, size_t length)
+void log_trace_dump_array(const char *class_name, const char *prefix, uint8_t *data, size_t length)
 {
 	uint8_t *end = data + length;
 	while (data < end) {
@@ -173,11 +173,12 @@ void log_trace_dump_array(const char *class_name, uint8_t *data, size_t length)
 			str_ptr = strchr(str_ptr, 0);
 		}
 
-		log_trace(class_name, "%s", str_buffer);
+		log_trace(class_name, "%s%s", prefix, str_buffer);
+		prefix = "";
 	}
 }
 
-void log_trace_dump_netbuf(const char *class_name, struct netbuf *nb)
+void log_trace_dump_netbuf(const char *class_name, const char *prefix, struct netbuf *nb)
 {
 	addr_t bookmark = netbuf_get_pos(nb);
 
@@ -203,7 +204,8 @@ void log_trace_dump_netbuf(const char *class_name, struct netbuf *nb)
 			str_ptr = strchr(str_ptr, 0);
 		}
 
-		log_trace(class_name, "%s", str_buffer);
+		log_trace(class_name, "%s%s", prefix, str_buffer);
+		prefix = "";
 	}
 }
 

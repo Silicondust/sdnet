@@ -1,5 +1,5 @@
 /*
- * ./src/web/url_params.h
+ * url_params.h
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

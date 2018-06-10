@@ -1,5 +1,5 @@
 /*
- * ./src/linux/system_managed.c
+ * system_managed.c
  *
  * Copyright © 2012-2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

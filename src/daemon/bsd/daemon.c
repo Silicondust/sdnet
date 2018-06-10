@@ -1,5 +1,5 @@
 /*
- * ./src/daemon/bsd/daemon.c
+ * daemon.c
  *
  * Copyright © 2015 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

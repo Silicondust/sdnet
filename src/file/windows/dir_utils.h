@@ -1,5 +1,5 @@
 /*
- * ./src/file/windows/dir_utils.h
+ * dir_utils.h
  *
  * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -21,6 +21,6 @@ struct dir_t;
 typedef struct dir_t DIR;
 
 extern DIR *opendir(const char *name);
-extern int readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result);
+extern struct dirent *readdir(DIR *dirp);
 extern void rewinddir(DIR *dirp);
 extern int closedir(DIR *dirp);

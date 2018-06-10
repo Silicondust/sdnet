@@ -1,5 +1,5 @@
 /*
- * ./src/windows/os_include.h
+ * os_include.h
  *
  * Copyright © 2007-2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -30,6 +30,14 @@
 
 #define __attribute__(x)
 
+#if !defined(__unused)
+#define __unused __pragma(warning(suppress: 4100 4101))
+#endif
+
+#if !defined(alignas)
+#define alignas(n) __declspec(align(n))
+#endif
+
 typedef size_t addr_t;
 typedef signed long ssize_t;
 
@@ -55,3 +63,5 @@ typedef uint64_t ticks_t;
 
 #define LIKELY(exp) (exp)
 #define UNLIKELY(exp) (exp)
+
+extern char *strcasestr(const char *haystack, const char *needle);

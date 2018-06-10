@@ -1,5 +1,5 @@
 /*
- * ./src/thread/pthread/signal.c
+ * signal.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

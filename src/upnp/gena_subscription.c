@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/gena_subscription.c
+ * gena_subscription.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

@@ -1,5 +1,5 @@
 /*
- * ./src/text/char_iso8859.c
+ * char_iso8859.c
  *
  * Copyright © 2008 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

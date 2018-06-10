@@ -1,5 +1,5 @@
 /*
- * ./src/webserver/webserver_page_proxy.c
+ * webserver_page_proxy.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

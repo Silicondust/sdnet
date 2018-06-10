@@ -1,5 +1,5 @@
 /*
- * ./src/unix_time/unix_time.h
+ * unix_time.h
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

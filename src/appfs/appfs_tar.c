@@ -1,5 +1,5 @@
 /*
- * ./src/appfs/appfs_tar.c
+ * appfs_tar.c
  *
  * Copyright © 2012-2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

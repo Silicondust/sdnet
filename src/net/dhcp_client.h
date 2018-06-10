@@ -1,5 +1,5 @@
 /*
- * ./src/net/dhcp_client.h
+ * dhcp_client.h
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

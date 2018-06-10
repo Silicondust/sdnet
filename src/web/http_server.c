@@ -1,5 +1,5 @@
 /*
- * ./src/web/http_server.c
+ * http_server.c
  *
  * Copyright © 2015-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

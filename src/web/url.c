@@ -1,5 +1,5 @@
 /*
- * ./src/web/url.c
+ * url.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -208,17 +208,20 @@ static bool url_parse_str_uri(struct url_t *output, struct url_t *base, const ch
 		return true;
 	}
 
-	char *base_uri_end = strrchr(base->uri, '/');
-	if (!base_uri_end) {
+	strcpy(output->uri, base->uri);
+
+	char *ptr = strchr(output->uri, '?');
+	if (ptr) {
+		*ptr = 0;
+	}
+
+	ptr = strrchr(output->uri, '/');
+	if (!ptr) {
 		DEBUG_WARN("relative uri without base: %s", str);
 		return false;
 	}
 
-	base_uri_end++;
-	size_t base_length = base_uri_end - base->uri;
-	memcpy(output->uri, base->uri, base_length);
-
-	sprintf_custom(output->uri + base_length, output->uri + sizeof(output->uri), "%s", str);
+	sprintf_custom(ptr + 1, output->uri + sizeof(output->uri), "%s", str);
 	return true;
 }
 
@@ -441,4 +444,29 @@ bool url_append_parameter(struct url_t *url, const char *name, const char *value
 	}
 
 	return sprintf_custom_url(ptr, end, "?%s=%s", name, value);
+}
+
+bool url_compare(struct url_t *a, struct url_t *b)
+{
+	if (strcmp(a->uri, b->uri) != 0) {
+		return false;
+	}
+	if (strcmp(a->dns_name, b->dns_name) != 0) {
+		return false;
+	}
+
+	if (a->protocol != b->protocol) {
+		return false;
+	}
+	if (a->ip_addr != b->ip_addr) {
+		return false;
+	}
+	if (a->ip_port != b->ip_port) {
+		return false;
+	}
+	if (a->flags != b->flags) {
+		return false;
+	}
+
+	return true;
 }

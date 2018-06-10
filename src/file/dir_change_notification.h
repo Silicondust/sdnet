@@ -1,5 +1,5 @@
 /*
- * ./src/file/dir_change_notification.h
+ * dir_change_notification.h
  *
  * Copyright © 2014-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

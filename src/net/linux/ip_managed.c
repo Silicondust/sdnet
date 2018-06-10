@@ -1,5 +1,5 @@
 /*
- * ./src/net/linux/ip_managed.c
+ * ip_managed.c
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

@@ -1,5 +1,5 @@
 /*
- * ./src/io/gpio_dummy.c
+ * gpio_dummy.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

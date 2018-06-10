@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/ssdp.h
+ * ssdp.h
  *
  * Copyright © 2011-2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

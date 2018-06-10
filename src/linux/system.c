@@ -1,5 +1,5 @@
 /*
- * ./src/linux/system.c
+ * system.c
  *
  * Copyright © 2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

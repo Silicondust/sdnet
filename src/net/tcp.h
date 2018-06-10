@@ -1,5 +1,5 @@
 /*
- * ./src/net/tcp.h
+ * tcp.h
  *
  * Copyright © 2007-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -36,6 +36,8 @@ extern void tcp_connection_close(struct tcp_connection *tc);
 extern tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_send_resume_callback_t send_resume, tcp_close_callback_t close, void *inst);
 extern tcp_error_t tcp_connection_send_netbuf(struct tcp_connection *tc, struct netbuf *nb);
 extern tcp_error_t tcp_connection_send_file(struct tcp_connection *tc, struct file_t *file, size_t length, size_t *pactual);
+extern void tcp_connection_pause_recv(struct tcp_connection *tc);
+extern void tcp_connection_resume_recv(struct tcp_connection *tc);
 extern tcp_error_t tcp_connection_can_send(struct tcp_connection *tc);
 extern void tcp_connection_set_max_recv_nb_size(struct tcp_connection *tc, size_t recv_nb_size);
 extern void tcp_connection_set_ttl(struct tcp_connection *tc, uint8_t ttl);

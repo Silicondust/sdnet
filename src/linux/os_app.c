@@ -1,5 +1,5 @@
 /*
- * ./src/linux/os_app.c
+ * os_app.c
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

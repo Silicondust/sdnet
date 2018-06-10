@@ -1,5 +1,5 @@
 /*
- * ./src/net/windows/tcp_socket.c
+ * tcp_socket.c
  *
  * Copyright © 2007-2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

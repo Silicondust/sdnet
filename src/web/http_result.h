@@ -1,5 +1,5 @@
 /*
- * ./src/web/http_result.h
+ * http_result.h
  *
  * Copyright © 2011-2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

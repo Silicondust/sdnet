@@ -1,5 +1,5 @@
 /*
- * ./src/utils/hash32.h
+ * hash32.h
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

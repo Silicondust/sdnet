@@ -1,5 +1,5 @@
 /*
- * ./src/crypto/der.h
+ * der.h
  *
  * Copyright © 2017 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

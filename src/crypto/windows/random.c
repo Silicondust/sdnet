@@ -1,5 +1,5 @@
 /*
- * ./src/crypto/windows/random.c
+ * random.c
  *
  * Copyright © 2007-2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

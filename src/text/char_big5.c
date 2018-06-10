@@ -1,5 +1,5 @@
 /*
- * ./src/text/char_big5.c
+ * char_big5.c
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

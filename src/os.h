@@ -1,5 +1,5 @@
 /*
- * ./src/os.h
+ * os.h
  *
  * Copyright © 2006-2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

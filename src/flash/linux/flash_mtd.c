@@ -1,5 +1,5 @@
 /*
- * ./src/flash/linux/flash_mtd.c
+ * flash_mtd.c
  *
  * Copyright © 2017 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

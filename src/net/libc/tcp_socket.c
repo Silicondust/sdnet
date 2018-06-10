@@ -1,5 +1,5 @@
 /*
- * ./src/net/libc/tcp_socket.c
+ * tcp_socket.c
  *
  * Copyright © 2007-2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -29,7 +29,9 @@ struct tcp_socket {
 static void tcp_socket_trigger_poll(void)
 {
 	uint8_t v = 0;
-	write(tcp_manager.socket_poll_trigger_fd, &v, 1);
+	if (write(tcp_manager.socket_poll_trigger_fd, &v, 1) != 1) {
+		DEBUG_WARN("tcp manager trigger failed");
+	}
 }
 
 uint16_t tcp_socket_get_port(struct tcp_socket *ts)
@@ -226,7 +228,9 @@ void tcp_socket_thread_execute(void *arg)
 		struct pollfd *poll_fds = tcp_manager.socket_poll_fds;
 		if (poll_fds->revents) {
 			uint8_t dummy[32];
-			read(poll_fds->fd, dummy, sizeof(dummy));
+			if (read(poll_fds->fd, dummy, sizeof(dummy)) < 0) {
+				/* Nothing needs to be done on error */
+			}
 		}
 
 		poll_fds++;

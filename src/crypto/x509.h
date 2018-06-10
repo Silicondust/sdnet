@@ -1,5 +1,5 @@
 /*
- * ./src/crypto/x509.h
+ * x509.h
  *
  * Copyright © 2017 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

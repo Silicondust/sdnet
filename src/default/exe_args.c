@@ -1,5 +1,5 @@
 /*
- * ./src/default/exe_args.c
+ * exe_args.c
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

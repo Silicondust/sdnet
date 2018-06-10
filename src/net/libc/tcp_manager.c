@@ -1,5 +1,5 @@
 /*
- * ./src/net/libc/tcp_manager.c
+ * tcp_manager.c
  *
  * Copyright © 2007-2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

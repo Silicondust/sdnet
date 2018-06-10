@@ -1,5 +1,5 @@
 /*
- * ./src/file/linux/dir_utils.c
+ * dir_utils.c
  *
  * Copyright © 2014-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -85,7 +85,7 @@ uint64_t dir_get_freespace(const char *path)
 
 struct dir_get_fs_type_lookup_t {
 	uint32_t f_type;
-	char name[8];
+	char name[12];
 };
 
 static struct dir_get_fs_type_lookup_t dir_get_fs_type_lookup[] =

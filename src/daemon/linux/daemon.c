@@ -1,5 +1,5 @@
 /*
- * ./src/daemon/linux/daemon.c
+ * daemon.c
  *
  * Copyright © 2015 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -94,12 +94,7 @@ uint8_t daemon_status(const char *exe_name, const char *daemon_name)
 	}
 
 	while (1) {
-		struct dirent search_result_data;
-		struct dirent *search_result = NULL;
-		if (readdir_r(search_dir, &search_result_data, &search_result) != 0) {
-			closedir(search_dir);
-			return DAEMON_NOT_RUNNING;
-		}
+		struct dirent *search_result = readdir(search_dir);
 		if (!search_result) {
 			closedir(search_dir);
 			return DAEMON_NOT_RUNNING;
@@ -142,12 +137,7 @@ uint8_t daemon_stop(const char *exe_name, const char *daemon_name)
 	ticks_t timeout = timer_get_ticks() + 5000;
 
 	while (1) {
-		struct dirent search_result_data;
-		struct dirent *search_result = NULL;
-		if (readdir_r(search_dir, &search_result_data, &search_result) != 0) {
-			closedir(search_dir);
-			return result;
-		}
+		struct dirent *search_result = readdir(search_dir);
 		if (!search_result) {
 			closedir(search_dir);
 			return result;

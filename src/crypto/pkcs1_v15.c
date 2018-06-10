@@ -1,5 +1,5 @@
 /*
- * ./src/crypto/pkcs1_v15.c
+ * pkcs1_v15.c
  *
  * Copyright © 2010-2017 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

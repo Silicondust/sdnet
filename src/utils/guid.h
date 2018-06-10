@@ -1,5 +1,5 @@
 /*
- * ./src/utils/guid.h
+ * guid.h
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

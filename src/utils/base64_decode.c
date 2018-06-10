@@ -1,5 +1,5 @@
 /*
- * ./src/utils/base64_decode.c
+ * base64_decode.c
  *
  * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

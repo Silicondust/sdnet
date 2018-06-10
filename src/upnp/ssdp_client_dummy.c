@@ -1,5 +1,5 @@
 /*
- * ./src/upnp/ssdp_client_dummy.c
+ * ssdp_client_dummy.c
  *
  * Copyright © 2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

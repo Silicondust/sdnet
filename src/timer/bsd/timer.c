@@ -1,5 +1,5 @@
 /*
- * ./src/timer/bsd/timer.c
+ * timer.c
  *
  * Copyright © 2015 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

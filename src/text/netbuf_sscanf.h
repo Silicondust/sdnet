@@ -1,5 +1,5 @@
 /*
- * ./src/text/netbuf_sscanf.h
+ * netbuf_sscanf.h
  *
  * Copyright © 2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

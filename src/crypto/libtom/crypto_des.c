@@ -1,5 +1,5 @@
 /*
- * ./src/crypto/libtom/crypto_des.c
+ * crypto_des.c
  *
  * Copyright © 2017 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

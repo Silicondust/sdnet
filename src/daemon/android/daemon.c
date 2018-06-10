@@ -1,5 +1,5 @@
 /*
- * ./src/daemon/android/daemon.c
+ * daemon.c
  *
  * Copyright © 2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *

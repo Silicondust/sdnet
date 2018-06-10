@@ -1,5 +1,5 @@
 /*
- * ./src/default/debug.c
+ * debug.c
  *
  * Copyright © 2007,2011 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -28,6 +28,7 @@ void debug_assert(const char *this_file, int line, const char *fmt, ...)
 
 	printf("\n");
 
+	while(1);
 	exit(1);
 }
 
@@ -60,10 +61,13 @@ void debug_print_hex_array(const char *this_file, int line, const void *buffer, 
 	uint8_t *end = (uint8_t *)buffer + size;
 
 	while (ptr < end) {
-		printf("%02X", (unsigned int)(unsigned char)*ptr++);
-	}
+		uint8_t *local_end = min(end, ptr + 64);
+		while (ptr < local_end) {
+			printf("%02X", (unsigned int)(unsigned char)*ptr++);
+		}
 
-	printf("\n");
+		printf("\n");
+	}
 }
 
 void debug_print_netbuf(const char *this_file, int line, struct netbuf *nb)

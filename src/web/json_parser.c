@@ -1,5 +1,5 @@
 /*
- * ./src/web/json_parser.c
+ * json_parser.c
  *
  * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
