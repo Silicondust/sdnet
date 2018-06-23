@@ -21,9 +21,14 @@
   <ItemGroup>
     <ClCompile Include="..\appfs\appfs_tar.c" />
     <ClCompile Include="..\crypto\crypto_test.c" />
-    <ClCompile Include="..\crypto\windows\crypto_aes.c" />
-    <ClCompile Include="..\crypto\windows\crypto_sha1.c" />
+    <ClCompile Include="..\crypto\der.c" />
+    <ClCompile Include="..\crypto\libtom\crypto_aes.c" />
+    <ClCompile Include="..\crypto\libtom\crypto_hash.c" />
+    <ClCompile Include="..\crypto\libtom\crypto_init.c" />
+    <ClCompile Include="..\crypto\libtom\crypto_rsa.c" />
+    <ClCompile Include="..\crypto\pkcs1_v15.c" />
     <ClCompile Include="..\crypto\windows\random.c" />
+    <ClCompile Include="..\crypto\x509.c" />
     <ClCompile Include="..\daemon\windows\daemon.c" />
     <ClCompile Include="..\default\debug.c" />
     <ClCompile Include="..\default\heap.c" />
@@ -81,6 +86,8 @@
     <ClCompile Include="..\utils\hash32.c" />
     <ClCompile Include="..\utils\hmap.c" />
     <ClCompile Include="..\utils\slist.c" />
+    <ClCompile Include="..\webclient\tls_client_connection.c" />
+    <ClCompile Include="..\webclient\tls_prf.c" />
     <ClCompile Include="..\webclient\webclient.c" />
     <ClCompile Include="..\webserver\webserver.c" />
     <ClCompile Include="..\webserver\webserver_connection.c" />
@@ -178,7 +185,7 @@
       <PreprocessorDefinitions>WIN32;DEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <PrecompiledHeaderFile>os.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -193,7 +200,7 @@
       <PreprocessorDefinitions>DEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <PrecompiledHeaderFile>os.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -210,7 +217,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <PrecompiledHeaderFile>os.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -229,7 +236,7 @@
       <PreprocessorDefinitions>NDEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <PrecompiledHeaderFile>os.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

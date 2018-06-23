@@ -18,6 +18,48 @@
 
 THIS_FILE("url");
 
+bool url_to_str(struct url_t *url, char *buffer, char *end)
+{
+	bool success = true;
+	char *ptr = buffer;
+
+	switch (url->protocol) {
+	case URL_PROTOCOL_HTTP:
+		success &= sprintf_custom(ptr, end, "http://");
+		ptr = strchr(ptr, 0);
+		break;
+
+	case URL_PROTOCOL_HTTPS:
+		success &= sprintf_custom(ptr, end, "https://");
+		ptr = strchr(ptr, 0);
+		break;
+
+	case URL_PROTOCOL_RTSP:
+		success &= sprintf_custom(ptr, end, "rtsp://");
+		ptr = strchr(ptr, 0);
+		break;
+
+	default:
+		break;
+	}
+
+	if (url->dns_name[0]) {
+		success &= sprintf_custom(ptr, end, "%s", url->dns_name);
+		ptr = strchr(ptr, 0);
+	} else if (url->ip_addr != 0) {
+		success &= sprintf_custom(ptr, end, "%v", url->ip_addr);
+		ptr = strchr(ptr, 0);
+	}
+
+	if (url->flags & URL_FLAGS_PORT_SPECIFIED) {
+		success &= sprintf_custom(ptr, end, ":%u", url->ip_port);
+		ptr = strchr(ptr, 0);
+	}
+
+	success &= sprintf_custom(ptr, end, "%s", url->uri);
+	return success;
+}
+
 static void url_wipe(struct url_t *output)
 {
 	output->protocol = URL_PROTOCOL_UNKNOWN;

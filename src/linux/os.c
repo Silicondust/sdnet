@@ -32,8 +32,8 @@ int os_main(int argc, char *argv[])
 	/*
 	 * Init.
 	 */
-	ltc_mp = ltm_desc;
 	system_init();
+	crypto_init();
 	heap_manager_init();
 	netbuf_manager_init();
 	exe_args_init(argc, argv);
@@ -51,7 +51,6 @@ int os_main(int argc, char *argv[])
 	udp_dhcp_manager_init();
 	dns_manager_init();
 	gpio_init();
-	crypto_test();
 
 	main_thread_signal = thread_signal_alloc();
 	system_app_queue = mqueue_alloc(1024, main_thread_signal);

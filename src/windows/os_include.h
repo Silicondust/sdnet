@@ -28,6 +28,10 @@
 #include <sys/types.h>
 #include <sys/timeb.h>
 
+#define LTC_NO_PROTOTYPES
+#include <tomcrypt.h>
+#include <tommath.h>
+
 #define __attribute__(x)
 
 #if !defined(__unused)

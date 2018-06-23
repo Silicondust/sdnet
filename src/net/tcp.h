@@ -52,8 +52,8 @@ extern void tcp_socket_accept(struct tcp_socket *ts, struct tcp_connection *tc, 
 extern void tcp_socket_reject(struct tcp_socket *ts);
 extern uint16_t tcp_socket_get_port(struct tcp_socket *ts);
 
-extern bool tcp_manager_get_network_ok_indication(void); /* Silicondust */
-extern void tcp_manager_reset_network_ok_indication(void); /* Silicondust */
+extern bool tcp_manager_get_network_ok_indication(void);
+extern void tcp_manager_reset_network_ok_indication(void);
 
 extern void tcp_manager_init(void);
 extern void tcp_manager_start(void);

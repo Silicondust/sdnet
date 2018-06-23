@@ -23,34 +23,65 @@ static const uint8_t pkcs1_v15_digest_info_sha1[15] =
 	0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14
 };
 
-void pkcs1_v15_pad(uint8_t *in, size_t in_len, uint8_t *out, size_t out_len)
+static const uint8_t pkcs1_v15_digest_info_sha256[19] =
 {
-	uint8_t *ptr = out + out_len;
+	0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20
+};
 
-	/*
-	 * Data.
-	 */
-	ptr -= in_len;
-	DEBUG_ASSERT(ptr >= out, "pkcs1_v15_pad: buffer too small");
-	memcpy(ptr, in, in_len);
+static const uint8_t pkcs1_v15_digest_info_sha384[19] =
+{
+	0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30
+};
 
-	/*
-	 * Start marker.
-	 */
+static const uint8_t pkcs1_v15_digest_info_sha512[19] =
+{
+	0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40
+};
+
+/* 0x00, 0x01, 0xFF-fill, 0x00, in-bytes */
+void pkcs1_v15_type1_pad(uint8_t *in, size_t in_len, uint8_t *out, size_t out_len)
+{
 	*out++ = 0x00;
 	*out++ = 0x01;
 
-	/*
-	 * End marker.
-	 */
-	ptr--;
-	DEBUG_ASSERT(ptr >= out + 8, "pkcs1_v15_pad: buffer too small");
-	*ptr = 0x00;
+	size_t fill_len = out_len - in_len - 3;
+	memset(out, 0xFF, fill_len);
+	out += fill_len;
 
-	/*
-	* Padding.
-	*/
-	memset(out, 0xFF, ptr - out);
+	*out++ = 0x00;
+
+	memcpy(out, in, in_len);
+}
+
+/* 0x00, 0x01, random-non-zero-fill, 0x00, in-bytes */
+void pkcs1_v15_type2_pad(uint8_t *in, size_t in_len, uint8_t *out, size_t out_len)
+{
+	*out++ = 0x00;
+	*out++ = 0x02;
+
+	size_t fill_len = out_len - in_len - 3;
+	uint8_t *fill_end = out + fill_len;
+
+	uint32_t random = random_get32();
+	while (out < fill_end) {
+		uint8_t v = random & 0xFF;
+		if (v == 0) {
+			if (random != 0) {
+				random >>= 8;
+				continue;
+			}
+
+			random = random_get32();
+			continue;
+		}
+
+		*out++ = v;
+		random >>= 8;
+	}
+
+	*out++ = 0x00;
+
+	memcpy(out, in, in_len);
 }
 
 bool pkcs1_v15_unpad(uint8_t *in, size_t in_len, uint8_t *out, size_t *pout_len)
@@ -90,39 +121,19 @@ bool pkcs1_v15_unpad(uint8_t *in, size_t in_len, uint8_t *out, size_t *pout_len)
 
 static void pkcs1_v15_pad_digest(const uint8_t *digest_info, size_t digest_info_len, uint8_t *digest, size_t digest_len, uint8_t *out, size_t out_len)
 {
-	uint8_t *ptr = out + out_len;
-
-	/*
-	 * Data.
-	 */
-	ptr -= digest_len;
-	DEBUG_ASSERT(ptr >= out, "pkcs1_v15_pad_digest: buffer too small");
-	memcpy(ptr, digest, digest_len);
-
-	/*
-	 * DigestInfo.
-	 */
-	ptr -= digest_info_len;
-	DEBUG_ASSERT(ptr >= out, "pkcs1_v15_pad_digest: buffer too small");
-	memcpy(ptr, digest_info, digest_info_len);
-
-	/*
-	 * Start marker.
-	 */
 	*out++ = 0x00;
 	*out++ = 0x01;
 
-	/*
-	 * End marker.
-	 */
-	ptr--;
-	DEBUG_ASSERT(ptr >= out + 8, "pkcs1_v15_pad_digest: buffer too small");
-	*ptr = 0x00;
+	size_t fill_len = out_len - digest_info_len - digest_len - 3;
+	memset(out, 0xFF, fill_len);
+	out += fill_len;
 
-	/*
-	 * Padding.
-	 */
-	memset(out, 0xFF, ptr - out);
+	*out++ = 0x00;
+
+	memcpy(out, digest_info, digest_info_len);
+	out += digest_info_len;
+
+	memcpy(out, digest, digest_len);
 }
 
 static bool pkcs1_v15_unpad_compare_digest(const uint8_t *digest_info, size_t digest_info_len, uint8_t *digest, size_t digest_len, uint8_t *in, size_t in_len)
@@ -177,4 +188,34 @@ void pkcs1_v15_pad_sha1(sha1_digest_t *digest, uint8_t *out, size_t out_len)
 bool pkcs1_v15_unpad_compare_sha1(sha1_digest_t *digest, uint8_t *in, size_t in_len)
 {
 	return pkcs1_v15_unpad_compare_digest(pkcs1_v15_digest_info_sha1, sizeof(pkcs1_v15_digest_info_sha1), digest->u8, sizeof(digest->u8), in, in_len);
+}
+
+void pkcs1_v15_pad_sha256(sha256_digest_t *digest, uint8_t *out, size_t out_len)
+{
+	pkcs1_v15_pad_digest(pkcs1_v15_digest_info_sha256, sizeof(pkcs1_v15_digest_info_sha256), digest->u8, sizeof(digest->u8), out, out_len);
+}
+
+bool pkcs1_v15_unpad_compare_sha256(sha256_digest_t *digest, uint8_t *in, size_t in_len)
+{
+	return pkcs1_v15_unpad_compare_digest(pkcs1_v15_digest_info_sha256, sizeof(pkcs1_v15_digest_info_sha256), digest->u8, sizeof(digest->u8), in, in_len);
+}
+
+void pkcs1_v15_pad_sha384(sha384_digest_t *digest, uint8_t *out, size_t out_len)
+{
+	pkcs1_v15_pad_digest(pkcs1_v15_digest_info_sha384, sizeof(pkcs1_v15_digest_info_sha384), digest->u8, sizeof(digest->u8), out, out_len);
+}
+
+bool pkcs1_v15_unpad_compare_sha384(sha384_digest_t *digest, uint8_t *in, size_t in_len)
+{
+	return pkcs1_v15_unpad_compare_digest(pkcs1_v15_digest_info_sha384, sizeof(pkcs1_v15_digest_info_sha384), digest->u8, sizeof(digest->u8), in, in_len);
+}
+
+void pkcs1_v15_pad_sha512(sha512_digest_t *digest, uint8_t *out, size_t out_len)
+{
+	pkcs1_v15_pad_digest(pkcs1_v15_digest_info_sha512, sizeof(pkcs1_v15_digest_info_sha512), digest->u8, sizeof(digest->u8), out, out_len);
+}
+
+bool pkcs1_v15_unpad_compare_sha512(sha512_digest_t *digest, uint8_t *in, size_t in_len)
+{
+	return pkcs1_v15_unpad_compare_digest(pkcs1_v15_digest_info_sha512, sizeof(pkcs1_v15_digest_info_sha512), digest->u8, sizeof(digest->u8), in, in_len);
 }

@@ -90,6 +90,7 @@ void flash_write(addr_t addr, const void *src, size_t length)
 	}
 
 	fwrite(src, 1, length, fp);
+	fflush(fp);
 }
 
 void flash_erase(addr_t addr, size_t length)
@@ -109,6 +110,8 @@ void flash_erase(addr_t addr, size_t length)
 		fputc(0xFF, fp);
 		position++;
 	}
+
+	fflush(fp);
 }
 
 void flash_writeprotect_bootsector(size_t size)

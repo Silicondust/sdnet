@@ -26,6 +26,8 @@ struct url_t {
 	char uri[512];
 };
 
+extern bool url_to_str(struct url_t *url, char *buffer, char *end);
+
 extern bool url_parse_str(struct url_t *output, const char *str);
 extern bool url_parse_str_with_base(struct url_t *output, struct url_t *base, const char *str);
 

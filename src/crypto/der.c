@@ -508,6 +508,13 @@ static void der_block_debug_print_internal(int level, struct der_block_t *block)
 		}
 		break;
 
+	case DER_TYPE_CHOICE:
+		{
+			DEBUG_INFO("%schoice", der_level_indent(level));
+			DEBUG_PRINT_HEX_ARRAY(block->payload, block->end - block->payload);
+		}
+		break;
+
 	case DER_TYPE_A0:
 	case DER_TYPE_A3:
 		{

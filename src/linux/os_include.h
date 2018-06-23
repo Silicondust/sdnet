@@ -46,11 +46,16 @@
 #include <linux/ip.h>
 #include <linux/udp.h>
 
+#define LTC_NO_PROTOTYPES
 #include <tomcrypt.h>
 #include <tommath.h>
 
 #define min(a, b) ((a) <= (b) ? (a) : (b))
 #define max(a, b) ((a) >= (b) ? (a) : (b))
+
+#if !defined(__unused)
+#define __unused __attribute__((unused))
+#endif
 
 #if !defined(alignas)
 #define alignas(n) __attribute__((aligned(n)))

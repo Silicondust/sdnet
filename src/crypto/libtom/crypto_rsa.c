@@ -30,7 +30,7 @@ struct rsa_key_t *rsa_key_import_private(uint8_t *in, size_t in_len)
 		return NULL;
 	}
 
-	if (rsa_import(in, in_len, &key->key) != CRYPT_OK) {
+	if (rsa_import(in, (unsigned long)in_len, &key->key) != CRYPT_OK) {
 		heap_free(key);
 		return NULL;
 	}
@@ -46,7 +46,7 @@ struct rsa_key_t *rsa_key_import_public(uint8_t *in, size_t in_len)
 		return NULL;
 	}
 
-	if (rsa_import(in, in_len, &key->key) != CRYPT_OK) {
+	if (rsa_import(in, (unsigned long)in_len, &key->key) != CRYPT_OK) {
 		heap_free(key);
 		return NULL;
 	}
@@ -61,10 +61,20 @@ void rsa_key_free(struct rsa_key_t *key)
 	heap_free(key);
 }
 
+uint32_t rsa_key_get_size_bits(struct rsa_key_t *key)
+{
+	return (uint32_t)rsa_get_size(&key->key) * 8;
+}
+
+uint32_t rsa_key_get_size_bytes(struct rsa_key_t *key)
+{
+	return (uint32_t)rsa_get_size(&key->key);
+}
+
 bool rsa_exptmod_auto(uint8_t *input, uint8_t *output, size_t len, struct rsa_key_t *key)
 {
-	unsigned long output_len = len;
-	int ret = rsa_exptmod(input, len, output, &output_len, key->which, &key->key);
+	unsigned long output_len = (unsigned long)len;
+	int ret = rsa_exptmod(input, (unsigned long)len, output, &output_len, key->which, &key->key);
 	if (ret != CRYPT_OK) {
 		return false;
 	}

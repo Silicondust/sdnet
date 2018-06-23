@@ -8,7 +8,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#if defined(_WIN32)
+#if defined(IP3K)
+#include <ubicom/os.h>
+#elif defined(_WIN32)
 #include <windows/os.h>
 #elif defined(__APPLE__)
 #include <osx/os.h>

@@ -1,7 +1,7 @@
 /*
  * webclient.c
  *
- * Copyright © 2014-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2014-2018 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -24,8 +24,8 @@ struct webclient_connection_t {
 	struct url_t url;
 	char *additional_header_lines;
 	struct dns_lookup_t *dns_lookup;
-	struct tcp_connection *conn;
-	struct https_client_t *https_client;
+	struct tcp_connection *tcp_conn;
+	struct tls_client_connection_t *tls_conn;
 	struct http_parser_t *http_parser;
 	const struct http_parser_tag_lookup_t *http_tag_list;
 	struct oneshot timer;
@@ -65,7 +65,8 @@ static int webclient_connection_deref_internal(struct webclient_connection_t *co
 	}
 
 	DEBUG_ASSERT(!connection->dns_lookup, "deref free with active session");
-	DEBUG_ASSERT(!connection->conn, "deref free with active session");
+	DEBUG_ASSERT(!connection->tcp_conn, "deref free with active session");
+	DEBUG_ASSERT(!connection->tls_conn, "deref free with active session");
 	DEBUG_ASSERT(!connection->http_parser, "deref free with active session");
 
 	if (connection->additional_header_lines) {
@@ -89,10 +90,16 @@ void webclient_connection_release(struct webclient_connection_t *connection)
 		connection->dns_lookup = NULL;
 	}
 
-	if (connection->conn) {
-		tcp_connection_close(connection->conn);
-		tcp_connection_deref(connection->conn);
-		connection->conn = NULL;
+	if (connection->tcp_conn) {
+		tcp_connection_close(connection->tcp_conn);
+		tcp_connection_deref(connection->tcp_conn);
+		connection->tcp_conn = NULL;
+	}
+
+	if (connection->tls_conn) {
+		tls_client_connection_close(connection->tls_conn);
+		tls_client_connection_deref(connection->tls_conn);
+		connection->tls_conn = NULL;
 	}
 
 	if (connection->http_parser) {
@@ -136,8 +143,15 @@ static void webclient_connection_conn_close(void *arg, tcp_close_reason_t reason
 {
 	struct webclient_connection_t *connection = (struct webclient_connection_t *)arg;
 
-	tcp_connection_deref(connection->conn);
-	connection->conn = NULL;
+	if (connection->tcp_conn) {
+		tcp_connection_deref(connection->tcp_conn);
+		connection->tcp_conn = NULL;
+	}
+
+	if (connection->tls_conn) {
+		tls_client_connection_deref(connection->tls_conn);
+		connection->tls_conn = NULL;
+	}
 
 	if (!http_parser_is_valid_complete(connection->http_parser)) {
 		webclient_connection_signal_complete(connection, WEBCLIENT_RESULT_EARLY_CLOSE, 0, "early close");
@@ -285,6 +299,7 @@ static http_parser_error_t webclient_connection_http_event(void *arg, http_parse
 static void webclient_connection_conn_recv(void *arg, struct netbuf *nb)
 {
 	struct webclient_connection_t *connection = (struct webclient_connection_t *)arg;
+
 	DEBUG_TRACE("webclient_connection_conn_recv");
 	http_parser_recv_netbuf(connection->http_parser, nb);
 }
@@ -292,6 +307,7 @@ static void webclient_connection_conn_recv(void *arg, struct netbuf *nb)
 static void webclient_connection_conn_established(void *arg)
 {
 	struct webclient_connection_t *connection = (struct webclient_connection_t *)arg;
+
 	DEBUG_TRACE("webclient_connection_conn_established");
 	connection->stats.establish_time = timer_get_ticks();
 
@@ -326,9 +342,18 @@ static void webclient_connection_conn_established(void *arg)
 	}
 
 	netbuf_set_pos_to_start(header_nb);
-	tcp_error_t tcp_error = tcp_connection_send_netbuf(connection->conn, header_nb);
+
+	success = false;
+	if (connection->tcp_conn) {
+		success = (tcp_connection_send_netbuf(connection->tcp_conn, header_nb) == TCP_OK);
+	}
+	if (connection->tls_conn) {
+		success = tls_client_connection_send_netbuf(connection->tls_conn, header_nb);
+	}
+
 	netbuf_free(header_nb);
-	if (tcp_error != TCP_OK) {
+
+	if (!success) {
 		webclient_connection_signal_complete(connection, WEBCLIENT_RESULT_SEND_FAILED, 0, "send failed");
 		return;
 	}
@@ -342,6 +367,9 @@ static void webclient_connection_conn_established(void *arg)
 
 static bool webclient_connection_execute_connect(struct webclient_connection_t *connection)
 {
+	DEBUG_ASSERT(!connection->tcp_conn, "active connection");
+	DEBUG_ASSERT(!connection->tls_conn, "active connection");
+
 	if (!connection->http_parser) {
 		connection->http_parser = http_parser_alloc(webclient_connection_http_event, connection);
 		if (!connection->http_parser) {
@@ -352,29 +380,50 @@ static bool webclient_connection_execute_connect(struct webclient_connection_t *
 	http_parser_reset(connection->http_parser);
 	http_parser_set_tag_list(connection->http_parser, connection->http_tag_list, connection->callback_arg);
 
-	if (connection->conn) {
-		tcp_connection_close(connection->conn);
-		tcp_connection_deref(connection->conn);
+	if (connection->url.protocol == URL_PROTOCOL_HTTP) {
+		connection->tcp_conn = tcp_connection_alloc();
+		if (!connection->tcp_conn) {
+			DEBUG_WARN("out of memory");
+			return false;
+		}
+
+		if (connection->max_recv_nb_size != 0) {
+			tcp_connection_set_max_recv_nb_size(connection->tcp_conn, connection->max_recv_nb_size);
+		}
+
+		if (tcp_connection_connect(connection->tcp_conn, connection->url.ip_addr, connection->url.ip_port, 0, 0, webclient_connection_conn_established, webclient_connection_conn_recv, NULL, webclient_connection_conn_close, connection) != TCP_OK) {
+			DEBUG_WARN("connect failed");
+			tcp_connection_deref(connection->tcp_conn);
+			connection->tcp_conn = NULL;
+			return false;
+		}
+
+		return true;
 	}
 
-	connection->conn = tcp_connection_alloc();
-	if (!connection->conn) {
-		DEBUG_WARN("out of memory");
-		return false;
+	if (connection->url.protocol == URL_PROTOCOL_HTTPS) {
+		connection->tls_conn = tls_client_connection_alloc();
+		if (!connection->tls_conn) {
+			DEBUG_WARN("out of memory");
+			return false;
+		}
+
+		if (connection->max_recv_nb_size != 0) {
+			tls_client_connection_set_max_recv_nb_size(connection->tls_conn, connection->max_recv_nb_size);
+		}
+
+		if (!tls_client_connection_connect(connection->tls_conn, connection->url.ip_addr, connection->url.ip_port, 0, 0, connection->url.dns_name, webclient_connection_conn_established, webclient_connection_conn_recv, NULL, webclient_connection_conn_close, connection)) {
+			DEBUG_WARN("connect failed");
+			tls_client_connection_deref(connection->tls_conn);
+			connection->tls_conn = NULL;
+			return false;
+		}
+
+		return true;
 	}
 
-	if (connection->max_recv_nb_size != 0) {
-		tcp_connection_set_max_recv_nb_size(connection->conn, connection->max_recv_nb_size);
-	}
-
-	if (tcp_connection_connect(connection->conn, connection->url.ip_addr, connection->url.ip_port, 0, 0, webclient_connection_conn_established, webclient_connection_conn_recv, NULL, webclient_connection_conn_close, connection) != TCP_OK) {
-		DEBUG_WARN("connect failed");
-		tcp_connection_deref(connection->conn);
-		connection->conn = NULL;
-		return false;
-	}
-
-	return true;
+	DEBUG_ERROR("unsupported protocol");
+	return false;
 }
 
 static void webclient_connection_execute_dns_callback(void *arg, ipv4_addr_t ip, ticks_t expire_time)
@@ -418,6 +467,24 @@ static bool webclient_connection_execute_dns(struct webclient_connection_t *conn
 
 static bool webclient_connection_execute_start(struct webclient_connection_t *connection)
 {
+	if (RUNTIME_DEBUG) {
+		char url_str[512];
+		url_to_str(&connection->url, url_str, url_str + sizeof(url_str));
+		DEBUG_INFO("requesting %s", url_str);
+	}
+
+	if (connection->tcp_conn) {
+		tcp_connection_close(connection->tcp_conn);
+		tcp_connection_deref(connection->tcp_conn);
+		connection->tcp_conn = NULL;
+	}
+
+	if (connection->tls_conn) {
+		tls_client_connection_close(connection->tls_conn);
+		tls_client_connection_deref(connection->tls_conn);
+		connection->tls_conn = NULL;
+	}
+
 	connection->stats.start_time = timer_get_ticks();
 	connection->stats.dns_time = 0;
 	connection->stats.establish_time = 0;
@@ -432,11 +499,15 @@ static bool webclient_connection_execute_start(struct webclient_connection_t *co
 
 bool webclient_connection_can_post_data(struct webclient_connection_t *connection)
 {
-	if (!connection->conn) {
-		return false;
+	if (connection->tcp_conn) {
+		return tcp_connection_can_send(connection->tcp_conn) == TCP_OK;
 	}
 
-	return tcp_connection_can_send(connection->conn) == TCP_OK;
+	if (connection->tls_conn) {
+		return tls_client_connection_can_send(connection->tls_conn);
+	}
+
+	return false;
 }
 
 bool webclient_connection_post_data(struct webclient_connection_t *connection, struct netbuf *txnb, bool end)
@@ -452,9 +523,16 @@ bool webclient_connection_post_data(struct webclient_connection_t *connection, s
 	}
 
 	netbuf_set_pos_to_start(txnb);
-	tcp_error_t tcp_error = tcp_connection_send_netbuf(connection->conn, txnb);
-	if (tcp_error != TCP_OK) {
-		DEBUG_ERROR("tcp error");
+
+	bool success = false;
+	if (connection->tcp_conn) {
+		success = (tcp_connection_send_netbuf(connection->tcp_conn, txnb) == TCP_OK);
+	}
+	if (connection->tls_conn) {
+		success = tls_client_connection_send_netbuf(connection->tls_conn, txnb);
+	}
+	if (!success) {
+		DEBUG_ERROR("send error");
 		return false;
 	}
 
@@ -463,29 +541,37 @@ bool webclient_connection_post_data(struct webclient_connection_t *connection, s
 
 void webclient_connection_pause_recv(struct webclient_connection_t *connection)
 {
-	if (!connection->conn) {
-		return;
-	}
-
 	if (connection->stats_last_pause_time == 0) {
 		connection->stats_last_pause_time = timer_get_ticks();
 	}
 
-	tcp_connection_pause_recv(connection->conn);
+	if (connection->tcp_conn) {
+		tcp_connection_pause_recv(connection->tcp_conn);
+		return;
+	}
+
+	if (connection->tls_conn) {
+		tls_client_connection_pause_recv(connection->tls_conn);
+		return;
+	}
 }
 
 void webclient_connection_resume_recv(struct webclient_connection_t *connection)
 {
-	if (!connection->conn) {
-		return;
-	}
-
 	if (connection->stats_last_pause_time > 0) {
 		connection->stats.paused_duration += timer_get_ticks() - connection->stats_last_pause_time;
 		connection->stats_last_pause_time = 0;
 	}
 
-	tcp_connection_resume_recv(connection->conn);
+	if (connection->tcp_conn) {
+		tcp_connection_resume_recv(connection->tcp_conn);
+		return;
+	}
+
+	if (connection->tls_conn) {
+		tls_client_connection_resume_recv(connection->tls_conn);
+		return;
+	}
 }
 
 struct webclient_connection_stats_t *webclient_connection_get_stats(struct webclient_connection_t *connection)
@@ -495,11 +581,15 @@ struct webclient_connection_stats_t *webclient_connection_get_stats(struct webcl
 
 ipv4_addr_t webclient_connection_get_local_ip(struct webclient_connection_t *connection)
 {
-	if (!connection->conn) {
-		return 0;
+	if (connection->tcp_conn) {
+		return tcp_connection_get_local_addr(connection->tcp_conn);
 	}
 
-	return tcp_connection_get_local_addr(connection->conn);
+	if (connection->tls_conn) {
+		return tls_client_connection_get_local_addr(connection->tls_conn);
+	}
+
+	return 0;
 }
 
 ticks_t webclient_connection_get_timeout_time_remaining(struct webclient_connection_t *connection)
@@ -521,8 +611,14 @@ void webclient_connection_set_max_recv_nb_size(struct webclient_connection_t *co
 {
 	connection->max_recv_nb_size = max_recv_nb_size;
 
-	if (connection->conn) {
-		tcp_connection_set_max_recv_nb_size(connection->conn, max_recv_nb_size);
+	if (connection->tcp_conn) {
+		tcp_connection_set_max_recv_nb_size(connection->tcp_conn, max_recv_nb_size);
+		return;
+	}
+
+	if (connection->tls_conn) {
+		tls_client_connection_set_max_recv_nb_size(connection->tls_conn, max_recv_nb_size);
+		return;
 	}
 }
 

@@ -46,6 +46,8 @@
 #include <net/udp.h>
 #include <net/tcp.h>
 #include <crypto/crypto.h>
+#include <crypto/crypto_hash.h>
+#include <crypto/pkcs1_v15.h>
 #include <appfs/appfs.h>
 #include <file/dir_change_notification.h>
 #include <file/dir_utils.h>
@@ -63,6 +65,8 @@
 #include <web/url_params.h>
 #include <web/xml_parser.h>
 #include <web/http_server.h>
+#include <webclient/tls_prf.h>
+#include <webclient/tls_client_connection.h>
 #include <webclient/webclient.h>
 #include <webserver/webserver.h>
 #include <upnp/upnp.h>

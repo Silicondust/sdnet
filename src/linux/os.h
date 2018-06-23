@@ -48,6 +48,8 @@
 #include <net/udp_dhcp.h>
 #include <net/tcp.h>
 #include <crypto/crypto.h>
+#include <crypto/crypto_hash.h>
+#include <crypto/pkcs1_v15.h>
 #include <crypto/der.h>
 #include <crypto/x509.h>
 #include <crypto/libtom/mpi.h>
@@ -71,6 +73,8 @@
 #include <web/url_params.h>
 #include <web/xml_parser.h>
 #include <web/http_server.h>
+#include <webclient/tls_prf.h>
+#include <webclient/tls_client_connection.h>
 #include <webclient/webclient.h>
 #include <webserver/webserver.h>
 #include <upnp/upnp.h>

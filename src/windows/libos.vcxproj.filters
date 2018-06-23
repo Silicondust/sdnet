@@ -21,12 +21,6 @@
     <ClCompile Include="..\crypto\windows\random.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\crypto\windows\crypto_aes.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\crypto\windows\crypto_sha1.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\daemon\windows\daemon.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -247,6 +241,33 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="strcasestr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\crypto\x509.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\crypto\der.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\crypto\pkcs1_v15.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\crypto\libtom\crypto_rsa.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\crypto\libtom\crypto_aes.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\crypto\libtom\crypto_init.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\crypto\libtom\crypto_hash.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\webclient\tls_prf.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\webclient\tls_client_connection.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

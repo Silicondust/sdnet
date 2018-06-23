@@ -44,7 +44,9 @@
 #include <mach/clock.h>
 #include <mach/mach.h>
 
+#define LTC_NO_PROTOTYPES
 #include <tomcrypt.h>
+#include <tommath.h>
 
 #define min(a, b) ((a) <= (b) ? (a) : (b))
 #define max(a, b) ((a) >= (b) ? (a) : (b))

@@ -34,6 +34,7 @@ int os_main(int argc, char *argv[])
 	/* Enable UTF-8 support. */
 	SetConsoleOutputCP(CP_UTF8);
 
+	crypto_init();
 	timer_init();
 	flash_init();
 	heap_manager_init();
@@ -45,7 +46,6 @@ int os_main(int argc, char *argv[])
 	igmp_manager_init();
 	tcp_manager_init();
 	udp_manager_init();
-	crypto_test();
 
 	main_thread_signal = thread_signal_alloc();
 	system_app_queue = mqueue_alloc(1024, main_thread_signal);

@@ -18,15 +18,20 @@
 
 THIS_FILE("x509");
 
+#define X509_CURRENT_TIME_VALID 946684800
+
 struct x509_certificate_t {
+	struct slist_prefix_t slist_prefix;
 	struct der_block_t top_level_block;
 	struct der_block_t issuer_block;
 	struct der_block_t subject_block;
 	struct der_block_t validity_time_block;
 	struct der_block_t public_key_block;
+	struct der_block_t subject_alternative_name_block;
+	struct der_block_t subject_key_identifier_block;
 	struct der_block_t authority_key_identifier_block;
 	struct der_block_t extended_key_usage_block;
-	uint8_t *raw_data;
+	uint8_t *raw_data; /* NULL for no_copy mode */
 	uint8_t version;
 	bool key_usage_critical;
 	uint32_t key_usage;
@@ -34,11 +39,14 @@ struct x509_certificate_t {
 
 void x509_certificate_free(struct x509_certificate_t *cert)
 {
-	heap_free(cert->raw_data);
+	if (cert->raw_data) {
+		heap_free(cert->raw_data);
+	}
+
 	heap_free(cert);
 }
 
-bool x509_certificate_verify_signature(struct x509_certificate_t *cert, struct rsa_key_t *key)
+bool x509_certificate_verify_signature(struct x509_certificate_t *cert, struct rsa_key_t *key, bool block_weak_signatures)
 {
 	/* Copy block state for local iteration */
 	struct der_block_t top_level_block = cert->top_level_block;
@@ -84,31 +92,104 @@ bool x509_certificate_verify_signature(struct x509_certificate_t *cert, struct r
 
 	size_t signature_bit_len = (signature_end - signature_ptr) * 8 - signature_unused_bits;
 
+	bool sha1 = false;
+	bool sha256 = false;
+	bool sha384 = false;
+	bool sha512 = false;
+
 	if (strcmp(signature_type_id, "1.2.840.113549.1.1.5") == 0) {
-		if ((signature_bit_len != 1024) && (signature_bit_len != 2048)) {
-			DEBUG_WARN("unexpected signature length");
+		/* RSA/PKCS1/SHA1 */
+		if (block_weak_signatures) {
+			DEBUG_WARN("ignoring weak signature");
 			return false;
 		}
+		sha1 = true;
+	} else if (strcmp(signature_type_id, "1.2.840.113549.1.1.11") == 0) {
+		/* RSA/PKCS1/SHA256 */
+		sha256 = true;
+	} else if (strcmp(signature_type_id, "1.2.840.113549.1.1.12") == 0) {
+		/* RSA/PKCS1/SHA384 */
+		sha384 = true;
+	} else if (strcmp(signature_type_id, "1.2.840.113549.1.1.13") == 0) {
+		/* RSA/PKCS1/SHA512 */
+		sha512 = true;
+	} else {
+		DEBUG_WARN("unsupported signature type %s", signature_type_id);
+		return false;
+	}
 
-		/* Hash data to be verified. */
+	uint8_t decoded_signature[4096 / 8];
+	size_t decoded_signature_len = signature_bit_len / 8;
+
+	/* Decrypt signature. */
+	switch (signature_bit_len) {
+	case 1024:
+		if (block_weak_signatures) {
+			DEBUG_WARN("ignoring weak signature");
+			return false;
+		}
+		break;
+
+	case 2048:
+	case 4096:
+		break;
+
+	default:
+		DEBUG_WARN("unexpected signature length");
+		return false;
+	}
+
+	if (!rsa_exptmod_auto(signature_ptr, decoded_signature, decoded_signature_len, key)) {
+		DEBUG_WARN("rsa_exptmod_auto failed");
+		return false;
+	}
+
+	/* Verify hash */
+	if (sha1) {
 		sha1_digest_t data_hash;
 		sha1_compute_digest(&data_hash, certificate_block_raw, certificate_block.end - certificate_block_raw);
 
-		/* Decrypt signature. */
-		uint8_t decoded_signature[256];
-		size_t decoded_signature_len = signature_bit_len / 8;
-		if (!rsa_exptmod_auto(signature_ptr, decoded_signature, decoded_signature_len, key)) {
-			DEBUG_WARN("rsa_exptmod_auto failed");
-			return false;
-		}
-
-		/* PKCS1 decode / signature check. */
 		if (!pkcs1_v15_unpad_compare_sha1(&data_hash, decoded_signature, decoded_signature_len)) {
 			DEBUG_WARN("signature does not match");
 			return false;
 		}
 
-		/* Success. */
+		return true;
+	}
+
+	if (sha256) {
+		sha256_digest_t data_hash;
+		sha256_compute_digest(&data_hash, certificate_block_raw, certificate_block.end - certificate_block_raw);
+
+		if (!pkcs1_v15_unpad_compare_sha256(&data_hash, decoded_signature, decoded_signature_len)) {
+			DEBUG_WARN("signature does not match");
+			return false;
+		}
+
+		return true;
+	}
+
+	if (sha384) {
+		sha384_digest_t data_hash;
+		sha384_compute_digest(&data_hash, certificate_block_raw, certificate_block.end - certificate_block_raw);
+
+		if (!pkcs1_v15_unpad_compare_sha384(&data_hash, decoded_signature, decoded_signature_len)) {
+			DEBUG_WARN("signature does not match");
+			return false;
+		}
+
+		return true;
+	}
+
+	if (sha512) {
+		sha512_digest_t data_hash;
+		sha512_compute_digest(&data_hash, certificate_block_raw, certificate_block.end - certificate_block_raw);
+
+		if (!pkcs1_v15_unpad_compare_sha512(&data_hash, decoded_signature, decoded_signature_len)) {
+			DEBUG_WARN("signature does not match");
+			return false;
+		}
+
 		return true;
 	}
 
@@ -145,9 +226,9 @@ bool x509_certificate_verify_validity_time(struct x509_certificate_t *cert, time
 		return false;
 	}
 
-	DEBUG_INFO("x509_certificate_verify_validity_time: not before = %lld", not_before_time);
-	DEBUG_INFO("x509_certificate_verify_validity_time: not after = %lld", not_after_time);
-	DEBUG_INFO("x509_certificate_verify_validity_time: current = %lld", current_time);
+	DEBUG_TRACE("x509_certificate_verify_validity_time: not before = %lld", not_before_time);
+	DEBUG_TRACE("x509_certificate_verify_validity_time: not after = %lld", not_after_time);
+	DEBUG_TRACE("x509_certificate_verify_validity_time: current = %lld", current_time);
 
 	return (current_time >= not_before_time) && (current_time <= not_after_time);
 }
@@ -235,6 +316,48 @@ bool x509_certificate_get_issuer_organization(struct x509_certificate_t *cert, c
 	return x509_certificate_get_string(&cert->issuer_block, "2.5.4.10", buffer, end);
 }
 
+bool x509_certificate_verify_subject_key_identifier(struct x509_certificate_t *cert, uint8_t identifier[20])
+{
+	if (cert->subject_key_identifier_block.type != DER_TYPE_OCTET_STRING) {
+		return false;
+	}
+
+	uint8_t *ptr = cert->subject_key_identifier_block.payload;
+	uint8_t *end = cert->subject_key_identifier_block.end;
+	if (ptr + 20 != end) {
+		DEBUG_WARN("bad identifier length");
+		return false;
+	}
+
+	return memcmp(identifier, ptr, 20) == 0;
+}
+
+bool x509_certificate_get_authority_key_identifier(struct x509_certificate_t *cert, uint8_t identifier[20])
+{
+	if (cert->authority_key_identifier_block.type != DER_TYPE_SEQUENCE) {
+		return false;
+	}
+
+	/* Copy block state for local iteration */
+	struct der_block_t authority_key_identifier_block = cert->authority_key_identifier_block;
+
+	struct der_block_t authority_key_identifier_data;
+	if (!der_child_iterator_next_and_verify_type(&authority_key_identifier_block, DER_TYPE_80, &authority_key_identifier_data)) {
+		DEBUG_WARN("bad structure");
+		return false;
+	}
+
+	uint8_t *ptr = authority_key_identifier_data.payload;
+	uint8_t *end = authority_key_identifier_data.end;
+	if (ptr + 20 != end) {
+		DEBUG_WARN("bad identifier length");
+		return false;
+	}
+
+	memcpy(identifier, ptr, 20);
+	return true;
+}
+
 struct rsa_key_t *x509_certificate_get_public_key(struct x509_certificate_t *cert)
 {
 	/* Copy block state for local iteration */
@@ -319,6 +442,11 @@ bool x509_certificate_is_usable_for_key_encipherment(struct x509_certificate_t *
 	return (cert->key_usage & (1 << 2)) != 0;
 }
 
+bool x509_certificate_is_usable_for_certificate_signing(struct x509_certificate_t *cert)
+{
+	return (cert->key_usage & (1 << 5)) != 0;
+}
+
 static bool x509_certificate_is_usable_for_extended(struct x509_certificate_t *cert, char *id)
 {
 	if (!cert->extended_key_usage_block.payload) {
@@ -345,14 +473,91 @@ static bool x509_certificate_is_usable_for_extended(struct x509_certificate_t *c
 	}
 }
 
+bool x509_certificate_is_usable_for_tls_web_server_authentication(struct x509_certificate_t *cert)
+{
+	return x509_certificate_is_usable_for_extended(cert, "1.3.6.1.5.5.7.3.1");
+}
+
+bool x509_certificate_is_usable_for_tls_web_client_authentication(struct x509_certificate_t *cert)
+{
+	return x509_certificate_is_usable_for_extended(cert, "1.3.6.1.5.5.7.3.2");
+}
+
 bool x509_certificate_is_usable_for_code_signing(struct x509_certificate_t *cert)
 {
 	return x509_certificate_is_usable_for_extended(cert, "1.3.6.1.5.5.7.3.3");
 }
 
-bool x509_certificate_is_authority_key_identifier_present(struct x509_certificate_t *cert)
+bool x509_certificate_is_valid_for_dns_name(struct x509_certificate_t *cert, const char *dns_name)
 {
-	return (cert->authority_key_identifier_block.payload != NULL);
+	const char *wildcard_name = strchr(dns_name, '.');
+	if (!wildcard_name) {
+		return false;
+	}
+
+	/* Check against common name */
+	char common_name[256];
+	if (!x509_certificate_get_subject_common_name(cert, common_name, common_name + sizeof(common_name))) {
+		return false;
+	}
+
+	if (common_name[0] == '*') {
+		if (strcmp(wildcard_name, common_name + 1) == 0) {
+			return true;
+		}
+	} else {
+		if (strcmp(dns_name, common_name) == 0) {
+			return true;
+		}
+	}
+
+	/* Check against alternative names */
+	if (cert->subject_alternative_name_block.type != DER_TYPE_SEQUENCE) {
+		return false;
+	}
+
+	struct der_block_t subject_alternative_name_block_local = cert->subject_alternative_name_block;
+	size_t dns_name_len = strlen(dns_name);
+	size_t wildcard_name_len = strlen(wildcard_name);
+
+	while (1) {
+		struct der_block_t value_block;
+		if (!der_child_iterator_next_and_verify_type(&subject_alternative_name_block_local, DER_TYPE_CHOICE, &value_block)) {
+			return false;
+		}
+
+		size_t len = value_block.end - value_block.payload;
+		if (len == 0) {
+			continue;
+		}
+
+		char *value = (char *)value_block.payload;
+
+		if (value[0] == '*') {
+			value++;
+			len--;
+
+			if (wildcard_name_len != len) {
+				continue;
+			}
+
+			if (memcmp(wildcard_name, value, len) != 0) {
+				continue;
+			}
+
+			return true;
+		}
+
+		if (dns_name_len != len) {
+			continue;
+		}
+
+		if (memcmp(dns_name, value, len) != 0) {
+			continue;
+		}
+
+		return true;
+	}
 }
 
 static bool x509_cetificate_import_decode_version(struct x509_certificate_t *cert, struct der_block_t *version_block)
@@ -413,19 +618,21 @@ static bool x509_certificate_import_key_usage(struct x509_certificate_t *cert, s
 	return true;
 }
 
-static bool x509_certificate_import_extended_key_usage(struct x509_certificate_t *cert, struct der_block_t *extension_payload_block)
+static bool x509_certificate_import_extensions_octect_string_containing_der_verify_type(struct x509_certificate_t *cert, struct der_block_t *extension_payload_block, struct der_block_t *output_block, uint8_t type)
 {
 	uint8_t *ptr;
 	uint8_t *end;
 	if (!der_block_get_octet_string(extension_payload_block, &ptr, &end)) {
+		DEBUG_WARN("not octet string");
 		return false;
 	}
 
-	if (!der_block_init(&cert->extended_key_usage_block, ptr, end)) {
+	if (!der_block_init(output_block, ptr, end)) {
 		return false;
 	}
 
-	if (cert->extended_key_usage_block.type != DER_TYPE_SEQUENCE) {
+	if (output_block->type != type) {
+		DEBUG_WARN("not expected type");
 		return false;
 	}
 
@@ -483,10 +690,26 @@ static bool x509_certificate_import_extensions(struct x509_certificate_t *cert, 
 			return false;
 		}
 
+		if (strcmp(object_id, "2.5.29.14") == 0) {
+			/* Subject Key Identifier */
+			if (!x509_certificate_import_extensions_octect_string_containing_der_verify_type(cert, &extension_payload_block, &cert->subject_key_identifier_block, DER_TYPE_OCTET_STRING)) {
+				return false;
+			}
+			continue;
+		}
+
 		if (strcmp(object_id, "2.5.29.15") == 0) {
 			/* Key Usage */
 			cert->key_usage_critical = critical;
 			if (!x509_certificate_import_key_usage(cert, &extension_payload_block)) {
+				return false;
+			}
+			continue;
+		}
+
+		if (strcmp(object_id, "2.5.29.17") == 0) {
+			/* Subject Alternative Name */
+			if (!x509_certificate_import_extensions_octect_string_containing_der_verify_type(cert, &extension_payload_block, &cert->subject_alternative_name_block, DER_TYPE_SEQUENCE)) {
 				return false;
 			}
 			continue;
@@ -499,13 +722,15 @@ static bool x509_certificate_import_extensions(struct x509_certificate_t *cert, 
 
 		if (strcmp(object_id, "2.5.29.35") == 0) {
 			/* Authroity Key Identifier */
-			cert->authority_key_identifier_block = extension_payload_block;
+			if (!x509_certificate_import_extensions_octect_string_containing_der_verify_type(cert, &extension_payload_block, &cert->authority_key_identifier_block, DER_TYPE_SEQUENCE)) {
+				return false;
+			}
 			continue;
 		}
 
 		if (strcmp(object_id, "2.5.29.37") == 0) {
 			/* Extended Key Usage */
-			if (!x509_certificate_import_extended_key_usage(cert, &extension_payload_block)) {
+			if (!x509_certificate_import_extensions_octect_string_containing_der_verify_type(cert, &extension_payload_block, &cert->extended_key_usage_block, DER_TYPE_SEQUENCE)) {
 				return false;
 			}
 			continue;
@@ -515,6 +740,8 @@ static bool x509_certificate_import_extensions(struct x509_certificate_t *cert, 
 			DEBUG_WARN("critical extension not supported: %s", object_id);
 			return false;
 		}
+
+		DEBUG_TRACE("extension not supported: %s", object_id);
 	}
 
 	return true;
@@ -597,17 +824,11 @@ static bool x509_certificate_import_internal(struct x509_certificate_t *cert)
 
 struct x509_certificate_t *x509_certificate_import(uint8_t *data, size_t length)
 {
-	struct der_block_t pre_test_block;
-	if (!der_block_init(&pre_test_block, data, data + length)) {
-		return NULL;
-	}
-	if (pre_test_block.type != DER_TYPE_SEQUENCE) {
+	length = x509_certificate_import_length(data, length);
+	if (length == 0) {
 		return NULL;
 	}
 
-	/* Actual length */
-	length = pre_test_block.end - data;
-		
 	struct x509_certificate_t *cert = (struct x509_certificate_t *)heap_alloc_and_zero(sizeof(struct x509_certificate_t), PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
 	if (!cert) {
 		return NULL;
@@ -632,6 +853,230 @@ struct x509_certificate_t *x509_certificate_import(uint8_t *data, size_t length)
 	}
 
 	return cert;
+}
+
+struct x509_certificate_t *x509_certificate_import_no_copy(uint8_t *data, size_t length)
+{
+	length = x509_certificate_import_length(data, length);
+	if (length == 0) {
+		return NULL;
+	}
+		
+	struct x509_certificate_t *cert = (struct x509_certificate_t *)heap_alloc_and_zero(sizeof(struct x509_certificate_t), PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
+	if (!cert) {
+		return NULL;
+	}
+
+	if (!der_block_init(&cert->top_level_block, data, data + length)) {
+		x509_certificate_free(cert);
+		return NULL;
+	}
+
+	if (!x509_certificate_import_internal(cert)) {
+		x509_certificate_free(cert);
+		return NULL;
+	}
+
+	return cert;
+}
+
+struct x509_certificate_t *x509_certificate_import_netbuf(struct netbuf *nb, size_t length)
+{
+#if defined(IPOS)
+	size_t cert_length = x509_certificate_import_length_netbuf(nb, length);
+	if (cert_length == 0) {
+		return NULL;
+	}
+
+	uint8_t *data = (uint8_t *)heap_alloc(cert_length, PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
+	if (!data) {
+		return NULL;
+	}
+
+	netbuf_fwd_read(nb, data, cert_length);
+
+	struct x509_certificate_t *cert = x509_certificate_import_no_copy(data, cert_length);
+	if (!cert) {
+		heap_free(data);
+		return NULL;
+	}
+
+	cert->raw_data = data;
+	return cert;
+#else
+	uint8_t *data = netbuf_get_ptr(nb);
+	return x509_certificate_import(data, length);
+#endif
+}
+
+size_t x509_certificate_import_length(uint8_t *data, size_t length)
+{
+	struct der_block_t pre_test_block;
+	if (!der_block_init(&pre_test_block, data, data + length)) {
+		return 0;
+	}
+
+	if (pre_test_block.type != DER_TYPE_SEQUENCE) {
+		return 0;
+	}
+
+	size_t cert_length = pre_test_block.end - data;
+	if (cert_length > length) {
+		return 0;
+	}
+
+	return cert_length;
+}
+
+size_t x509_certificate_import_length_netbuf(struct netbuf *nb, size_t length)
+{
+#if defined(IPOS)
+	addr_t bookmark = netbuf_get_pos(nb);
+
+	if (!netbuf_fwd_check_space(nb, 4)) {
+		return 0;
+	}
+
+	if (netbuf_fwd_read_u8(nb) != 0x30) {
+		netbuf_set_pos(nb, bookmark);
+		return 0;
+	}
+
+	if (netbuf_fwd_read_u8(nb) != 0x82) {
+		netbuf_set_pos(nb, bookmark);
+		return 0;
+	}
+
+	size_t cert_length = netbuf_fwd_read_u16(nb) + 4;
+	netbuf_set_pos(nb, bookmark);
+
+	if (cert_length > length) {
+		return 0;
+	}
+
+	if (!netbuf_fwd_check_space(nb, cert_length)) {
+		return 0;
+	}
+
+	return cert_length;
+#else
+	uint8_t *data = netbuf_get_ptr(nb);
+	return x509_certificate_import_length(data, length);
+#endif
+}
+
+bool x509_chain_verify(struct slist_t *chain, struct slist_t *root_certs, bool block_weak_signatures)
+{
+	struct x509_certificate_t *child_cert = slist_get_head(struct x509_certificate_t, chain);
+	if (!child_cert) {
+		DEBUG_WARN("no certificates");
+		return false;
+	}
+
+	if (RUNTIME_DEBUG) {
+		char common_name[128];
+		x509_certificate_get_subject_common_name(child_cert, common_name, common_name + sizeof(common_name));
+		DEBUG_TRACE("server CN = %s", common_name);
+	}
+
+	time64_t current_time = unix_time();
+	if (current_time >= X509_CURRENT_TIME_VALID) {
+		if (!x509_certificate_verify_validity_time(child_cert, current_time)) {
+			DEBUG_WARN("certificate has expired");
+			return false;
+		}
+	}
+
+	while (1) {
+		uint8_t child_authority_key_identifier[20];
+		if (!x509_certificate_get_authority_key_identifier(child_cert, child_authority_key_identifier)) {
+			DEBUG_WARN("child does not have an authority_key_identifier");
+			return false;
+		}
+
+		struct x509_certificate_t *root_cert = slist_get_head(struct x509_certificate_t, root_certs);
+		while (root_cert) {
+			if (!x509_certificate_verify_subject_key_identifier(root_cert, child_authority_key_identifier)) {
+				root_cert = slist_get_next(struct x509_certificate_t, root_cert);
+				continue;
+			}
+
+			if (RUNTIME_DEBUG) {
+				char common_name[128];
+				x509_certificate_get_subject_common_name(root_cert, common_name, common_name + sizeof(common_name));
+				DEBUG_TRACE("root CN = %s", common_name);
+			}
+
+			if (current_time >= X509_CURRENT_TIME_VALID) {
+				if (!x509_certificate_verify_validity_time(root_cert, current_time)) {
+					DEBUG_WARN("root certificate has expired");
+					return false;
+				}
+			}
+
+			if (!x509_certificate_is_usable_for_certificate_signing(root_cert)) {
+				DEBUG_WARN("root cert not valid for certificate signing");
+				return false;
+			}
+
+			struct rsa_key_t *root_public_key = x509_certificate_get_public_key(root_cert);
+			if (!root_public_key) {
+				DEBUG_WARN("rsa import failed");
+				return false;
+			}
+
+			if (!x509_certificate_verify_signature(child_cert, root_public_key, block_weak_signatures)) {
+				rsa_key_free(root_public_key);
+				return false;
+			}
+
+			rsa_key_free(root_public_key);
+			return true;
+		}
+
+		struct x509_certificate_t *parent_cert = slist_get_next(struct x509_certificate_t, child_cert);
+		if (!parent_cert) {
+			DEBUG_WARN("no root cert match");
+			return false;
+		}
+
+		if (RUNTIME_DEBUG) {
+			char common_name[128];
+			x509_certificate_get_subject_common_name(parent_cert, common_name, common_name + sizeof(common_name));
+			DEBUG_TRACE("intermediate CN = %s", common_name);
+		}
+
+		if (!x509_certificate_verify_subject_key_identifier(parent_cert, child_authority_key_identifier)) {
+			DEBUG_WARN("child authority_key_identifier does not match parent subject_key_identifier");
+			return false;
+		}
+
+		if (current_time >= X509_CURRENT_TIME_VALID) {
+			if (!x509_certificate_verify_validity_time(parent_cert, current_time)) {
+				DEBUG_WARN("certificate has expired");
+				return false;
+			}
+		}
+
+		if (!x509_certificate_is_usable_for_certificate_signing(parent_cert)) {
+			DEBUG_WARN("cert not valid for certificate signing");
+			return false;
+		}
+
+		struct rsa_key_t *parent_public_key = x509_certificate_get_public_key(parent_cert);
+		if (!parent_public_key) {
+			DEBUG_WARN("rsa import failed");
+			return false;
+		}
+
+		if (!x509_certificate_verify_signature(child_cert, parent_public_key, block_weak_signatures)) {
+			rsa_key_free(parent_public_key);
+			return false;
+		}
+		
+		rsa_key_free(parent_public_key);
+		child_cert = parent_cert;
+	}
 }
 
 #if defined(DEBUG)
@@ -727,7 +1172,7 @@ void x509_test(void)
 	struct rsa_key_t *upstream_key = rsa_key_import_public(x509_test_upstream_public_key, sizeof(x509_test_upstream_public_key));
 	DEBUG_ASSERT(upstream_key, "rsa_key_import_public failed");
 
-	DEBUG_ASSERT(x509_certificate_verify_signature(cert, upstream_key), "x509_certificate_verify_signature failed");
+	DEBUG_ASSERT(x509_certificate_verify_signature(cert, upstream_key, false), "x509_certificate_verify_signature failed");
 	rsa_key_free(upstream_key);
 
 	DEBUG_ASSERT(x509_certificate_verify_validity_time(cert, 1510427089ULL), "x509_certificate_verify_validity_time failed");
@@ -749,7 +1194,6 @@ void x509_test(void)
 	DEBUG_ASSERT(x509_certificate_is_key_usage_critical(cert), "x509_certificate_is_key_usage_critical failed");
 	DEBUG_ASSERT(x509_certificate_is_usable_for_digital_signature(cert), "x509_certificate_is_usable_for_digital_signature failed");
 	DEBUG_ASSERT(x509_certificate_is_usable_for_key_encipherment(cert), "x509_certificate_is_usable_for_key_encipherment failed");
-	DEBUG_ASSERT(x509_certificate_is_authority_key_identifier_present(cert), "x509_certificate_is_authority_key_identifier_present failed");
 
 	x509_certificate_free(cert);
 

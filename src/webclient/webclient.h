@@ -1,7 +1,7 @@
 /*
  * webclient.h
  *
- * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2014-2018 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -33,6 +33,7 @@ struct webclient_connection_stats_t {
 #define WEBCLIENT_RESULT_HTTP_PARSE_ERROR 6
 #define WEBCLIENT_RESULT_EARLY_CLOSE 7
 #define WEBCLIENT_RESULT_TIMEOUT 8
+#define WEBCLIENT_RESULT_HTTPS_FAILED 9
 
 typedef void(*webclient_connection_redirect_callback_t)(void *arg, struct webclient_connection_t *connection, struct url_t *url);
 typedef void(*webclient_connection_post_callback_t)(void *arg, struct webclient_connection_t *connection);

@@ -19,6 +19,8 @@
 #define DER_TYPE_UTC_TIME 0x17
 #define DER_TYPE_SEQUENCE 0x30
 #define DER_TYPE_SET 0x31
+#define DER_TYPE_80 0x80
+#define DER_TYPE_CHOICE 0x82
 #define DER_TYPE_A0 0xA0
 #define DER_TYPE_A3 0xA3
 #define DER_TYPE_ERROR 0xFF
