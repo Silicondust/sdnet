@@ -132,9 +132,6 @@
     <ClCompile Include="..\utils\slist.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\webclient\webclient.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\web\http_parser.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -264,10 +261,16 @@
     <ClCompile Include="..\crypto\libtom\crypto_hash.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\webclient\tls_prf.c">
+    <ClCompile Include="..\net\tls_prf.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\webclient\tls_client_connection.c">
+    <ClCompile Include="..\net\tls_client_connection.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\webclient\webclient_operation.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\webclient\webclient.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

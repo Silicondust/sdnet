@@ -20,17 +20,22 @@ THIS_FILE("json_parser_utils");
 
 bool json_parser_nb_to_str(char *str, char *end, struct netbuf *nb)
 {
+	DEBUG_ASSERT(str < end, "bad buffer");
+
+	bool success = true;
 	size_t len = netbuf_get_remaining(nb);
+
 	if (str + len >= end) {
 		len = end - str - 1;
-		netbuf_fwd_read(nb, str, len);
-		str[len] = 0;
-		return false;
+		success = false;
 	}
 
-	netbuf_fwd_read(nb, str, len);
+	if (LIKELY(len > 0)) {
+		netbuf_fwd_read(nb, str, len);
+	}
+
 	str[len] = 0;
-	return true;
+	return success;
 }
 
 static bool json_parser_path_apply_element_start(char *path, char *end, char tag, struct netbuf *name_nb)

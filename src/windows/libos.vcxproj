@@ -41,6 +41,8 @@
     <ClCompile Include="..\flash\flash_file.c" />
     <ClCompile Include="..\net\ip_passive_common.c" />
     <ClCompile Include="..\net\libc\dns_lookup.c" />
+    <ClCompile Include="..\net\tls_client_connection.c" />
+    <ClCompile Include="..\net\tls_prf.c" />
     <ClCompile Include="..\net\windows\igmp.c" />
     <ClCompile Include="..\net\windows\ip_passive.c" />
     <ClCompile Include="..\net\windows\tcp_connection.c" />
@@ -86,9 +88,8 @@
     <ClCompile Include="..\utils\hash32.c" />
     <ClCompile Include="..\utils\hmap.c" />
     <ClCompile Include="..\utils\slist.c" />
-    <ClCompile Include="..\webclient\tls_client_connection.c" />
-    <ClCompile Include="..\webclient\tls_prf.c" />
     <ClCompile Include="..\webclient\webclient.c" />
+    <ClCompile Include="..\webclient\webclient_operation.c" />
     <ClCompile Include="..\webserver\webserver.c" />
     <ClCompile Include="..\webserver\webserver_connection.c" />
     <ClCompile Include="..\webserver\webserver_content_type.c" />

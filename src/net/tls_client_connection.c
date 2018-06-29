@@ -1186,6 +1186,8 @@ bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv
 		return false;
 	}
 
+	tcp_connection_set_max_recv_nb_size(tls_conn->conn, min(TLS_MAX_RECORD_LENGTH, NETBUF_MAX_LENGTH));
+
 	tcp_error_t ret = tcp_connection_connect(tls_conn->conn, dest_addr, dest_port, src_addr, src_port, tls_client_connection_tcp_establish_callback, tls_client_connection_tcp_recv_callback, tls_client_connection_tcp_send_resume_callback, tls_client_connection_tcp_close_callback, tls_conn);
 	if (ret != TCP_OK) {
 		DEBUG_ERROR("tcp_connection_connect failed");
@@ -1251,15 +1253,6 @@ void tls_client_connection_resume_recv(struct tls_client_connection_t *tls_conn)
 	}
 
 	tcp_connection_resume_recv(tls_conn->conn);
-}
-
-void tls_client_connection_set_max_recv_nb_size(struct tls_client_connection_t *tls_conn, size_t recv_nb_size)
-{
-	if (!tls_conn->conn) {
-		return;
-	}
-
-	tcp_connection_set_max_recv_nb_size(tls_conn->conn, recv_nb_size);
 }
 
 ipv4_addr_t tls_client_connection_get_local_addr(struct tls_client_connection_t *tls_conn)

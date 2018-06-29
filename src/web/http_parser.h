@@ -30,7 +30,7 @@ typedef enum {
 	HTTP_PARSER_EVENT_RESET,
 } http_parser_event_t;
 
-typedef http_parser_error_t (*http_parser_func_t)(void *app_data, struct netbuf *nb);
+typedef http_parser_error_t (*http_parser_func_t)(void *app_data, const char *header, struct netbuf *nb);
 typedef http_parser_error_t (*http_parser_event_callback_t)(void *app_data, http_parser_event_t header_event, struct netbuf *nb);
 
 struct http_parser_tag_lookup_t {

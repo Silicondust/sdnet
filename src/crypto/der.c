@@ -456,8 +456,18 @@ static void der_block_debug_print_internal(int level, struct der_block_t *block)
 		break;
 
 	case DER_TYPE_UTF8_STRING:
+		{
+			char str[128];
+			if (!der_block_get_text_string(block, str, str + sizeof(str))) {
+				break;
+			}
+
+			DEBUG_INFO("%sutf8-string=%s", der_level_indent(level), str);
+		}
+		break;
+
 	case DER_TYPE_PRINTABLE_STRING:
-	{
+		{
 			char str[128];
 			if (!der_block_get_text_string(block, str, str + sizeof(str))) {
 				break;

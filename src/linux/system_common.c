@@ -1,5 +1,5 @@
 /*
- * system.c
+ * system_common.c
  *
  * Copyright © 2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
@@ -16,7 +16,7 @@
 #define RUNTIME_DEBUG 0
 #endif
 
-THIS_FILE("system");
+THIS_FILE("system_common");
 
 uint32_t system_detect_file_limit(void)
 {

@@ -17,9 +17,9 @@
 
 THIS_FILE("webserver_connection");
 
-static http_parser_error_t webserver_connection_http_tag_host(void *arg, struct netbuf *nb);
-static http_parser_error_t webserver_connection_http_tag_range(void *arg, struct netbuf *nb);
-static http_parser_error_t webserver_connection_http_tag_accept_language(void *arg, struct netbuf *nb);
+static http_parser_error_t webserver_connection_http_tag_host(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t webserver_connection_http_tag_range(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t webserver_connection_http_tag_accept_language(void *arg, const char *header, struct netbuf *nb);
 
 static const struct http_parser_tag_lookup_t webserver_connection_http_tag_list[] = {
 	{"HOST", webserver_connection_http_tag_host},
@@ -190,14 +190,14 @@ static webserver_page_result_t webserver_connection_execute(struct webserver_con
 	return page->start_callback(page->callback_arg, connection, connection->uri_nb, connection->params_nb, &connection->page_callback_state);
 }
 
-static http_parser_error_t webserver_connection_http_tag_host(void *arg, struct netbuf *nb)
+static http_parser_error_t webserver_connection_http_tag_host(void *arg, const char *header, struct netbuf *nb)
 {
 	struct webserver_connection_t *connection = (struct webserver_connection_t *)arg;
 	connection->host_detected = true;
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t webserver_connection_http_tag_range(void *arg, struct netbuf *nb)
+static http_parser_error_t webserver_connection_http_tag_range(void *arg, const char *header, struct netbuf *nb)
 {
 	struct webserver_connection_t *connection = (struct webserver_connection_t *)arg;
 
@@ -248,7 +248,7 @@ static http_parser_error_t webserver_connection_http_tag_range(void *arg, struct
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t webserver_connection_http_tag_accept_language(void *arg, struct netbuf *nb)
+static http_parser_error_t webserver_connection_http_tag_accept_language(void *arg, const char *header, struct netbuf *nb)
 {
 	struct webserver_connection_t *connection = (struct webserver_connection_t *)arg;
 	connection->language_header = true;

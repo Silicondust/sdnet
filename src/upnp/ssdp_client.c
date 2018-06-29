@@ -19,10 +19,10 @@ THIS_FILE("ssdp_client");
 
 static struct ssdp_client_manager_t ssdp_client_manager;
 
-static http_parser_error_t ssdp_client_manager_http_tag_st(void *arg, struct netbuf *nb);
-static http_parser_error_t ssdp_client_manager_http_tag_nts(void *arg, struct netbuf *nb);
-static http_parser_error_t ssdp_client_manager_http_tag_usn(void *arg, struct netbuf *nb);
-static http_parser_error_t ssdp_client_manager_http_tag_location(void *arg, struct netbuf *nb);
+static http_parser_error_t ssdp_client_manager_http_tag_st(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t ssdp_client_manager_http_tag_nts(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t ssdp_client_manager_http_tag_usn(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t ssdp_client_manager_http_tag_location(void *arg, const char *header, struct netbuf *nb);
 
 const struct http_parser_tag_lookup_t ssdp_client_manager_notify_http_tag_list[] = {
 	{"NT", ssdp_client_manager_http_tag_st},
@@ -124,7 +124,7 @@ static struct ssdp_client_device_t *ssdp_client_device_alloc(void)
 	return device;
 }
 
-static http_parser_error_t ssdp_client_manager_http_tag_st(void *arg, struct netbuf *nb)
+static http_parser_error_t ssdp_client_manager_http_tag_st(void *arg, const char *header, struct netbuf *nb)
 {
 	if (ssdp_client_manager.st_found) {
 		heap_free(ssdp_client_manager.st_found);
@@ -139,7 +139,7 @@ static http_parser_error_t ssdp_client_manager_http_tag_st(void *arg, struct net
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t ssdp_client_manager_http_tag_nts(void *arg, struct netbuf *nb)
+static http_parser_error_t ssdp_client_manager_http_tag_nts(void *arg, const char *header, struct netbuf *nb)
 {
 	if (netbuf_fwd_strcmp(nb, "ssdp:alive") == 0) {
 		DEBUG_TRACE("ssdp notify alive");
@@ -158,14 +158,14 @@ static http_parser_error_t ssdp_client_manager_http_tag_nts(void *arg, struct ne
 	return HTTP_PARSER_ESTOP;
 }
 
-static http_parser_error_t ssdp_client_manager_http_tag_usn(void *arg, struct netbuf *nb)
+static http_parser_error_t ssdp_client_manager_http_tag_usn(void *arg, const char *header, struct netbuf *nb)
 {
 	sha1_compute_digest_netbuf(&ssdp_client_manager.usn_hash, nb, netbuf_get_remaining(nb));
 	ssdp_client_manager.usn_detected = true;
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t ssdp_client_manager_http_tag_location(void *arg, struct netbuf *nb)
+static http_parser_error_t ssdp_client_manager_http_tag_location(void *arg, const char *header, struct netbuf *nb)
 {
 	url_parse_nb(&ssdp_client_manager.location, nb);
 	return HTTP_PARSER_OK;

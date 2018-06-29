@@ -24,7 +24,6 @@ extern bool tls_client_connection_send_netbuf(struct tls_client_connection_t *tl
 extern void tls_client_connection_pause_recv(struct tls_client_connection_t *tls_conn);
 extern void tls_client_connection_resume_recv(struct tls_client_connection_t *tls_conn);
 extern bool tls_client_connection_can_send(struct tls_client_connection_t *tls_conn);
-extern void tls_client_connection_set_max_recv_nb_size(struct tls_client_connection_t *tls_conn, size_t recv_nb_size);
 extern ipv4_addr_t tls_client_connection_get_local_addr(struct tls_client_connection_t *tls_conn);
 extern ipv4_addr_t tls_client_connection_get_remote_addr(struct tls_client_connection_t *tls_conn);
 

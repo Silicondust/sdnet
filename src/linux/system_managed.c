@@ -18,7 +18,7 @@
 #define RUNTIME_DEBUG 0
 #endif
 
-THIS_FILE("system");
+THIS_FILE("system_managed");
 
 extern int capset(cap_user_header_t, const cap_user_data_t);
 
@@ -153,7 +153,14 @@ void system_reset(void)
 	}
 }
 
+static void system_custom_init_default(void)
+{
+}
+
+void system_custom_init(void) __attribute__((weak, alias("system_custom_init_default")));
+
 void system_init(void)
 {
+	system_custom_init();
 	system_signal_handler_init();
 }

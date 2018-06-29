@@ -17,10 +17,10 @@
 
 THIS_FILE("gena_service_connection");
 
-static http_parser_error_t gena_service_connection_http_tag_callback(void *arg, struct netbuf *nb);
-static http_parser_error_t gena_service_connection_http_tag_nt(void *arg, struct netbuf *nb);
-static http_parser_error_t gena_service_connection_http_tag_sid(void *arg, struct netbuf *nb);
-static http_parser_error_t gena_service_connection_http_tag_timeout(void *arg, struct netbuf *nb);
+static http_parser_error_t gena_service_connection_http_tag_callback(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t gena_service_connection_http_tag_nt(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t gena_service_connection_http_tag_sid(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t gena_service_connection_http_tag_timeout(void *arg, const char *header, struct netbuf *nb);
 
 static const struct http_parser_tag_lookup_t gena_service_connection_http_tag_list[] = {
 	{"CALLBACK", gena_service_connection_http_tag_callback},
@@ -255,7 +255,7 @@ static bool gena_service_connection_http_tag_callback_parse(struct url_t *callba
 	return true;
 }
 
-static http_parser_error_t gena_service_connection_http_tag_callback(void *arg, struct netbuf *nb)
+static http_parser_error_t gena_service_connection_http_tag_callback(void *arg, const char *header, struct netbuf *nb)
 {
 	struct gena_service_connection_t *connection = (struct gena_service_connection_t *)arg;
 	connection->callback_present = true;
@@ -284,7 +284,7 @@ static http_parser_error_t gena_service_connection_http_tag_callback(void *arg, 
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t gena_service_connection_http_tag_nt(void *arg, struct netbuf *nb)
+static http_parser_error_t gena_service_connection_http_tag_nt(void *arg, const char *header, struct netbuf *nb)
 {
 	struct gena_service_connection_t *connection = (struct gena_service_connection_t *)arg;
 	connection->nt_present = true;
@@ -298,7 +298,7 @@ static http_parser_error_t gena_service_connection_http_tag_nt(void *arg, struct
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t gena_service_connection_http_tag_sid(void *arg, struct netbuf *nb)
+static http_parser_error_t gena_service_connection_http_tag_sid(void *arg, const char *header, struct netbuf *nb)
 {
 	struct gena_service_connection_t *connection = (struct gena_service_connection_t *)arg;
 	connection->sid_present = true;
@@ -319,7 +319,7 @@ static http_parser_error_t gena_service_connection_http_tag_sid(void *arg, struc
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t gena_service_connection_http_tag_timeout(void *arg, struct netbuf *nb)
+static http_parser_error_t gena_service_connection_http_tag_timeout(void *arg, const char *header, struct netbuf *nb)
 {
 	struct gena_service_connection_t *connection = (struct gena_service_connection_t *)arg;
 

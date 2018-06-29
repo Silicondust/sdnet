@@ -26,9 +26,9 @@ const char soap_result_action_failed[] = "501 Action Failed";
 const char soap_result_argument_value_invalid[] = "600 Argument Value Invalid";
 const char soap_result_argument_value_out_of_range[] = "601 Argument Value Out of Range";
 
-static http_parser_error_t soap_service_connection_http_tag_expect(void *arg, struct netbuf *nb);
-static http_parser_error_t soap_service_connection_http_tag_host(void *arg, struct netbuf *nb);
-static http_parser_error_t soap_service_connection_http_tag_soapaction(void *arg, struct netbuf *nb);
+static http_parser_error_t soap_service_connection_http_tag_expect(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t soap_service_connection_http_tag_host(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t soap_service_connection_http_tag_soapaction(void *arg, const char *header, struct netbuf *nb);
 
 static const struct http_parser_tag_lookup_t soap_service_connection_http_tag_list[] = {
 	{"EXPECT", soap_service_connection_http_tag_expect},
@@ -212,7 +212,7 @@ static http_parser_error_t soap_service_connection_recv_payload(struct soap_serv
 	}
 }
 
-static http_parser_error_t soap_service_connection_http_tag_expect(void *arg, struct netbuf *nb)
+static http_parser_error_t soap_service_connection_http_tag_expect(void *arg, const char *header, struct netbuf *nb)
 {
 	struct soap_service_connection_t *connection = (struct soap_service_connection_t *)arg;
 
@@ -225,7 +225,7 @@ static http_parser_error_t soap_service_connection_http_tag_expect(void *arg, st
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t soap_service_connection_http_tag_host(void *arg, struct netbuf *nb)
+static http_parser_error_t soap_service_connection_http_tag_host(void *arg, const char *header, struct netbuf *nb)
 {
 	struct soap_service_connection_t *connection = (struct soap_service_connection_t *)arg;
 	connection->host_detected = true;
@@ -233,7 +233,7 @@ static http_parser_error_t soap_service_connection_http_tag_host(void *arg, stru
 }
 
 /* error paths set connection->complete */
-static http_parser_error_t soap_service_connection_http_tag_soapaction(void *arg, struct netbuf *nb)
+static http_parser_error_t soap_service_connection_http_tag_soapaction(void *arg, const char *header, struct netbuf *nb)
 {
 	struct soap_service_connection_t *connection = (struct soap_service_connection_t *)arg;
 

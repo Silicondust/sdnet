@@ -32,13 +32,14 @@ static http_parser_error_t http_parser_parse_headers_name(struct http_parser_t *
 static http_parser_error_t http_parser_parse_headers_value(struct http_parser_t *hpi, struct netbuf *nb);
 static http_parser_error_t http_parser_parse_headers_complete(struct http_parser_t *hpi, struct netbuf *nb);
 static http_parser_error_t http_parser_parse_payload_data(struct http_parser_t *hpi, struct netbuf *nb);
-static http_parser_error_t http_parser_parse_payload_chunk_header(struct http_parser_t *hpi, struct netbuf *nb);
-static http_parser_error_t http_parser_parse_payload_chunk_data(struct http_parser_t *hpi, struct netbuf *nb);
-static http_parser_error_t http_parser_parse_payload_chunk_end(struct http_parser_t *hpi, struct netbuf *nb);
+static http_parser_error_t http_parser_parse_payload_chunked_header(struct http_parser_t *hpi, struct netbuf *nb);
+static http_parser_error_t http_parser_parse_payload_chunked_data(struct http_parser_t *hpi, struct netbuf *nb);
+static http_parser_error_t http_parser_parse_payload_chunked_separator(struct http_parser_t *hpi, struct netbuf *nb);
+static http_parser_error_t http_parser_parse_payload_chunked_complete(struct http_parser_t *hpi, struct netbuf *nb);
 static http_parser_error_t http_parser_parse_transaction_complete(struct http_parser_t *hpi, struct netbuf *nb);
 
-static http_parser_error_t http_parser_tag_content_length(void *arg, struct netbuf *nb);
-static http_parser_error_t http_parser_tag_transfer_encodding(void *arg, struct netbuf *nb);
+static http_parser_error_t http_parser_tag_content_length(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t http_parser_tag_transfer_encodding(void *arg, const char *header, struct netbuf *nb);
 
 static const struct http_parser_tag_lookup_t http_parser_tag_list[] = {
 	{"Content-Length", http_parser_tag_content_length},
@@ -126,7 +127,6 @@ static http_parser_error_t http_parser_callback_null_nb(struct http_parser_t *hp
 	http_parser_error_t ret = hpi->event_callback(hpi->event_callback_arg, header_event, NULL);
 
 	if (hpi->parse_func == http_parser_parse_start) { /* http_parser_reset called */
-		DEBUG_ASSERT(ret == HTTP_PARSER_ESTOP, "%p unexpected return value from app: state %p", hpi, hpi->parse_func);
 		return HTTP_PARSER_ESTOP;
 	}
 
@@ -160,7 +160,6 @@ static http_parser_error_t http_parser_callback_with_nb(struct http_parser_t *hp
 	netbuf_free(callback_nb);
 
 	if (hpi->parse_func == http_parser_parse_start) { /* http_parser_reset called */
-		DEBUG_ASSERT(ret == HTTP_PARSER_ESTOP, "%p unexpected return value from app: state %p", hpi, hpi->parse_func);
 		return HTTP_PARSER_ESTOP;
 	}
 
@@ -240,7 +239,7 @@ static http_parser_error_t http_parser_callback_headers_value(struct http_parser
 	}
 
 	if (internal_list_entry) {
-		internal_list_entry->func(hpi, callback_nb);
+		internal_list_entry->func(hpi, internal_list_entry->header, callback_nb);
 
 		if (!app_list_entry) {
 			netbuf_free(callback_nb);
@@ -251,11 +250,10 @@ static http_parser_error_t http_parser_callback_headers_value(struct http_parser
 		netbuf_set_pos_to_start(callback_nb);
 	}
 
-	http_parser_error_t ret = app_list_entry->func(hpi->app_list_callback_arg, callback_nb);
+	http_parser_error_t ret = app_list_entry->func(hpi->app_list_callback_arg, app_list_entry->header, callback_nb);
 	netbuf_free(callback_nb);
 
 	if (hpi->parse_func == http_parser_parse_start) { /* http_parser_reset called */
-		DEBUG_ASSERT(ret == HTTP_PARSER_ESTOP, "%p unexpected return value from app: state %p", hpi, hpi->parse_func);
 		return HTTP_PARSER_ESTOP;
 	}
 
@@ -269,7 +267,7 @@ static http_parser_error_t http_parser_callback_headers_value(struct http_parser
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t http_parser_tag_content_length(void *arg, struct netbuf *nb)
+static http_parser_error_t http_parser_tag_content_length(void *arg, const char *header, struct netbuf *nb)
 {
 	struct http_parser_t *hpi = (struct http_parser_t *)arg;
 
@@ -279,7 +277,7 @@ static http_parser_error_t http_parser_tag_content_length(void *arg, struct netb
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t http_parser_tag_transfer_encodding(void *arg, struct netbuf *nb)
+static http_parser_error_t http_parser_tag_transfer_encodding(void *arg, const char *header, struct netbuf *nb)
 {
 	struct http_parser_t *hpi = (struct http_parser_t *)arg;
 
@@ -488,6 +486,24 @@ static http_parser_error_t http_parser_parse_response_version(struct http_parser
 	return http_parser_emoredata(nb, begin);
 }
 
+static void http_parser_parse_response_status_code_process(struct http_parser_t *hpi, struct netbuf *nb, addr_t begin, addr_t end)
+{
+	size_t len = end - begin;
+	if (len != 3) {
+		return;
+	}
+
+	addr_t bookmark = netbuf_get_pos(nb);
+	netbuf_set_pos(nb, begin);
+
+	/* Implied no payload data for 100-continue */
+	if (netbuf_fwd_strncmp(nb, "100", 3) == 0) {
+		hpi->length_remaining = 0;
+	}
+
+	netbuf_set_pos(nb, bookmark);
+}
+
 static http_parser_error_t http_parser_parse_response_status_code(struct http_parser_t *hpi, struct netbuf *nb)
 {
 	http_parser_skip_subline_whitespace(nb);
@@ -503,10 +519,12 @@ static http_parser_error_t http_parser_parse_response_status_code(struct http_pa
 				return http_parser_callback_parse_error(hpi);
 			}
 
+			http_parser_parse_response_status_code_process(hpi, nb, begin, pos);
 			return http_parser_callback_with_nb(hpi, HTTP_PARSER_EVENT_STATUS_CODE, nb, begin, pos, http_parser_parse_headers_name);
 		}
 
 		if (http_parser_is_subline_whitespace(c)) {
+			http_parser_parse_response_status_code_process(hpi, nb, begin, pos);
 			return http_parser_callback_with_nb(hpi, HTTP_PARSER_EVENT_STATUS_CODE, nb, begin, pos, http_parser_parse_response_reason_phrase);
 		}
 
@@ -653,16 +671,20 @@ static http_parser_error_t http_parser_parse_headers_complete(struct http_parser
 		return http_parser_callback_parse_error(hpi);
 	}
 
-	http_parser_parse_func_t parse_func;
 	if (hpi->chunked_encoding) {
-		parse_func = http_parser_parse_payload_chunk_header;
-	} else if (hpi->length_remaining > 0) {
-		parse_func = http_parser_parse_payload_data;
-	} else {
-		parse_func = http_parser_parse_transaction_complete;
+		return http_parser_callback_null_nb(hpi, HTTP_PARSER_EVENT_HEADER_COMPLETE, http_parser_parse_payload_chunked_header);
+	}
+	
+	if (hpi->length_remaining > 0) {
+		return http_parser_callback_null_nb(hpi, HTTP_PARSER_EVENT_HEADER_COMPLETE, http_parser_parse_payload_data);
 	}
 
-	return http_parser_callback_null_nb(hpi, HTTP_PARSER_EVENT_HEADER_COMPLETE, parse_func);
+	http_parser_error_t ret = http_parser_callback_null_nb(hpi, HTTP_PARSER_EVENT_HEADER_COMPLETE, http_parser_parse_transaction_complete);
+	if (ret != HTTP_PARSER_OK) {
+		return ret;
+	}
+
+	return http_parser_callback_null_nb(hpi, HTTP_PARSER_EVENT_DATA_COMPLETE, http_parser_parse_transaction_complete);
 }
 
 static http_parser_error_t http_parser_parse_payload_data(struct http_parser_t *hpi, struct netbuf *nb)
@@ -692,7 +714,7 @@ static http_parser_error_t http_parser_parse_payload_data(struct http_parser_t *
 	return http_parser_callback_with_nb(hpi, HTTP_PARSER_EVENT_DATA, nb, begin, begin + length, http_parser_parse_payload_data);
 }
 
-static http_parser_error_t http_parser_parse_payload_chunk_header(struct http_parser_t *hpi, struct netbuf *nb)
+static http_parser_error_t http_parser_parse_payload_chunked_header(struct http_parser_t *hpi, struct netbuf *nb)
 {
 	addr_t begin = netbuf_get_pos(nb);
 	addr_t end = netbuf_get_end(nb);
@@ -742,14 +764,15 @@ static http_parser_error_t http_parser_parse_payload_chunk_header(struct http_pa
 	}
 
 	if (hpi->length_remaining == 0) {
-		return http_parser_callback_null_nb(hpi, HTTP_PARSER_EVENT_DATA_COMPLETE, http_parser_parse_transaction_complete);
+		hpi->parse_func = http_parser_parse_payload_chunked_complete;
+		return HTTP_PARSER_OK;
 	}
 
-	hpi->parse_func = http_parser_parse_payload_chunk_data;
+	hpi->parse_func = http_parser_parse_payload_chunked_data;
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t http_parser_parse_payload_chunk_data(struct http_parser_t *hpi, struct netbuf *nb)
+static http_parser_error_t http_parser_parse_payload_chunked_data(struct http_parser_t *hpi, struct netbuf *nb)
 {
 	addr_t begin = netbuf_get_pos(nb);
 	size_t length = netbuf_get_remaining(nb);
@@ -762,13 +785,13 @@ static http_parser_error_t http_parser_parse_payload_chunk_data(struct http_pars
 	hpi->length_remaining -= length;
 
 	if (hpi->length_remaining == 0) {
-		return http_parser_callback_with_nb(hpi, HTTP_PARSER_EVENT_DATA, nb, begin, begin + length, http_parser_parse_payload_chunk_end);
+		return http_parser_callback_with_nb(hpi, HTTP_PARSER_EVENT_DATA, nb, begin, begin + length, http_parser_parse_payload_chunked_separator);
 	}
 
-	return http_parser_callback_with_nb(hpi, HTTP_PARSER_EVENT_DATA, nb, begin, begin + length, http_parser_parse_payload_chunk_data);
+	return http_parser_callback_with_nb(hpi, HTTP_PARSER_EVENT_DATA, nb, begin, begin + length, http_parser_parse_payload_chunked_data);
 }
 
-static http_parser_error_t http_parser_parse_payload_chunk_end(struct http_parser_t *hpi, struct netbuf *nb)
+static http_parser_error_t http_parser_parse_payload_chunked_separator(struct http_parser_t *hpi, struct netbuf *nb)
 {
 	addr_t begin = netbuf_get_pos(nb);
 
@@ -784,12 +807,34 @@ static http_parser_error_t http_parser_parse_payload_chunk_end(struct http_parse
 		return http_parser_callback_parse_error(hpi);
 	}
 
-	hpi->parse_func = http_parser_parse_payload_chunk_header;
+	hpi->parse_func = http_parser_parse_payload_chunked_header;
 	return HTTP_PARSER_OK;
+}
+
+static http_parser_error_t http_parser_parse_payload_chunked_complete(struct http_parser_t *hpi, struct netbuf *nb)
+{
+	addr_t begin = netbuf_get_pos(nb);
+
+	if (netbuf_fwd_read_u8(nb) != '\r') {
+		return http_parser_callback_parse_error(hpi);
+	}
+
+	if (!netbuf_fwd_check_space(nb, 1)) {
+		return http_parser_emoredata(nb, begin);
+	}
+
+	if (netbuf_fwd_read_u8(nb) != '\n') {
+		return http_parser_callback_parse_error(hpi);
+	}
+
+	return http_parser_callback_null_nb(hpi, HTTP_PARSER_EVENT_DATA_COMPLETE, http_parser_parse_transaction_complete);
 }
 
 static http_parser_error_t http_parser_parse_transaction_complete(struct http_parser_t *hpi, struct netbuf *nb)
 {
+	hpi->length_remaining = 0xFFFFFFFFFFFFFFFFULL;
+	hpi->chunked_encoding = false;
+
 	return http_parser_callback_null_nb(hpi, HTTP_PARSER_EVENT_RESET, http_parser_parse_method_protocol);
 }
 

@@ -26,9 +26,9 @@ const char ssdp_service_root_device_urn[] = "upnp:rootdevice";
 
 static struct ssdp_service_manager_t ssdp_service_manager;
 
-static http_parser_error_t ssdp_service_manager_http_tag_man(void *arg, struct netbuf *nb);
-static http_parser_error_t ssdp_service_manager_http_tag_mx(void *arg, struct netbuf *nb);
-static http_parser_error_t ssdp_service_manager_http_tag_st(void *arg, struct netbuf *nb);
+static http_parser_error_t ssdp_service_manager_http_tag_man(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t ssdp_service_manager_http_tag_mx(void *arg, const char *header, struct netbuf *nb);
+static http_parser_error_t ssdp_service_manager_http_tag_st(void *arg, const char *header, struct netbuf *nb);
 
 const struct http_parser_tag_lookup_t ssdp_service_manager_msearch_http_tag_list[] = {
 	{"MAN", ssdp_service_manager_http_tag_man},
@@ -230,7 +230,7 @@ static void ssdp_service_manager_notify_timer_callback(void *arg)
 	oneshot_attach(&ssdp_service_manager.notify_timer, SSDP_NOTIFY_RATE_DELAY, ssdp_service_manager_notify_timer_callback, NULL);
 }
 
-static http_parser_error_t ssdp_service_manager_http_tag_man(void *arg, struct netbuf *nb)
+static http_parser_error_t ssdp_service_manager_http_tag_man(void *arg, const char *header, struct netbuf *nb)
 {
 	if (netbuf_fwd_strcmp(nb, "\"ssdp:discover\"") != 0) {
 		DEBUG_INFO("unexpected MAN str");
@@ -242,7 +242,7 @@ static http_parser_error_t ssdp_service_manager_http_tag_man(void *arg, struct n
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t ssdp_service_manager_http_tag_mx(void *arg, struct netbuf *nb)
+static http_parser_error_t ssdp_service_manager_http_tag_mx(void *arg, const char *header, struct netbuf *nb)
 {
 	ssdp_service_manager.mx_present = true;
 
@@ -265,7 +265,7 @@ static http_parser_error_t ssdp_service_manager_http_tag_mx(void *arg, struct ne
 	return HTTP_PARSER_OK;
 }
 
-static http_parser_error_t ssdp_service_manager_http_tag_st(void *arg, struct netbuf *nb)
+static http_parser_error_t ssdp_service_manager_http_tag_st(void *arg, const char *header, struct netbuf *nb)
 {
 	ssdp_service_manager_populate_discover_list_by_st(nb);
 

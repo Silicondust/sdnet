@@ -24,3 +24,6 @@ extern uint32_t system_detect_file_limit(void);
 extern void system_update_file_limit(uint32_t new_limit);
 
 extern void system_drop_root(void);
+
+/* Internal */
+extern void system_custom_init(void);

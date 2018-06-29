@@ -16,7 +16,7 @@
 #define RUNTIME_DEBUG 0
 #endif
 
-THIS_FILE("system");
+THIS_FILE("system_passive");
 
 static volatile uint32_t signal_in_progress = 0;
 
