@@ -16,7 +16,7 @@
 #define RUNTIME_DEBUG 0
 #endif
 
-THIS_FILE("sprintf_custom");
+THIS_FILE("doprint_custom");
 
 #define ELEMENT_TYPE_PERCENT 0
 #define ELEMENT_TYPE_INT 1
@@ -91,16 +91,16 @@ static uint8_t doprint_custom_get_element_str(const char **pfmt, char element_st
 			return ELEMENT_TYPE_STRING;
 
 		case '%':
-			if (fmt != *pfmt + 1) {
-				DEBUG_ERROR("malformed fmt str");
+			if (fmt == *pfmt + 1) {
+				*pfmt = fmt;
+				return ELEMENT_TYPE_PERCENT;
 			}
-			*pfmt = (*pfmt) + 1;
+
+			DEBUG_ERROR("malformed fmt str");
 			return ELEMENT_TYPE_PERCENT;
 
 		default:
 			DEBUG_ERROR("malformed fmt str");
-			fmt = *pfmt;
-			*pfmt = (*pfmt) + 1;
 			return ELEMENT_TYPE_PERCENT;
 		}
 	}

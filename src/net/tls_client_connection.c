@@ -158,18 +158,19 @@ void tls_client_connection_close(struct tls_client_connection_t *tls_conn)
 	}
 
 	tls_conn->state = TLS_CLIENT_CONNECTION_STATE_NULL;
+	tls_conn->establish_callback = NULL;
+	tls_conn->recv_callback = NULL;
+	tls_conn->send_resume_callback = NULL;
+	tls_conn->close_callback = NULL;
 }
 
 static void tls_client_connection_close_and_notify(struct tls_client_connection_t *tls_conn)
 {
-	if (!tls_conn->conn) {
-		return;
-	}
-
+	tls_client_connection_close_callback_t close_callback = tls_conn->close_callback;
 	tls_client_connection_close(tls_conn);
 
-	if (tls_conn->close_callback) {
-		tls_conn->close_callback(tls_conn->callback_arg, tls_conn->close_reason);
+	if (close_callback) {
+		close_callback(tls_conn->callback_arg, tls_conn->close_reason);
 	}
 }
 
@@ -177,6 +178,10 @@ static void tls_client_connection_tcp_close_callback(void *arg, tcp_close_reason
 {
 	struct tls_client_connection_t *tls_conn = (struct tls_client_connection_t *)arg;
 	tls_conn->close_reason = reason;
+
+	tcp_connection_deref(tls_conn->conn);
+	tls_conn->conn = NULL;
+
 	tls_client_connection_close_and_notify(tls_conn);
 }
 
@@ -993,7 +998,10 @@ static bool tls_client_connection_recv_application_data(struct tls_client_connec
 		return false;
 	}
 
-	tls_conn->recv_callback(tls_conn->callback_arg, nb);
+	if (tls_conn->recv_callback) {
+		tls_conn->recv_callback(tls_conn->callback_arg, nb);
+	}
+
 	return true;
 }
 
@@ -1191,6 +1199,8 @@ bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv
 	tcp_error_t ret = tcp_connection_connect(tls_conn->conn, dest_addr, dest_port, src_addr, src_port, tls_client_connection_tcp_establish_callback, tls_client_connection_tcp_recv_callback, tls_client_connection_tcp_send_resume_callback, tls_client_connection_tcp_close_callback, tls_conn);
 	if (ret != TCP_OK) {
 		DEBUG_ERROR("tcp_connection_connect failed");
+		tcp_connection_deref(tls_conn->conn);
+		tls_conn->conn = NULL;
 		tls_client_connection_close(tls_conn);
 		return false;
 	}

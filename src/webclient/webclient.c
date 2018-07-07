@@ -18,7 +18,7 @@
 
 THIS_FILE("webclient");
 
-static bool webclient_execute_start(struct webclient_t *webclient);
+static void webclient_execute_future(void *arg);
 static http_parser_error_t webclient_http_tag_webclient(void *arg, const char *header, struct netbuf *nb);
 static http_parser_error_t webclient_http_tag_location(void *arg, const char *header, struct netbuf *nb);
 
@@ -52,6 +52,10 @@ static void webclient_close_internal(struct webclient_t *webclient)
 	http_parser_reset(webclient->http_parser);
 	webclient->http_last_event = HTTP_PARSER_EVENT_RESET;
 
+	webclient->http_result = 0;
+	webclient->redirect_url_updated = false;
+	webclient->pipelined_redirect = false;
+	webclient->waiting_for_headers = false;
 	webclient->keep_alive_accepted = false;
 	webclient->must_close = false;
 }
@@ -60,7 +64,9 @@ void webclient_release(struct webclient_t *webclient)
 {
 	DEBUG_ASSERT(!webclient->current_operation, "webclient_release called with current operation");
 	DEBUG_ASSERT(!webclient->pipelined_operation, "webclient_release called with pipelined operation");
+	DEBUG_ASSERT(!slist_get_head(struct webclient_operation_t, &webclient->future_operations), "idle_disconnect with future operation");
 
+	oneshot_detach(&webclient->execute_timer);
 	webclient_close_internal(webclient);
 
 	http_parser_set_tag_list(webclient->http_parser, NULL, NULL);
@@ -82,36 +88,43 @@ static void webclient_idle_disconnect_callback(void *arg)
 	struct webclient_t *webclient = (struct webclient_t *)arg;
 	DEBUG_ASSERT(!webclient->current_operation, "idle_disconnect with current operation");
 	DEBUG_ASSERT(!webclient->pipelined_operation, "idle_disconnect with pipelined operation");
+	DEBUG_ASSERT(!slist_get_head(struct webclient_operation_t, &webclient->future_operations), "idle_disconnect with future operation");
 
 	DEBUG_INFO("webclient not being used - closing");
 	webclient_close_internal(webclient);
+}
+
+static void webclient_schedule_execute(struct webclient_t *webclient)
+{
+	if (oneshot_is_attached(&webclient->execute_timer)) {
+		return;
+	}
+
+	oneshot_attach(&webclient->execute_timer, 0, webclient_execute_future, webclient);
 }
 
 static void webclient_operation_complete_close_webclient(struct webclient_t *webclient, uint8_t result, uint16_t http_error, const char *error_str)
 {
 	webclient_close_internal(webclient);
 
-	struct webclient_operation_t *ended_current_operation = webclient->current_operation;
-	struct webclient_operation_t *ended_pipelined_operation = webclient->pipelined_operation;
-	webclient->pipelined_operation = NULL;
-	webclient->current_operation = NULL;
-
-	if (ended_current_operation) {
-		ended_current_operation->webclient = NULL;
-		webclient_operation_signal_complete(ended_current_operation, result, http_error, error_str);
-		webclient_operation_deref(ended_current_operation);
+	if (webclient->pipelined_operation) {
+		slist_attach_head(struct webclient_operation_t, &webclient->future_operations, webclient->pipelined_operation);
+		webclient->pipelined_operation = NULL;
 	}
 
-	if (ended_pipelined_operation) {
-		ended_pipelined_operation->webclient = NULL;
-		webclient_operation_signal_complete(ended_pipelined_operation, WEBCLIENT_RESULT_EARLY_CLOSE, 0, "early close");
-		webclient_operation_deref(ended_pipelined_operation);
+	webclient_schedule_execute(webclient);
+
+	struct webclient_operation_t *current_operation = webclient->current_operation;
+	if (current_operation) {
+		webclient->current_operation = NULL;
+		current_operation->webclient = NULL;
+		webclient_operation_signal_complete_and_deref(current_operation, result, http_error, error_str);
 	}
 }
 
 static void webclient_operation_complete_healthy_webclient(struct webclient_t *webclient, uint8_t result, uint16_t http_error, const char *error_str)
 {
-	if (webclient->must_close || !webclient->keep_alive_accepted) {
+	if (webclient->waiting_for_headers || webclient->must_close || !webclient->keep_alive_accepted) {
 		DEBUG_INFO("unable to pipeline");
 		webclient_operation_complete_close_webclient(webclient, result, http_error, error_str);
 		return;
@@ -123,36 +136,40 @@ static void webclient_operation_complete_healthy_webclient(struct webclient_t *w
 		return;
 	}
 
-	struct webclient_operation_t *ended_operation = webclient->current_operation;
-	webclient->current_operation = NULL;
+	webclient_schedule_execute(webclient);
 
-	if (!webclient->pipelined_operation && (webclient->max_idle_time != TICKS_INFINITE) && !oneshot_is_attached(&webclient->idle_disconnect_timer)) {
-		oneshot_attach(&webclient->idle_disconnect_timer, webclient->max_idle_time, webclient_idle_disconnect_callback, webclient);
-	}
-
-	if (ended_operation) {
-		ended_operation->webclient = NULL;
-		webclient_operation_signal_complete(ended_operation, result, http_error, error_str);
-		webclient_operation_deref(ended_operation);
+	struct webclient_operation_t *current_operation = webclient->current_operation;
+	if (current_operation) {
+		webclient->current_operation = NULL;
+		current_operation->webclient = NULL;
+		webclient_operation_signal_complete_and_deref(current_operation, result, http_error, error_str);
 	}
 }
 
 void webclient_release_operation(struct webclient_t *webclient, struct webclient_operation_t *operation)
 {
-	if (operation == webclient->pipelined_operation) {
-		DEBUG_INFO("pipelined operation release");
-		webclient->pipelined_operation = NULL;
-		webclient->must_close = true;
+	if (operation == webclient->current_operation) {
+		DEBUG_INFO("current operation release");
+		webclient->current_operation = NULL;
+		webclient_schedule_execute(webclient);
 
 		operation->webclient = NULL;
 		webclient_operation_deref(operation);
 		return;
 	}
 
-	if (operation == webclient->current_operation) {
-		DEBUG_INFO("current operation release");
-		webclient->current_operation = NULL;
+	if (operation == webclient->pipelined_operation) {
+		DEBUG_INFO("pipelined operation release");
+		webclient->must_close = true;
+		webclient->pipelined_operation = NULL;
+		webclient_schedule_execute(webclient);
 
+		operation->webclient = NULL;
+		webclient_operation_deref(operation);
+		return;
+	}
+
+	if (slist_detach_item(struct webclient_operation_t, &webclient->future_operations, operation)) {
 		operation->webclient = NULL;
 		webclient_operation_deref(operation);
 		return;
@@ -161,20 +178,26 @@ void webclient_release_operation(struct webclient_t *webclient, struct webclient
 
 void webclient_timeout_operation(struct webclient_t *webclient, struct webclient_operation_t *operation)
 {
-	if (operation == webclient->pipelined_operation) {
-		DEBUG_INFO("pipelined operation timeout");
-		webclient->pipelined_operation = NULL;
-		webclient->must_close = true;
-
-		operation->webclient = NULL;
-		webclient_operation_signal_complete(operation, WEBCLIENT_RESULT_TIMEOUT, 0, "timeout");
-		webclient_operation_deref(operation);
-		return;
-	}
-
 	if (operation == webclient->current_operation) {
 		DEBUG_INFO("current operation timeout");
 		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_TIMEOUT, 0, "timeout");
+		return;
+	}
+
+	if (operation == webclient->pipelined_operation) {
+		DEBUG_INFO("pipelined operation timeout");
+		webclient->must_close = true;
+		webclient->pipelined_operation = NULL;
+		webclient_schedule_execute(webclient);
+
+		operation->webclient = NULL;
+		webclient_operation_signal_complete_and_deref(operation, WEBCLIENT_RESULT_TIMEOUT, 0, "timeout");
+		return;
+	}
+
+	if (slist_detach_item(struct webclient_operation_t, &webclient->future_operations, operation)) {
+		operation->webclient = NULL;
+		webclient_operation_signal_complete_and_deref(operation, WEBCLIENT_RESULT_TIMEOUT, 0, "timeout");
 		return;
 	}
 }
@@ -266,18 +289,15 @@ static uint16_t webclient_is_http_result_redirect(struct webclient_t *webclient)
 static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t event, struct netbuf *nb)
 {
 	struct webclient_t *webclient = (struct webclient_t *)arg;
-	struct webclient_operation_t *operation = webclient->current_operation;
+	struct webclient_operation_t *operation = webclient->current_operation; /* May be NULL */
 	char error_str[20];
 
 	webclient->http_last_event = event;
 
 	switch (event) {
 	case HTTP_PARSER_EVENT_STATUS_CODE:
-		DEBUG_ASSERT(webclient->current_operation, "http event status code without current operation");
 		DEBUG_ASSERT(!webclient->pipelined_operation, "http event status code with pipelined operation");
-		if (!operation) {
-			return HTTP_PARSER_ESTOP;
-		}
+		DEBUG_ASSERT(webclient->waiting_for_headers, "http event status code without waiting for headers flag");
 
 		webclient->http_result = (uint16_t)netbuf_fwd_strtoul(nb, NULL, 10);
 
@@ -285,19 +305,30 @@ static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t e
 			http_parser_set_tag_list(webclient->http_parser, webclient_http_tag_list, webclient);
 		}
 
+		webclient->redirect_url_updated = false;
+		webclient->pipelined_redirect = false;
 		return HTTP_PARSER_OK;
 
 	case HTTP_PARSER_EVENT_HEADER_COMPLETE:
 		DEBUG_TRACE("HTTP_PARSER_EVENT_HEADER_COMPLETE: keep_alive=%u", webclient->keep_alive_accepted);
-		DEBUG_ASSERT(webclient->current_operation, "http event header complete without current operation");
 		DEBUG_ASSERT(!webclient->pipelined_operation, "http event header complete with pipelined operation");
-		if (!operation) {
-			return HTTP_PARSER_ESTOP;
-		}
+		DEBUG_ASSERT(webclient->waiting_for_headers, "http event header complete without waiting for headers flag");
 
 		if ((webclient->http_result == 100) && webclient->expect_100_continue) {
 			DEBUG_TRACE("webclient_http_event: 100");
+
+			if (!operation) {
+				webclient_operation_complete_close_webclient(webclient, 0, 0, "");
+				return HTTP_PARSER_OK;
+			}
+
 			webclient_operation_schedule_post_callback(operation);
+			return HTTP_PARSER_OK;
+		}
+
+		if (!operation) {
+			webclient->waiting_for_headers = false;
+			webclient_operation_complete_healthy_webclient(webclient, 0, 0, "");
 			return HTTP_PARSER_OK;
 		}
 
@@ -306,6 +337,7 @@ static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t e
 		if (webclient_is_http_result_redirect(webclient)) {
 			if (!webclient->redirect_url_updated) {
 				DEBUG_WARN("webclient_http_event: redirect without location");
+				webclient->waiting_for_headers = false;
 				sprintf_custom(error_str, error_str + sizeof(error_str), "http error %u", webclient->http_result);
 				webclient_operation_complete_healthy_webclient(webclient, WEBCLIENT_RESULT_NON_200_RESULT, webclient->http_result, error_str);
 				return HTTP_PARSER_OK;
@@ -314,38 +346,52 @@ static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t e
 			if (operation->redirect_callback) {
 				webclient_operation_ref(operation);
 				operation->redirect_callback(operation->callback_arg, operation, &operation->url);
-				if (webclient_operation_deref(operation) == 0) {
-					DEBUG_ASSERT(!webclient->current_operation, "zero deref but operation still set");
+
+				if (!webclient->current_operation) {
+					webclient_operation_deref(operation);
+					webclient->waiting_for_headers = false;
 					webclient_operation_complete_healthy_webclient(webclient, 0, 0, "");
 					return HTTP_PARSER_OK;
 				}
+
+				if (operation != webclient->current_operation) {
+					webclient_operation_deref(operation);
+					return HTTP_PARSER_OK;
+				}
+
+				webclient_operation_deref(operation);
 			}
 
 			DEBUG_INFO("webclient_http_event: redirecting to new url");
 			operation->stats.redirect_count++;
+			slist_attach_head(struct webclient_operation_t, &webclient->future_operations, webclient->current_operation);
+			webclient->current_operation = NULL;
 
-			if (!webclient_execute_start(webclient)) {
-				sprintf_custom(error_str, error_str + sizeof(error_str), "http error %u", webclient->http_result);
-				webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_NON_200_RESULT, webclient->http_result, error_str);
-				return HTTP_PARSER_OK;
-			}
-
+			webclient->waiting_for_headers = false;
+			webclient_schedule_execute(webclient);
 			return HTTP_PARSER_OK;
 		}
 
 		if (webclient->http_result == 200) {
 			DEBUG_TRACE("webclient_http_event: 200");
+			webclient->waiting_for_headers = false;
+			webclient_schedule_execute(webclient);
 			return HTTP_PARSER_OK;
 		}
 
 		DEBUG_WARN("webclient_http_event: non-ok status code %u", webclient->http_result);
+		webclient->waiting_for_headers = false;
 		sprintf_custom(error_str, error_str + sizeof(error_str), "http error %u", webclient->http_result);
 		webclient_operation_complete_healthy_webclient(webclient, WEBCLIENT_RESULT_NON_200_RESULT, webclient->http_result, error_str);
 		return HTTP_PARSER_OK;
 
 	case HTTP_PARSER_EVENT_DATA:
 		if (!operation) {
-			DEBUG_INFO("dropping data for dead operation");
+			webclient_operation_complete_close_webclient(webclient, 0, 0, "");
+			return HTTP_PARSER_OK;
+		}
+
+		if (webclient->http_result != 200) {
 			return HTTP_PARSER_OK;
 		}
 
@@ -355,14 +401,22 @@ static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t e
 
 		operation->stats.download_size += netbuf_get_remaining(nb);
 
-		webclient_operation_ref(operation);
 		if (operation->data_callback) {
+			webclient_operation_ref(operation);
 			operation->data_callback(operation->callback_arg, operation, nb);
-		}
-		if (webclient_operation_deref(operation) == 0) {
-			DEBUG_ASSERT(!webclient->current_operation, "zero deref but operation still set");
-			webclient_operation_complete_close_webclient(webclient, 0, 0, "");
-			return HTTP_PARSER_OK;
+
+			if (!webclient->current_operation) {
+				webclient_operation_deref(operation);
+				webclient_operation_complete_healthy_webclient(webclient, 0, 0, "");
+				return HTTP_PARSER_OK;
+			}
+
+			if (operation != webclient->current_operation) {
+				webclient_operation_deref(operation);
+				return HTTP_PARSER_OK;
+			}
+
+			webclient_operation_deref(operation);
 		}
 
 		return HTTP_PARSER_OK;
@@ -370,6 +424,10 @@ static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t e
 	case HTTP_PARSER_EVENT_DATA_COMPLETE:
 		DEBUG_TRACE("HTTP_PARSER_EVENT_DATA_COMPLETE");
 		if ((webclient->http_result == 100) && webclient->expect_100_continue) {
+			return HTTP_PARSER_OK;
+		}
+
+		if (webclient->pipelined_redirect) {
 			return HTTP_PARSER_OK;
 		}
 
@@ -382,6 +440,8 @@ static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t e
 		if (!operation) {
 			webclient->current_operation = webclient->pipelined_operation;
 			webclient->pipelined_operation = NULL;
+			webclient->waiting_for_headers = (webclient->current_operation != NULL);
+			webclient_schedule_execute(webclient);
 		}
 
 		return HTTP_PARSER_OK;
@@ -390,7 +450,7 @@ static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t e
 	case HTTP_PARSER_EVENT_INTERNAL_ERROR:
 		DEBUG_INFO("http error event - closing webclient");
 		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_HTTP_PARSE_ERROR, 0, "parse error");
-		return HTTP_PARSER_ESTOP;
+		return HTTP_PARSER_OK;
 
 	default:
 		return HTTP_PARSER_OK;
@@ -400,12 +460,6 @@ static http_parser_error_t webclient_http_event(void *arg, http_parser_event_t e
 static void webclient_conn_recv(void *arg, struct netbuf *nb)
 {
 	struct webclient_t *webclient = (struct webclient_t *)arg;
-	struct webclient_operation_t *operation = webclient->current_operation;
-	if (!operation) {
-		DEBUG_ERROR("conn recv without current operation");
-		webclient_close_internal(webclient);
-		return;
-	}
 
 	DEBUG_TRACE("webclient_conn_recv");
 	http_parser_recv_netbuf(webclient->http_parser, nb);
@@ -466,8 +520,7 @@ static void webclient_conn_established(void *arg)
 	struct webclient_t *webclient = (struct webclient_t *)arg;
 	struct webclient_operation_t *operation = webclient->current_operation;
 	if (!operation) {
-		oneshot_detach(&webclient->idle_disconnect_timer);
-		oneshot_attach(&webclient->idle_disconnect_timer, min(webclient->max_idle_time, 5 * TICK_RATE), webclient_idle_disconnect_callback, webclient);
+		webclient_schedule_execute(webclient);
 		return;
 	}
 
@@ -539,7 +592,7 @@ static bool webclient_build_and_set_http_tag_list(struct webclient_t *webclient)
 	return true;
 }
 
-static bool webclient_execute_connect(struct webclient_t *webclient)
+static void webclient_execute_connect(struct webclient_t *webclient)
 {
 	struct webclient_operation_t *operation = webclient->current_operation;
 	DEBUG_ASSERT(webclient->current_operation, "execute_connect called without operation");
@@ -549,14 +602,16 @@ static bool webclient_execute_connect(struct webclient_t *webclient)
 
 	if (!webclient_build_and_set_http_tag_list(webclient)) {
 		DEBUG_WARN("out of memory");
-		return false;
+		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_RESOURCE_ERROR, 0, "resource error");
+		return;
 	}
 
 	if (operation->url.protocol == URL_PROTOCOL_HTTP) {
 		webclient->tcp_conn = tcp_connection_alloc();
 		if (!webclient->tcp_conn) {
 			DEBUG_WARN("out of memory");
-			return false;
+			webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_RESOURCE_ERROR, 0, "resource error");
+			return;
 		}
 
 		if (webclient->max_recv_nb_size != 0) {
@@ -567,31 +622,34 @@ static bool webclient_execute_connect(struct webclient_t *webclient)
 			DEBUG_WARN("connect failed");
 			tcp_connection_deref(webclient->tcp_conn);
 			webclient->tcp_conn = NULL;
-			return false;
+			webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_CONNECT_FAILED, 0, "connect failed");
+			return;
 		}
 
-		return true;
+		return;
 	}
 
 	if (operation->url.protocol == URL_PROTOCOL_HTTPS) {
 		webclient->tls_conn = tls_client_connection_alloc();
 		if (!webclient->tls_conn) {
 			DEBUG_WARN("out of memory");
-			return false;
+			webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_RESOURCE_ERROR, 0, "resource error");
+			return;
 		}
 
 		if (!tls_client_connection_connect(webclient->tls_conn, operation->url.ip_addr, operation->url.ip_port, 0, 0, operation->url.dns_name, webclient_conn_established, webclient_conn_recv, NULL, webclient_conn_close, webclient)) {
 			DEBUG_WARN("connect failed");
 			tls_client_connection_deref(webclient->tls_conn);
 			webclient->tls_conn = NULL;
-			return false;
+			webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_CONNECT_FAILED, 0, "connect failed");
+			return;
 		}
 
-		return true;
+		return;
 	}
 
 	DEBUG_ERROR("unsupported protocol");
-	return false;
+	webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_CONNECT_FAILED, 0, "connect failed");
 }
 
 static void webclient_execute_dns_callback(void *arg, ipv4_addr_t ip, ticks_t expire_time)
@@ -615,14 +673,10 @@ static void webclient_execute_dns_callback(void *arg, ipv4_addr_t ip, ticks_t ex
 	}
 
 	operation->url.ip_addr = ip;
-
-	if (!webclient_execute_connect(webclient)) {
-		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_CONNECT_FAILED, 0, "connect failed");
-		return;
-	}
+	webclient_execute_connect(webclient);
 }
 
-static bool webclient_execute_dns_or_connect(struct webclient_t *webclient)
+static void webclient_execute_dns_or_connect(struct webclient_t *webclient)
 {
 	struct webclient_operation_t *operation = webclient->current_operation;
 	DEBUG_ASSERT(webclient->current_operation, "execute_dns called without operation");
@@ -630,25 +684,25 @@ static bool webclient_execute_dns_or_connect(struct webclient_t *webclient)
 	DEBUG_ASSERT(!webclient->dns_lookup, "active dns operation");
 
 	if (operation->url.ip_addr != 0) {
-		return webclient_execute_connect(webclient);
+		webclient_execute_connect(webclient);
+		return;
 	}
 
 	webclient->dns_lookup = dns_lookup_alloc();
 	if (!webclient->dns_lookup) {
-		return false;
+		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_RESOURCE_ERROR, 0, "resource error");
+		return;
 	}
 
 	if (!dns_lookup_gethostbyname(webclient->dns_lookup, operation->url.dns_name, webclient_execute_dns_callback, webclient)) {
-		DEBUG_WARN("dns failed");
-		return false;
+		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_DNS_FAILED, 0, "dns failed");
+		return;
 	}
-
-	return true;
 }
 
 static bool webclient_is_url_valid_to_pipeline(struct webclient_t *webclient, struct url_t *url)
 {
-	if (webclient->must_close || !webclient->keep_alive_accepted) {
+	if (webclient->waiting_for_headers || webclient->must_close || !webclient->keep_alive_accepted) {
 		return false;
 	}
 
@@ -668,18 +722,8 @@ static bool webclient_is_url_valid_to_pipeline(struct webclient_t *webclient, st
 	}
 }
 
-static bool webclient_execute_start(struct webclient_t *webclient)
+static void webclient_execute_start(struct webclient_t *webclient, struct webclient_operation_t *operation)
 {
-	struct webclient_operation_t *operation = (webclient->pipelined_operation) ? webclient->pipelined_operation : webclient->current_operation;
-
-	if (webclient->tcp_conn || webclient->tls_conn) {
-		if (!webclient_is_url_valid_to_pipeline(webclient, &operation->url)) {
-			DEBUG_ASSERT(!webclient->pipelined_operation, "invalid state");
-			DEBUG_INFO("unable to use existing webclient - forcing restart of webclient");
-			webclient_close_internal(webclient);
-		}
-	}
-
 	if (RUNTIME_DEBUG) {
 		char url_str[512];
 		url_to_str(&operation->url, url_str, url_str + sizeof(url_str));
@@ -695,9 +739,6 @@ static bool webclient_execute_start(struct webclient_t *webclient)
 
 	oneshot_detach(&webclient->idle_disconnect_timer);
 
-	webclient->http_result = 0;
-	webclient->redirect_url_updated = false;
-
 	operation->stats.start_time = timer_get_ticks();
 	operation->stats.dns_time = 0;
 	operation->stats.establish_time = 0;
@@ -705,53 +746,71 @@ static bool webclient_execute_start(struct webclient_t *webclient)
 
 	if (!webclient->tcp_conn && !webclient->tls_conn) {
 		sprintf_custom(webclient->dns_name, webclient->dns_name + sizeof(webclient->dns_name), "%s", operation->url.dns_name);
-		return webclient_execute_dns_or_connect(webclient);
+		webclient_execute_dns_or_connect(webclient);
+		return;
 	}
 
 	if (!webclient_send_header(webclient, operation)) {
 		if (operation == webclient->pipelined_operation) {
 			DEBUG_INFO("failed to send pipelined request using existing webclient");
 			webclient->must_close = true;
-			return false;
+			slist_attach_head(struct webclient_operation_t, &webclient->future_operations, webclient->pipelined_operation);
+			webclient->pipelined_operation = NULL;
+			return;
 		}
 
 		DEBUG_INFO("failed to send using existing webclient, starting new webclient");
 		webclient_close_internal(webclient);
-		return webclient_execute_dns_or_connect(webclient);
+		webclient_execute_dns_or_connect(webclient);
+		return;
 	}
 
 	if (operation->post_callback && !webclient->expect_100_continue) {
 		webclient_operation_schedule_post_callback(operation);
 	}
-
-	return true;
 }
 
-bool webclient_execute_operation(struct webclient_t *webclient, struct webclient_operation_t *operation)
+static void webclient_execute_future(void *arg)
 {
+	struct webclient_t *webclient = (struct webclient_t *)arg;
+
+	struct webclient_operation_t *operation = slist_get_head(struct webclient_operation_t, &webclient->future_operations);
+	if (!operation) {
+		if (!webclient->tcp_conn && !webclient->tls_conn) {
+			return;
+		}
+		if (webclient->max_idle_time == TICKS_INFINITE) {
+			return;
+		}
+
+		if (webclient->current_operation) {
+			return;
+		}
+		if (webclient->pipelined_operation) {
+			return;
+		}
+
+		if (oneshot_is_attached(&webclient->idle_disconnect_timer)) {
+			return;
+		}
+
+		oneshot_attach(&webclient->idle_disconnect_timer, webclient->max_idle_time, webclient_idle_disconnect_callback, webclient);
+		return;
+	}
+
 	if (webclient->pipelined_operation) {
-		DEBUG_WARN("unable to execute operation - busy with existing pipelined operation");
-		return false;
+		return;
 	}
 
 	if (webclient->current_operation) {
 		if (!webclient_is_url_valid_to_pipeline(webclient, &operation->url)) {
-			DEBUG_WARN("unable to execute operation - unable to pipeline with current operation");
-			return false;
+			return;
 		}
 
-		webclient->pipelined_operation = webclient_operation_ref(operation);
-		operation->webclient = webclient;
-
-		if (!webclient_execute_start(webclient)) {
-			DEBUG_WARN("unable to execute operation - start failed");
-			operation->webclient = NULL;
-			webclient_operation_deref(operation);
-			webclient->pipelined_operation = NULL;
-			return false;
-		}
-
-		return true;
+		slist_detach_head(struct webclient_operation_t, &webclient->future_operations);
+		webclient->pipelined_operation = operation;
+		webclient_execute_start(webclient, operation);
+		return;
 	}
 
 	if ((webclient->http_last_event != HTTP_PARSER_EVENT_DATA_COMPLETE) && (webclient->http_last_event != HTTP_PARSER_EVENT_RESET)) {
@@ -759,31 +818,28 @@ bool webclient_execute_operation(struct webclient_t *webclient, struct webclient
 		webclient_close_internal(webclient);
 	}
 
-	webclient->current_operation = webclient_operation_ref(operation);
-	operation->webclient = webclient;
-
-	if (!webclient_execute_start(webclient)) {
-		DEBUG_WARN("unable to execute operation - start failed");
-		operation->webclient = NULL;
-		webclient_operation_deref(operation);
-		webclient->current_operation = NULL;
-		return false;
+	if (webclient->tcp_conn || webclient->tls_conn) {
+		if (!webclient_is_url_valid_to_pipeline(webclient, &operation->url)) {
+			DEBUG_INFO("unable to use existing webclient - forcing restart of webclient");
+			webclient_close_internal(webclient);
+		}
 	}
-			
-	return true;
+
+	DEBUG_ASSERT(!webclient->waiting_for_headers, "state error");
+
+	slist_detach_head(struct webclient_operation_t, &webclient->future_operations);
+	webclient->current_operation = operation;
+	webclient->waiting_for_headers = true;
+	webclient_execute_start(webclient, operation);
 }
 
-bool webclient_can_execute(struct webclient_t *webclient, struct url_t *url)
+void webclient_add_operation(struct webclient_t *webclient, struct webclient_operation_t *operation)
 {
-	if (webclient->pipelined_operation) {
-		return false;
-	}
+	webclient_operation_ref(operation);
+	operation->webclient = webclient;
+	slist_attach_tail(struct webclient_operation_t, &webclient->future_operations, operation);
 
-	if (webclient->current_operation) {
-		return webclient_is_url_valid_to_pipeline(webclient, url);
-	}
-
-	return true;
+	webclient_schedule_execute(webclient);
 }
 
 bool webclient_can_post_data(struct webclient_t *webclient)
@@ -900,6 +956,7 @@ struct webclient_t *webclient_alloc(const char *additional_header_lines, ticks_t
 		}
 	}
 
+	oneshot_init(&webclient->execute_timer);
 	oneshot_init(&webclient->idle_disconnect_timer);
 	webclient->max_idle_time = max_idle_time;
 	webclient->http_last_event = HTTP_PARSER_EVENT_RESET;

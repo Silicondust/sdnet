@@ -62,10 +62,16 @@ void webclient_operation_release(struct webclient_operation_t *operation)
 	webclient_operation_deref(operation);
 }
 
-void webclient_operation_signal_complete(struct webclient_operation_t *operation, uint8_t result, uint16_t http_error, const char *error_str)
+void webclient_operation_signal_complete_and_deref(struct webclient_operation_t *operation, uint8_t result, uint16_t http_error, const char *error_str)
 {
 	oneshot_detach(&operation->post_callback_timer);
 	oneshot_detach(&operation->timeout_timer);
+
+	webclient_operation_complete_callback_t complete_callback = operation->complete_callback;
+	operation->redirect_callback = NULL;
+	operation->post_callback = NULL;
+	operation->data_callback = NULL;
+	operation->complete_callback = NULL;
 
 	operation->stats.complete_time = timer_get_ticks();
 
@@ -74,11 +80,11 @@ void webclient_operation_signal_complete(struct webclient_operation_t *operation
 		operation->stats_last_pause_time = 0;
 	}
 
-	if (operation->complete_callback) {
-		webclient_operation_ref(operation);
-		operation->complete_callback(operation->callback_arg, operation, result, http_error, error_str);
-		webclient_operation_deref(operation);
+	if (complete_callback) {
+		complete_callback(operation->callback_arg, operation, result, http_error, error_str);
 	}
+
+	webclient_operation_deref(operation);
 }
 
 static void webclient_operation_timeout(void *arg)
@@ -93,10 +99,7 @@ static void webclient_operation_timeout(void *arg)
 static void webclient_operation_post_callback(void *arg)
 {
 	struct webclient_operation_t *operation = (struct webclient_operation_t *)arg;
-
-	webclient_operation_ref(operation);
 	operation->post_callback(operation->callback_arg, operation);
-	webclient_operation_deref(operation);
 }
 
 void webclient_operation_schedule_post_callback(struct webclient_operation_t *operation)
@@ -208,11 +211,7 @@ struct webclient_operation_t *webclient_operation_execute_post(struct webclient_
 	oneshot_attach(&operation->timeout_timer, WEBCLIENT_OPERATION_TIMEOUT, webclient_operation_timeout, operation);
 
 	operation->stats.first_start_time = timer_get_ticks();
-
-	if (!webclient_execute_operation(webclient, operation)) {
-		webclient_operation_deref(operation);
-		return NULL;
-	}
+	webclient_add_operation(webclient, operation);
 
 	return operation;
 }

@@ -9,6 +9,7 @@
  */
 
 struct webclient_operation_t {
+	struct slist_prefix_t slist_prefix;
 	struct webclient_t *webclient;
 
 	struct url_t url;
@@ -36,23 +37,27 @@ struct webclient_t {
 	struct tls_client_connection_t *tls_conn;
 	struct http_parser_t *http_parser;
 	struct http_parser_tag_lookup_t *http_tag_list_allocated;
+	struct oneshot execute_timer;
 	struct oneshot idle_disconnect_timer;
 	http_parser_event_t http_last_event;
 	ticks_t max_idle_time;
 	size_t max_recv_nb_size;
 	uint16_t http_result;
 	bool redirect_url_updated;
+	bool pipelined_redirect;
 	bool expect_100_continue;
+	bool waiting_for_headers;
 	bool keep_alive_accepted;
 	bool must_close;
 
 	struct webclient_operation_t *current_operation;
 	struct webclient_operation_t *pipelined_operation;
+	struct slist_t future_operations;
 };
 
 extern void webclient_release_operation(struct webclient_t *webclient, struct webclient_operation_t *operation);
 extern void webclient_timeout_operation(struct webclient_t *webclient, struct webclient_operation_t *operation);
-extern bool webclient_execute_operation(struct webclient_t *webclient, struct webclient_operation_t *operation);
+extern void webclient_add_operation(struct webclient_t *webclient, struct webclient_operation_t *operation);
 extern bool webclient_can_post_data(struct webclient_t *webclient);
 extern bool webclient_post_data(struct webclient_t *webclient, struct netbuf *txnb, bool end);
 extern void webclient_pause_recv(struct webclient_t *webclient);
@@ -60,5 +65,5 @@ extern void webclient_resume_recv(struct webclient_t *webclient);
 
 extern struct webclient_operation_t *webclient_operation_ref(struct webclient_operation_t *operation);
 extern int webclient_operation_deref(struct webclient_operation_t *operation);
-extern void webclient_operation_signal_complete(struct webclient_operation_t *operation, uint8_t result, uint16_t http_error, const char *error_str);
+extern void webclient_operation_signal_complete_and_deref(struct webclient_operation_t *operation, uint8_t result, uint16_t http_error, const char *error_str);
 extern void webclient_operation_schedule_post_callback(struct webclient_operation_t *operation);

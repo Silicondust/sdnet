@@ -9,23 +9,22 @@
  */
 
 /*
- * A webclient_connection represents a single tcp or tls connection to a webserver. It will automatically connect
- * and disconnect as needed.
- *
+ * A webclient represents a single tcp or tls connection to one server at a time.
  * A webclient_operation represents a GET or a POST operation.
  *
- * On first operation the webclient_connection will connect to the server specified by the operation url.
+ * Any number of webclient_operations can be enqueued for the webclient to execute and operations can be to different servers.
+ * If the server supports connection pipelining and the next request is to the same server (dns name) the webclient will
+ * automatically pipeline the request.
  *
- * If a redirect response is received the webclient_connection will follow the redirect. This may require it to disconnect from
- * the current server and connect to a new server.
+ * Redirects are automatically followed. Redirects can be to the same server or to a different server.
+ * Note: as any operation could result in a redirect to a different server the next operation isn't pipelined until the headers have
+ * been received from the first operation.
  *
- * A second operation can be accepted by the same webclient if:
- * - all prior operations have completed, OR
- * - the prior operation is in the data state AND the connection is not scheduled to be closed AND the dns_name in the url is the same.
+ * If a failure occurs after a pipelined operation has been sent to the server but before the server has responded the webclient will
+ * automatically reconnect and resubmit the operation.
  *
- * A new operation can be to a new server if all prior operations have been completed. It will only be rejected if a prior operation
- * is ongoing and the new operation can't be pipeliend behind it (or it is unknown if it can be pipelined behind it due to not being in
- * the data state).
+ * Once all operations have been completed the webclient will keep the the connection alive for a specified period of time in case of
+ * future operations.
  */
 
 struct webclient_t;
@@ -55,6 +54,7 @@ struct webclient_operation_stats_t {
 #define WEBCLIENT_RESULT_EARLY_CLOSE 7
 #define WEBCLIENT_RESULT_TIMEOUT 8
 #define WEBCLIENT_RESULT_HTTPS_FAILED 9
+#define WEBCLIENT_RESULT_RESOURCE_ERROR 10
 
 typedef void(*webclient_operation_redirect_callback_t)(void *arg, struct webclient_operation_t *operation, struct url_t *url);
 typedef void(*webclient_operation_post_callback_t)(void *arg, struct webclient_operation_t *operation);
@@ -63,7 +63,6 @@ typedef void(*webclient_operation_complete_callback_t)(void *arg, struct webclie
 
 extern struct webclient_t *webclient_alloc(const char *additional_header_lines, ticks_t max_idle_time);
 extern void webclient_release(struct webclient_t *webclient);
-extern bool webclient_can_execute(struct webclient_t *webclient, struct url_t *url);
 extern void webclient_set_max_recv_nb_size(struct webclient_t *webclient, size_t max_recv_nb_size);
 extern ipv4_addr_t webclient_get_local_ip(struct webclient_t *webclient);
 
