@@ -53,7 +53,7 @@ void pkcs1_v15_type1_pad(uint8_t *in, size_t in_len, uint8_t *out, size_t out_le
 	memcpy(out, in, in_len);
 }
 
-/* 0x00, 0x01, random-non-zero-fill, 0x00, in-bytes */
+/* 0x00, 0x02, random-non-zero-fill, 0x00, in-bytes */
 void pkcs1_v15_type2_pad(uint8_t *in, size_t in_len, uint8_t *out, size_t out_len)
 {
 	*out++ = 0x00;

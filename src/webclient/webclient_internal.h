@@ -8,6 +8,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#define WEBCLIENT_PIPELINE_STATE_NULL 0
+#define WEBCLIENT_PIPELINE_STATE_CURRENT_OPERATION_BUSY 1
+#define WEBCLIENT_PIPELINE_STATE_CAN_PIPELINE 2
+
 struct webclient_operation_t {
 	struct slist_prefix_t slist_prefix;
 	struct webclient_t *webclient;
@@ -17,6 +21,7 @@ struct webclient_operation_t {
 	const struct http_parser_tag_lookup_t *http_tag_list;
 	struct oneshot post_callback_timer;
 	struct oneshot timeout_timer;
+	ticks_t timeout_to_apply;
 	int refs;
 
 	webclient_operation_redirect_callback_t redirect_callback;
@@ -38,15 +43,14 @@ struct webclient_t {
 	struct http_parser_t *http_parser;
 	struct http_parser_tag_lookup_t *http_tag_list_allocated;
 	struct oneshot execute_timer;
-	struct oneshot idle_disconnect_timer;
-	http_parser_event_t http_last_event;
+	struct oneshot disconnect_timer;
 	ticks_t max_idle_time;
 	size_t max_recv_nb_size;
 	uint16_t http_result;
+	uint8_t pipeline_state;
+	uint64_t data_on_dead_operation;
 	bool redirect_url_updated;
-	bool pipelined_redirect;
 	bool expect_100_continue;
-	bool waiting_for_headers;
 	bool keep_alive_accepted;
 	bool must_close;
 
@@ -67,3 +71,4 @@ extern struct webclient_operation_t *webclient_operation_ref(struct webclient_op
 extern int webclient_operation_deref(struct webclient_operation_t *operation);
 extern void webclient_operation_signal_complete_and_deref(struct webclient_operation_t *operation, uint8_t result, uint16_t http_error, const char *error_str);
 extern void webclient_operation_schedule_post_callback(struct webclient_operation_t *operation);
+extern void webclient_operation_pipelined_to_current(struct webclient_operation_t *operation);

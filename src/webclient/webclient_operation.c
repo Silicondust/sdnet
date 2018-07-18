@@ -47,6 +47,8 @@ int webclient_operation_deref(struct webclient_operation_t *operation)
 
 void webclient_operation_release(struct webclient_operation_t *operation)
 {
+	DEBUG_TRACE("webclient_operation_release: %s", operation->url.uri);
+
 	oneshot_detach(&operation->post_callback_timer);
 	oneshot_detach(&operation->timeout_timer);
 
@@ -90,9 +92,9 @@ void webclient_operation_signal_complete_and_deref(struct webclient_operation_t 
 static void webclient_operation_timeout(void *arg)
 {
 	struct webclient_operation_t *operation = (struct webclient_operation_t *)arg;
-	struct webclient_t *webclient = operation->webclient;
-	DEBUG_WARN("webclient_operation_timeout");
+	DEBUG_WARN("webclient_operation_timeout: %s", operation->url.uri);
 
+	struct webclient_t *webclient = operation->webclient;
 	webclient_timeout_operation(webclient, operation);
 }
 
@@ -166,17 +168,36 @@ struct webclient_operation_stats_t *webclient_operation_get_stats(struct webclie
 
 ticks_t webclient_operation_get_timeout_time_remaining(struct webclient_operation_t *operation)
 {
-	return oneshot_get_ticks_remaining(&operation->timeout_timer);
+	if (oneshot_is_attached(&operation->timeout_timer)) {
+		return oneshot_get_ticks_remaining(&operation->timeout_timer);
+	}
+
+	return operation->timeout_to_apply;
 }
 
 void webclient_operation_set_timeout(struct webclient_operation_t *operation, ticks_t timeout)
 {
+	struct webclient_t *webclient = operation->webclient;
+
+	if (operation != webclient->current_operation) {
+		operation->timeout_to_apply = timeout;
+		return;
+	}
+
+	operation->timeout_to_apply = 0;
 	oneshot_detach(&operation->timeout_timer);
 	if (timeout == TICKS_INFINITE) {
 		return;
 	}
 
 	oneshot_attach(&operation->timeout_timer, timeout, webclient_operation_timeout, operation);
+}
+
+void webclient_operation_pipelined_to_current(struct webclient_operation_t *operation)
+{
+	if (operation->timeout_to_apply) {
+		webclient_operation_set_timeout(operation, operation->timeout_to_apply);
+	}
 }
 
 struct webclient_operation_t *webclient_operation_execute_post(struct webclient_t *webclient, struct url_t *url, const char *additional_header_lines, const struct http_parser_tag_lookup_t *http_tag_list, webclient_operation_redirect_callback_t redirect_callback, webclient_operation_post_callback_t post_callback, webclient_operation_data_callback_t data_callback, webclient_operation_complete_callback_t complete_callback, void *callback_arg)
@@ -208,10 +229,10 @@ struct webclient_operation_t *webclient_operation_execute_post(struct webclient_
 
 	oneshot_init(&operation->post_callback_timer);
 	oneshot_init(&operation->timeout_timer);
-	oneshot_attach(&operation->timeout_timer, WEBCLIENT_OPERATION_TIMEOUT, webclient_operation_timeout, operation);
 
 	operation->stats.first_start_time = timer_get_ticks();
 	webclient_add_operation(webclient, operation);
+	webclient_operation_set_timeout(operation, WEBCLIENT_OPERATION_TIMEOUT);
 
 	return operation;
 }

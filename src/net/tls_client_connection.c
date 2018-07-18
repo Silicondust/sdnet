@@ -18,12 +18,8 @@
 
 THIS_FILE("tls_client_connection");
 
-/*
- * A TLS record consists of a 5 byte header followed by a up to 16384 bytes of payload data.
- * The maximum application data length is the maximum record payload size (16384), less the IV size (16), less the MAC size (20), less the minimum padding size (1).
- */
-#define TLS_MAX_RECORD_LENGTH (16384 + 5)
-#define TLS_MAX_APPLICATION_DATA_LENGTH (16384 - 16 - 20 - 1)
+#define TLS_MAX_RECORD_LENGTH 16437
+#define TLS_MAX_APPLICATION_DATA_LENGTH 16384
 
 #define TLS_CLIENT_CONNECTION_STATE_NULL 0
 #define TLS_CLIENT_CONNECTION_STATE_CLIENT_CONNECTING 1
@@ -43,6 +39,7 @@ THIS_FILE("tls_client_connection");
 #define TLS_HANDSHAKE_TYPE_CLIENT_HELLO 1
 #define TLS_HANDSHAKE_TYPE_SERVER_HELLO 2
 #define TLS_HANDSHAKE_TYPE_CERTIFICATE 11
+#define TLS_HANDSHAKE_TYPE_CERTIFICATE_REQUEST 13
 #define TLS_HANDSHAKE_TYPE_SERVER_HELLO_DONE 14
 #define TLS_HANDSHAKE_TYPE_CLIENT_KEY_EXCHANGE 16
 #define TLS_HANDSHAKE_TYPE_FINISHED 20
@@ -290,6 +287,19 @@ static bool tls_client_connection_record_send_encrypt(struct tls_client_connecti
 	return true;
 }
 
+static inline void tls_client_connection_record_recv_decrypt_aes(struct tls_client_connection_t *tls_conn, struct netbuf *nb)
+{
+#if defined(IPOS)
+	aes_lock();
+	aes_cbc_decrypt_netbuf(nb, netbuf_get_remaining(nb), tls_conn->server_write_iv.u32be, tls_conn->server_write_key.u32be, AES_KEY_SIZE_128);
+	aes_unlock();
+#else
+	uint8_t *ptr = netbuf_get_ptr(nb);
+	uint8_t *end = ptr + netbuf_get_remaining(nb);
+	aes_cbc_128_decrypt_inplace(ptr, end, &tls_conn->server_write_iv, &tls_conn->server_write_key);
+#endif
+}
+
 static bool tls_client_connection_record_recv_decrypt(struct tls_client_connection_t *tls_conn, uint8_t record_content_type, struct netbuf *nb)
 {
 	if (!tls_conn->encrypt) {
@@ -307,14 +317,12 @@ static bool tls_client_connection_record_recv_decrypt(struct tls_client_connecti
 		return false;
 	}
 
-#if defined(IPOS)
-	aes_lock();
-	aes_cbc_decrypt_netbuf(nb, netbuf_get_remaining(nb), tls_conn->server_write_iv.u32be, tls_conn->server_write_key.u32be, AES_KEY_SIZE_128);
-	aes_unlock();
+#if defined(DEBUG_TIMING)
+	uint32_t aes_time = timer_get_fast_ticks();
+	tls_client_connection_record_recv_decrypt_aes(tls_conn, nb);
+	aes_time = timer_get_fast_ticks() - aes_time;
 #else
-	uint8_t *ptr = netbuf_get_ptr(nb);
-	uint8_t *end = ptr + netbuf_get_remaining(nb);
-	aes_cbc_128_decrypt_inplace(ptr, end, &tls_conn->server_write_iv, &tls_conn->server_write_key);
+	tls_client_connection_record_recv_decrypt_aes(tls_conn, nb);
 #endif
 
 	/* Remove IV */
@@ -365,8 +373,15 @@ static bool tls_client_connection_record_recv_decrypt(struct tls_client_connecti
 	netbuf_rev_write_u8(nb, record_content_type);
 	netbuf_rev_write_u64(nb, tls_conn->server_write_sequence++);
 
+#if defined(DEBUG_TIMING)
+	sha1_digest_t mac;
+	uint32_t hmac_time = timer_get_fast_ticks();
+	sha1_hmac_compute_digest_netbuf(&mac, nb, 13 + payload_length, tls_conn->server_write_mac_secret, sizeof(tls_conn->server_write_mac_secret));
+	hmac_time = timer_get_fast_ticks() - hmac_time;
+#else
 	sha1_digest_t mac;
 	sha1_hmac_compute_digest_netbuf(&mac, nb, 13 + payload_length, tls_conn->server_write_mac_secret, sizeof(tls_conn->server_write_mac_secret));
+#endif
 
 	netbuf_set_pos_to_end(nb);
 	netbuf_retreat_pos(nb, SHA1_SIZE);
@@ -380,7 +395,10 @@ static bool tls_client_connection_record_recv_decrypt(struct tls_client_connecti
 	netbuf_retreat_pos(nb, payload_length);
 	netbuf_set_start_to_pos(nb);
 
-	DEBUG_TRACE("payload length = %u", netbuf_get_extent(nb));
+#if defined(DEBUG_TIMING)
+	DEBUG_INFO("%u byte payload (aes=%uus hamc=%uus)", netbuf_get_extent(nb), aes_time / FAST_TICK_RATE_US, hmac_time / FAST_TICK_RATE_US);
+#endif
+
 	return true;
 }
 
@@ -964,6 +982,11 @@ static bool tls_client_connection_recv_handshake(struct tls_client_connection_t 
 		return tls_client_connection_recv_certificate(tls_conn, nb);
 	}
 
+	if ((handshake_type == TLS_HANDSHAKE_TYPE_CERTIFICATE_REQUEST) && (tls_conn->state == TLS_CLIENT_CONNECTION_STATE_CERTIFICATE_RECV_EXPECTING_SERVER_HELLO_DONE)) {
+		DEBUG_WARN("server is requesting client certificate");
+		return false;
+	}
+
 	if ((handshake_type == TLS_HANDSHAKE_TYPE_SERVER_HELLO_DONE) && (tls_conn->state == TLS_CLIENT_CONNECTION_STATE_CERTIFICATE_RECV_EXPECTING_SERVER_HELLO_DONE)) {
 		return tls_client_connection_recv_server_hello_done(tls_conn, nb);
 	}
@@ -972,7 +995,7 @@ static bool tls_client_connection_recv_handshake(struct tls_client_connection_t 
 		return tls_client_connection_recv_finished(tls_conn, nb);
 	}
 
-	DEBUG_WARN("unexpected handshake_type 0x%02x in state %u", handshake_type, tls_conn->state);
+	DEBUG_WARN("unexpected handshake_type %u in state %u", handshake_type, tls_conn->state);
 	return false;
 }
 

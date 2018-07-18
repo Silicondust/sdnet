@@ -282,7 +282,7 @@ static http_parser_error_t http_parser_tag_transfer_encodding(void *arg, const c
 	struct http_parser_t *hpi = (struct http_parser_t *)arg;
 
 	if (netbuf_fwd_strcasecmp(nb, "chunked") == 0) {
-		DEBUG_INFO("%p chunked encoding", hpi);
+		DEBUG_TRACE("%p chunked encoding", hpi);
 		hpi->chunked_encoding = true;
 		return HTTP_PARSER_OK;
 	}

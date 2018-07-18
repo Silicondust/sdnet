@@ -23,7 +23,7 @@ static json_parser_error_t json_parser_parse_start(struct json_parser_t *xpi, st
 static json_parser_error_t json_parser_parse_name_or_open(struct json_parser_t *xpi, struct netbuf *nb);
 static json_parser_error_t json_parser_parse_name_or_open_or_close(struct json_parser_t *xpi, struct netbuf *nb);
 static json_parser_error_t json_parser_parse_name_str(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_colon(struct json_parser_t *xpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_name_colon(struct json_parser_t *xpi, struct netbuf *nb);
 static json_parser_error_t json_parser_parse_value(struct json_parser_t *xpi, struct netbuf *nb);
 static json_parser_error_t json_parser_parse_value_str(struct json_parser_t *xpi, struct netbuf *nb);
 static json_parser_error_t json_parser_parse_value_unquoted(struct json_parser_t *xpi, struct netbuf *nb);
@@ -405,8 +405,8 @@ static json_parser_error_t json_parser_parse_name_str(struct json_parser_t *xpi,
 			return json_parser_callback_parse_error(xpi);
 
 		case '\"':
-			xpi->parse_func = json_parser_parse_colon;
-			return json_parser_parse_colon(xpi, nb);
+			xpi->parse_func = json_parser_parse_name_colon;
+			return json_parser_parse_name_colon(xpi, nb);
 
 		case '\\':
 			c = json_parser_read_escaped_char(xpi, nb);
@@ -428,7 +428,7 @@ static json_parser_error_t json_parser_parse_name_str(struct json_parser_t *xpi,
 	}
 }
 
-static json_parser_error_t json_parser_parse_colon(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_name_colon(struct json_parser_t *xpi, struct netbuf *nb)
 {
 	json_parser_skip_whitespace(xpi, nb);
 	addr_t emoredata_start = netbuf_get_pos(nb);
