@@ -863,6 +863,11 @@ static void webclient_execute_future(void *arg)
 		}
 	}
 
+	if (!webclient->tcp_conn && !webclient->tls_conn && (webclient->pipeline_state != WEBCLIENT_PIPELINE_STATE_NULL)) {
+		DEBUG_ASSERT(0, "state error");
+		webclient_close_internal(webclient);
+	}
+
 	if (webclient->pipeline_state == WEBCLIENT_PIPELINE_STATE_NULL) {
 		(void)slist_detach_head(struct webclient_operation_t, &webclient->future_operations);
 		oneshot_detach(&webclient->disconnect_timer);

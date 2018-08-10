@@ -22,6 +22,10 @@ THIS_FILE("x509");
 
 struct x509_certificate_t {
 	struct slist_prefix_t slist_prefix;
+	uint8_t *allocated; /* NULL for no_copy mode */
+	uint8_t *raw_data;
+	size_t raw_length;
+
 	struct der_block_t top_level_block;
 	struct der_block_t issuer_block;
 	struct der_block_t subject_block;
@@ -31,7 +35,7 @@ struct x509_certificate_t {
 	struct der_block_t subject_key_identifier_block;
 	struct der_block_t authority_key_identifier_block;
 	struct der_block_t extended_key_usage_block;
-	uint8_t *raw_data; /* NULL for no_copy mode */
+
 	uint8_t version;
 	bool key_usage_critical;
 	uint32_t key_usage;
@@ -39,11 +43,21 @@ struct x509_certificate_t {
 
 void x509_certificate_free(struct x509_certificate_t *cert)
 {
-	if (cert->raw_data) {
-		heap_free(cert->raw_data);
+	if (cert->allocated) {
+		heap_free(cert->allocated);
 	}
 
 	heap_free(cert);
+}
+
+uint8_t *x509_certificate_get_raw_data(struct x509_certificate_t *cert)
+{
+	return cert->raw_data;
+}
+
+size_t x509_certificate_get_raw_length(struct x509_certificate_t *cert)
+{
+	return cert->raw_length;
 }
 
 bool x509_certificate_verify_signature(struct x509_certificate_t *cert, struct rsa_key_t *key, bool block_weak_signatures)
@@ -122,20 +136,12 @@ bool x509_certificate_verify_signature(struct x509_certificate_t *cert, struct r
 	size_t decoded_signature_len = signature_bit_len / 8;
 
 	/* Decrypt signature. */
-	switch (signature_bit_len) {
-	case 1024:
-		if (block_weak_signatures) {
-			DEBUG_WARN("ignoring weak signature");
-			return false;
-		}
-		break;
-
-	case 2048:
-	case 4096:
-		break;
-
-	default:
-		DEBUG_WARN("unexpected signature length");
+	if ((signature_bit_len < 1024) || (signature_bit_len > 4096)) {
+		DEBUG_WARN("unexpected signature length %u", signature_bit_len);
+		return false;
+	}
+	if (block_weak_signatures && (signature_bit_len < 2048)) {
+		DEBUG_WARN("ignoring weak signature %u", signature_bit_len);
 		return false;
 	}
 
@@ -822,27 +828,22 @@ static bool x509_certificate_import_internal(struct x509_certificate_t *cert)
 	return true;
 }
 
-struct x509_certificate_t *x509_certificate_import(uint8_t *data, size_t length)
+/* allocated is null for no-copy import */
+static struct x509_certificate_t *x509_certificate_import_create(uint8_t *allocated, uint8_t *raw_data, size_t raw_length)
 {
-	length = x509_certificate_import_length(data, length);
-	if (length == 0) {
-		return NULL;
-	}
-
 	struct x509_certificate_t *cert = (struct x509_certificate_t *)heap_alloc_and_zero(sizeof(struct x509_certificate_t), PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
 	if (!cert) {
+		if (allocated) {
+			heap_free(allocated);
+		}
 		return NULL;
 	}
 
-	cert->raw_data = (uint8_t *)heap_alloc(length, PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
-	if (!cert->raw_data) {
-		heap_free(cert);
-		return NULL;
-	}
+	cert->allocated = allocated;
+	cert->raw_data = raw_data;
+	cert->raw_length = raw_length;
 
-	memcpy(cert->raw_data, data, length);
-
-	if (!der_block_init(&cert->top_level_block, cert->raw_data, cert->raw_data + length)) {
+	if (!der_block_init(&cert->top_level_block, raw_data, raw_data + raw_length)) {
 		x509_certificate_free(cert);
 		return NULL;
 	}
@@ -861,52 +862,40 @@ struct x509_certificate_t *x509_certificate_import_no_copy(uint8_t *data, size_t
 	if (length == 0) {
 		return NULL;
 	}
-		
-	struct x509_certificate_t *cert = (struct x509_certificate_t *)heap_alloc_and_zero(sizeof(struct x509_certificate_t), PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
-	if (!cert) {
+
+	return x509_certificate_import_create(NULL, data, length);
+}
+
+struct x509_certificate_t *x509_certificate_import(uint8_t *data, size_t length)
+{
+	length = x509_certificate_import_length(data, length);
+	if (length == 0) {
 		return NULL;
 	}
 
-	if (!der_block_init(&cert->top_level_block, data, data + length)) {
-		x509_certificate_free(cert);
+	uint8_t *allocated = (uint8_t *)heap_alloc(length, PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
+	if (!allocated) {
 		return NULL;
 	}
 
-	if (!x509_certificate_import_internal(cert)) {
-		x509_certificate_free(cert);
-		return NULL;
-	}
-
-	return cert;
+	memcpy(allocated, data, length);
+	return x509_certificate_import_create(allocated, allocated, length);
 }
 
 struct x509_certificate_t *x509_certificate_import_netbuf(struct netbuf *nb, size_t length)
 {
-#if defined(IPOS)
-	size_t cert_length = x509_certificate_import_length_netbuf(nb, length);
-	if (cert_length == 0) {
+	length = x509_certificate_import_length_netbuf(nb, length);
+	if (length == 0) {
 		return NULL;
 	}
 
-	uint8_t *data = (uint8_t *)heap_alloc(cert_length, PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
-	if (!data) {
+	uint8_t *allocated = (uint8_t *)heap_alloc(length, PKG_OS, MEM_TYPE_OS_X509_CERTIFICATE);
+	if (!allocated) {
 		return NULL;
 	}
 
-	netbuf_fwd_read(nb, data, cert_length);
-
-	struct x509_certificate_t *cert = x509_certificate_import_no_copy(data, cert_length);
-	if (!cert) {
-		heap_free(data);
-		return NULL;
-	}
-
-	cert->raw_data = data;
-	return cert;
-#else
-	uint8_t *data = netbuf_get_ptr(nb);
-	return x509_certificate_import(data, length);
-#endif
+	netbuf_fwd_read(nb, allocated, length);
+	return x509_certificate_import_create(allocated, allocated, length);
 }
 
 size_t x509_certificate_import_length(uint8_t *data, size_t length)
@@ -931,29 +920,25 @@ size_t x509_certificate_import_length(uint8_t *data, size_t length)
 size_t x509_certificate_import_length_netbuf(struct netbuf *nb, size_t length)
 {
 #if defined(IPOS)
-	addr_t bookmark = netbuf_get_pos(nb);
-
 	if (!netbuf_fwd_check_space(nb, 4)) {
 		return 0;
 	}
 
-	if (netbuf_fwd_read_u8(nb) != 0x30) {
-		netbuf_set_pos(nb, bookmark);
+	uint8_t header[4];
+	netbuf_fwd_read(nb, header, 4);
+	netbuf_retreat_pos(nb, 4);
+
+	if (header[0] != DER_TYPE_SEQUENCE) {
+		return 0;
+	}
+	if (header[1] != 0x82) {
 		return 0;
 	}
 
-	if (netbuf_fwd_read_u8(nb) != 0x82) {
-		netbuf_set_pos(nb, bookmark);
-		return 0;
-	}
-
-	size_t cert_length = netbuf_fwd_read_u16(nb) + 4;
-	netbuf_set_pos(nb, bookmark);
-
+	size_t cert_length = mem_int_read_be_u16(header + 2) + 4;
 	if (cert_length > length) {
 		return 0;
 	}
-
 	if (!netbuf_fwd_check_space(nb, cert_length)) {
 		return 0;
 	}

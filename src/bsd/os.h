@@ -38,10 +38,13 @@
 #include <text/netbuf_sscanf.h>
 #include <timer/oneshot.h>
 #include <crypto/random.h>
-#include <crypto/bsd/random.h>
 #include <crypto/crypto.h>
 #include <crypto/crypto_hash.h>
 #include <crypto/pkcs1_v15.h>
+#include <crypto/der.h>
+#include <crypto/x509.h>
+#include <crypto/bsd/random.h>
+#include <crypto/libtom/mpi.h>
 #include <net/ip_datalink.h>
 #include <net/igmp.h>
 #include <net/dhcp_client.h>

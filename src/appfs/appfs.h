@@ -40,3 +40,4 @@ extern uint64_t appfs_file_read_u64(struct appfs_file_t *stream);
 
 extern void appfs_init(void);
 extern void appfs_tar_init(void *start, void *end);
+extern void appfs_tar_init_encrypted(void *start, void *end, aes_128_iv_t *iv, aes_128_key_t *key);

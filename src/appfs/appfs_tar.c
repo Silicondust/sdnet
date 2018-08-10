@@ -227,7 +227,37 @@ void *appfs_file_mmap(const char *filename, const char *root, size_t *psize)
 
 void appfs_tar_init(void *start, void *end)
 {
+	if (((addr_t)start & 0x3) == 0) {
+		appfs_tar_manager.data_start = (uint8_t *)start;
+		appfs_tar_manager.data_end = (uint8_t *)end;
+		return;
+	}
+
+	size_t length = (uint8_t *)end - (uint8_t *)start;
+	uint8_t *buffer = heap_alloc(length, PKG_OS, MEM_TYPE_OS_APPFS_DATA);
+	if (!buffer) {
+		DEBUG_ERROR("out of memory");
+		return;
+	}
+
+	memcpy(buffer, start, length);
+
 	appfs_tar_manager.data_start = (uint8_t *)start;
 	appfs_tar_manager.data_end = (uint8_t *)end;
-	DEBUG_ASSERT(((addr_t)appfs_tar_manager.data_start & 0x3) == 0, "appfs not aligned");
+}
+
+void appfs_tar_init_encrypted(void *start, void *end, aes_128_iv_t *iv, aes_128_key_t *key)
+{
+	size_t length = (uint8_t *)end - (uint8_t *)start;
+	uint8_t *buffer = heap_alloc(length, PKG_OS, MEM_TYPE_OS_APPFS_DATA);
+	if (!buffer) {
+		DEBUG_ERROR("out of memory");
+		return;
+	}
+
+	memcpy(buffer, start, length);
+	aes_cbc_128_decrypt_inplace(buffer, buffer + length, iv, key);
+
+	appfs_tar_manager.data_start = buffer;
+	appfs_tar_manager.data_end = buffer + length;
 }

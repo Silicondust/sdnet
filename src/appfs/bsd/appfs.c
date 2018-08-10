@@ -23,5 +23,11 @@ extern addr_t appfs_tar_end;
 
 void appfs_init(void)
 {
+#if defined(APPFS_ENC_IV) && defined(APPFS_ENC_KEY)
+	aes_128_iv_t iv = { .u8 = APPFS_ENC_IV };
+	aes_128_key_t key = { .u8 = APPFS_ENC_KEY };
+	appfs_tar_init_encrypted(&appfs_tar_start, &appfs_tar_end, &iv, &key);
+#else
 	appfs_tar_init(&appfs_tar_start, &appfs_tar_end);
+#endif
 }

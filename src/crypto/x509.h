@@ -17,6 +17,9 @@ extern struct x509_certificate_t *x509_certificate_import_no_copy(uint8_t *data,
 extern struct x509_certificate_t *x509_certificate_import_netbuf(struct netbuf *nb, size_t length);
 extern void x509_certificate_free(struct x509_certificate_t *cert);
 
+extern uint8_t *x509_certificate_get_raw_data(struct x509_certificate_t *cert);
+extern size_t x509_certificate_get_raw_length(struct x509_certificate_t *cert);
+
 extern bool x509_certificate_verify_signature(struct x509_certificate_t *cert, struct rsa_key_t *key, bool block_weak_signatures);
 extern bool x509_certificate_verify_validity_time(struct x509_certificate_t *cert, time64_t current_time);
 
