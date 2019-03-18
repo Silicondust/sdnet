@@ -53,6 +53,7 @@ struct webclient_t {
 	bool expect_100_continue;
 	bool keep_alive_accepted;
 	bool must_close;
+	int refs;
 
 	struct webclient_operation_t *current_operation;
 	struct webclient_operation_t *pipelined_operation;

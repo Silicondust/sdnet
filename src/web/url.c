@@ -60,7 +60,7 @@ bool url_to_str(struct url_t *url, char *buffer, char *end)
 	return success;
 }
 
-static void url_wipe(struct url_t *output)
+void url_wipe(struct url_t *output)
 {
 	output->protocol = URL_PROTOCOL_UNKNOWN;
 	output->ip_addr = 0;

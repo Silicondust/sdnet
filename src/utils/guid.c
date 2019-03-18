@@ -20,12 +20,11 @@ THIS_FILE("guid");
 
 void guid_create_random(struct guid *guid)
 {
-	uint32_t data[4];
+	uint32_t *data = (uint32_t *)guid;
 	data[0] = random_get32();
 	data[1] = random_get32();
 	data[2] = random_get32();
 	data[3] = random_get32();
-	memcpy(guid, data, 16);
 }
 
 void guid_create_ubicom(struct guid *guid, uint8_t mac_addr[6], uint8_t sequence)
@@ -109,7 +108,7 @@ bool guid_read_netbuf(struct guid *guid, struct netbuf *nb)
 void guid_write_string(struct guid *guid, char *str)
 {
 	sprintf_custom(str, str + 37,
-		"%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+		"%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
 		guid->time_low, guid->time_mid, guid->time_hi_and_version,
 		guid->clock_seq_hi_and_reserved, guid->clock_seq_low,
 		guid->node[0], guid->node[1], guid->node[2],
@@ -117,13 +116,40 @@ void guid_write_string(struct guid *guid, char *str)
 	);
 }
 
-void guid_write_string_upper(struct guid *guid, char *str)
+bool guid_write_netbuf(struct guid *guid, struct netbuf *nb)
 {
-	sprintf_custom(str, str + 37,
+	return netbuf_sprintf(nb,
 		"%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
 		guid->time_low, guid->time_mid, guid->time_hi_and_version,
 		guid->clock_seq_hi_and_reserved, guid->clock_seq_low,
 		guid->node[0], guid->node[1], guid->node[2],
 		guid->node[3], guid->node[4], guid->node[5]
 	);
+}
+
+bool guid_is_zero(struct guid *guid)
+{
+	uint32_t *data = (uint32_t *)guid;
+	return (data[0] == 0) && (data[1] == 0) && (data[2] == 0) && (data[3] == 0);
+}
+
+bool guid_is_match(struct guid *guid_a, struct guid *guid_b)
+{
+	uint32_t *data_a = (uint32_t *)guid_a;
+	uint32_t *data_b = (uint32_t *)guid_b;
+	return (data_a[0] == data_b[0]) && (data_a[1] == data_b[1]) && (data_a[2] == data_b[2]) && (data_a[3] == data_b[3]);
+}
+
+int guid_compare(struct guid *guid_a, struct guid *guid_b)
+{
+	if (guid_a->time_low != guid_b->time_low) {
+		return (guid_a->time_low > guid_b->time_low) ? 1 : -1;
+	}
+	if (guid_a->time_mid != guid_b->time_mid) {
+		return (guid_a->time_mid > guid_b->time_mid) ? 1 : -1;
+	}
+	if (guid_a->time_hi_and_version != guid_b->time_hi_and_version) {
+		return (guid_a->time_hi_and_version > guid_b->time_hi_and_version) ? 1 : -1;
+	}
+	return memcmp((uint8_t *)guid_a + 8, (uint8_t *)guid_b + 8, 8);
 }

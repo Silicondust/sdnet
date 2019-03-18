@@ -75,6 +75,11 @@ static bool json_parser_path_apply_element_end(char *path, char tag)
 		}
 	}
 
+	if (ptr == path) {
+		*ptr = 0;
+		return true; /* special case when the json is a simple unnamed value */
+	}
+
 	while (ptr > path) {
 		ptr--;
 		if ((*ptr == '{') || (*ptr == '[')) {

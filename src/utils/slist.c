@@ -220,3 +220,17 @@ void slist_clear_custom_impl(struct slist_t *list, void *state, slist_clear_cust
 		index++;
 	}
 }
+
+void slist_steal(struct slist_t *dst, struct slist_t *src)
+{
+	struct slist_prefix_t **pprev = &dst->head;
+	struct slist_prefix_t *p = dst->head;
+
+	while (p) {
+		pprev = &p->next;
+		p = p->next;
+	}
+
+	*pprev = src->head;
+	src->head = NULL;
+}

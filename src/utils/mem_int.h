@@ -18,9 +18,20 @@ static inline uint16_t mem_int_read_be_u16(uint8_t *ptr)
 	return ((uint16_t)ptr[0] << 8) | ((uint16_t)ptr[1] << 0);
 }
 
+static inline uint32_t mem_int_read_be_u24(uint8_t *ptr)
+{
+	return ((uint32_t)ptr[0] << 16) | ((uint32_t)ptr[1] << 8) | ((uint32_t)ptr[2] << 0);
+}
+
 static inline uint32_t mem_int_read_be_u32(uint8_t *ptr)
 {
 	return ((uint32_t)ptr[0] << 24) | ((uint32_t)ptr[1] << 16) | ((uint32_t)ptr[2] << 8) | ((uint32_t)ptr[3] << 0);
+}
+
+static inline uint64_t mem_int_read_be_u48(uint8_t *ptr)
+{
+	return ((uint64_t)ptr[0] << 40) | ((uint64_t)ptr[1] << 32) | ((uint64_t)ptr[2] << 24) | ((uint64_t)ptr[3] << 16) |
+		   ((uint64_t)ptr[4] << 8) | ((uint64_t)ptr[5] << 0);
 }
 
 static inline uint64_t mem_int_read_be_u64(uint8_t *ptr)
@@ -34,9 +45,20 @@ static inline uint16_t mem_int_read_le_u16(uint8_t *ptr)
 	return ((uint16_t)ptr[1] << 8) | ((uint16_t)ptr[0] << 0);
 }
 
+static inline uint32_t mem_int_read_le_u24(uint8_t *ptr)
+{
+	return ((uint32_t)ptr[2] << 16) | ((uint32_t)ptr[1] << 8) | ((uint32_t)ptr[0] << 0);
+}
+
 static inline uint32_t mem_int_read_le_u32(uint8_t *ptr)
 {
 	return ((uint32_t)ptr[3] << 24) | ((uint32_t)ptr[2] << 16) | ((uint32_t)ptr[1] << 8) | ((uint32_t)ptr[0] << 0);
+}
+
+static inline uint64_t mem_int_read_le_u48(uint8_t *ptr)
+{
+	return ((uint64_t)ptr[5] << 40) | ((uint64_t)ptr[4] << 32) | ((uint64_t)ptr[3] << 24) | ((uint64_t)ptr[2] << 16) |
+		   ((uint64_t)ptr[1] << 8) | ((uint64_t)ptr[0] << 0);
 }
 
 static inline uint64_t mem_int_read_le_u64(uint8_t *ptr)
@@ -56,12 +78,29 @@ static inline void mem_int_write_be_u16(uint8_t *ptr, uint16_t v)
 	ptr[1] = (uint8_t)(v >> 0);
 }
 
+static inline void mem_int_write_be_u24(uint8_t *ptr, uint32_t v)
+{
+	ptr[0] = (uint8_t)(v >> 16);
+	ptr[1] = (uint8_t)(v >> 8);
+	ptr[2] = (uint8_t)(v >> 0);
+}
+
 static inline void mem_int_write_be_u32(uint8_t *ptr, uint32_t v)
 {
 	ptr[0] = (uint8_t)(v >> 24);
 	ptr[1] = (uint8_t)(v >> 16);
 	ptr[2] = (uint8_t)(v >> 8);
 	ptr[3] = (uint8_t)(v >> 0);
+}
+
+static inline void mem_int_write_be_u48(uint8_t *ptr, uint64_t v)
+{
+	ptr[0] = (uint8_t)(v >> 40);
+	ptr[1] = (uint8_t)(v >> 32);
+	ptr[2] = (uint8_t)(v >> 24);
+	ptr[3] = (uint8_t)(v >> 16);
+	ptr[4] = (uint8_t)(v >> 8);
+	ptr[5] = (uint8_t)(v >> 0);
 }
 
 static inline void mem_int_write_be_u64(uint8_t *ptr, uint64_t v)
@@ -82,12 +121,29 @@ static inline void mem_int_write_le_u16(uint8_t *ptr, uint16_t v)
 	ptr[1] = (uint8_t)(v >> 8);
 }
 
+static inline void mem_int_write_le_u24(uint8_t *ptr, uint32_t v)
+{
+	ptr[0] = (uint8_t)(v >> 0);
+	ptr[1] = (uint8_t)(v >> 8);
+	ptr[2] = (uint8_t)(v >> 16);
+}
+
 static inline void mem_int_write_le_u32(uint8_t *ptr, uint32_t v)
 {
 	ptr[0] = (uint8_t)(v >> 0);
 	ptr[1] = (uint8_t)(v >> 8);
 	ptr[2] = (uint8_t)(v >> 16);
 	ptr[3] = (uint8_t)(v >> 24);
+}
+
+static inline void mem_int_write_le_u48(uint8_t *ptr, uint64_t v)
+{
+	ptr[0] = (uint8_t)(v >> 0);
+	ptr[1] = (uint8_t)(v >> 8);
+	ptr[2] = (uint8_t)(v >> 16);
+	ptr[3] = (uint8_t)(v >> 24);
+	ptr[4] = (uint8_t)(v >> 32);
+	ptr[5] = (uint8_t)(v >> 40);
 }
 
 static inline void mem_int_write_le_u64(uint8_t *ptr, uint64_t v)

@@ -49,10 +49,13 @@ static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye
 	success &= netbuf_sprintf(txnb, "NOTIFY * HTTP/1.1\r\n");
 	success &= netbuf_sprintf(txnb, "Host: 239.255.255.250:%u\r\n", SSDP_SERVICE_PORT);
 
+	char uuid_str[37];
+	guid_write_string(&service->uuid, uuid_str);
+
 	if (service->urn) {
 		success &= netbuf_sprintf(txnb, "NT: %s\r\n", service->urn);
 	} else {
-		success &= netbuf_sprintf(txnb, "NT: uuid:%s\r\n", service->uuid);
+		success &= netbuf_sprintf(txnb, "NT: uuid:%s\r\n", uuid_str);
 	}
 
 	if (byebye) {
@@ -65,9 +68,9 @@ static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye
 	}
 
 	if (service->urn) {
-		success &= netbuf_sprintf(txnb, "USN: uuid:%s::%s\r\n", service->uuid, service->urn);
+		success &= netbuf_sprintf(txnb, "USN: uuid:%s::%s\r\n", uuid_str, service->urn);
 	} else {
-		success &= netbuf_sprintf(txnb, "USN: uuid:%s\r\n", service->uuid);
+		success &= netbuf_sprintf(txnb, "USN: uuid:%s\r\n", uuid_str);
 	}
 
 	success &= netbuf_sprintf(txnb, "\r\n");
@@ -85,7 +88,9 @@ static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye
 
 static void ssdp_service_send_discover_response(struct ssdp_service_t *service, ipv4_addr_t remote_ip, uint16_t remote_port)
 {
-	DEBUG_TRACE("sending ssdp discover response for %s", (service->urn) ? service->urn : service->uuid);
+	char uuid_str[37];
+	guid_write_string(&service->uuid, uuid_str);
+	DEBUG_TRACE("sending ssdp discover response for %s", (service->urn) ? service->urn : uuid_str);
 
 	struct netbuf *txnb = netbuf_alloc();
 	if (!txnb) {
@@ -100,7 +105,7 @@ static void ssdp_service_send_discover_response(struct ssdp_service_t *service, 
 	if (service->urn) {
 		success &= netbuf_sprintf(txnb, "ST: %s\r\n", service->urn);
 	} else {
-		success &= netbuf_sprintf(txnb, "ST: uuid:%s\r\n", service->uuid);
+		success &= netbuf_sprintf(txnb, "ST: uuid:%s\r\n", uuid_str);
 	}
 
 	ipv4_addr_t local_ip = ip_get_local_ip_for_remote_ip(remote_ip);
@@ -108,9 +113,9 @@ static void ssdp_service_send_discover_response(struct ssdp_service_t *service, 
 	success &= http_header_write_cache_control(txnb, 1800);
 
 	if (service->urn) {
-		success &= netbuf_sprintf(txnb, "USN: uuid:%s::%s\r\n", service->uuid, service->urn);
+		success &= netbuf_sprintf(txnb, "USN: uuid:%s::%s\r\n", uuid_str, service->urn);
 	} else {
-		success &= netbuf_sprintf(txnb, "USN: uuid:%s\r\n", service->uuid);
+		success &= netbuf_sprintf(txnb, "USN: uuid:%s\r\n", uuid_str);
 	}
 
 	success &= netbuf_sprintf(txnb, "Ext:\r\n");
@@ -145,6 +150,11 @@ static void ssdp_service_manager_populate_discover_list_by_uuid_netbuf(struct ne
 {
 	ssdp_service_manager.discover_list = NULL;
 
+	struct guid uuid;
+	if (!guid_read_netbuf(&uuid, nb)) {
+		return;
+	}
+
 	struct ssdp_service_t *service = slist_get_head(struct ssdp_service_t, &ssdp_service_manager.service_list);
 	while (service) {
 		if (service->urn) {
@@ -152,8 +162,7 @@ static void ssdp_service_manager_populate_discover_list_by_uuid_netbuf(struct ne
 			continue;
 		}
 
-		/* Case insensitive compare required for UUIDs. */
-		if (netbuf_fwd_strcasecmp(nb, service->uuid) == 0) {
+		if (guid_is_match(&service->uuid, &uuid)) {
 			service->discover_next = ssdp_service_manager.discover_list;
 			ssdp_service_manager.discover_list = service;
 		}
@@ -411,7 +420,7 @@ void ssdp_service_manager_start(void)
 	oneshot_attach(&ssdp_service_manager.notify_timer, SSDP_START_DELAY, ssdp_service_manager_notify_timer_callback, NULL);
 }
 
-static struct ssdp_service_t *ssdp_service_manager_add_service_internal(const char *uuid, const char *urn, const char *device_xml_uri)
+static struct ssdp_service_t *ssdp_service_manager_add_service_internal(struct guid *uuid, const char *urn, const char *device_xml_uri)
 {
 	struct ssdp_service_t *service = (struct ssdp_service_t *)heap_alloc_and_zero(sizeof(struct ssdp_service_t), PKG_OS, MEM_TYPE_OS_SSDP_SERVICE);
 	if (!service) {
@@ -419,7 +428,7 @@ static struct ssdp_service_t *ssdp_service_manager_add_service_internal(const ch
 		return NULL;
 	}
 
-	service->uuid = uuid;
+	service->uuid = *uuid;
 	service->urn = urn;
 	service->device_xml_uri = device_xml_uri;
 
@@ -427,14 +436,11 @@ static struct ssdp_service_t *ssdp_service_manager_add_service_internal(const ch
 	return service;
 }
 
-struct ssdp_service_t *ssdp_service_manager_add_service(const char *uuid, const char *urn, const char *device_xml_uri)
+struct ssdp_service_t *ssdp_service_manager_add_service(struct guid *uuid, const char *urn, const char *device_xml_uri)
 {
-	DEBUG_ASSERT(uuid, "null uuid");
-	DEBUG_ASSERT(urn, "null uuid");
-
 	struct ssdp_service_t *p = slist_get_head(struct ssdp_service_t, &ssdp_service_manager.service_list);
 	while (p) {
-		if (strcmp(p->uuid, uuid) == 0) {
+		if (guid_is_match(&p->uuid, uuid)) {
 			break;
 		}
 		p = slist_get_next(struct ssdp_service_t, p);

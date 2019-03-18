@@ -381,39 +381,6 @@ static void tcp_connection_notify_established(struct tcp_connection *tc)
 	tc->est_callback(tc->callback_inst);
 }
 
-static void tcp_connection_thread_est(struct tcp_connection *tc, WSANETWORKEVENTS *network_events)
-{
-	if (network_events->lNetworkEvents & FD_CLOSE) {
-		DEBUG_INFO("connection failed");
-		tc->dead = true;
-		return;
-	}
-
-	if (network_events->lNetworkEvents & FD_WRITE) {
-		DEBUG_TRACE("connection established");
-		tcp_manager.network_ok_indication = true;
-		tc->established_timeout = 0;
-
-		if (tc->est_callback && !tc->app_closed) {
-			thread_main_enter();
-			tcp_connection_notify_established(tc);
-			thread_main_exit();
-		}
-
-		if (network_events->lNetworkEvents & FD_READ) {
-			tcp_connection_thread_recv(tc);
-		}
-
-		return;
-	}
-
-	if (timer_get_ticks() >= tc->established_timeout) {
-		DEBUG_INFO("connection timeout");
-		tc->dead = true;
-		return;
-	}
-}
-
 static void tcp_connection_thread_normal(struct tcp_connection *tc, WSANETWORKEVENTS *network_events)
 {
 	if (tc->send_nb) {
@@ -436,6 +403,36 @@ static void tcp_connection_thread_normal(struct tcp_connection *tc, WSANETWORKEV
 	}
 
 	if (tc->close_event_received) {
+		tc->dead = true;
+		return;
+	}
+}
+
+static void tcp_connection_thread_est(struct tcp_connection *tc, WSANETWORKEVENTS *network_events)
+{
+	if (network_events->lNetworkEvents & FD_WRITE) {
+		DEBUG_TRACE("connection established");
+		tcp_manager.network_ok_indication = true;
+		tc->established_timeout = 0;
+
+		if (tc->est_callback && !tc->app_closed) {
+			thread_main_enter();
+			tcp_connection_notify_established(tc);
+			thread_main_exit();
+		}
+
+		tcp_connection_thread_normal(tc, network_events);
+		return;
+	}
+
+	if (network_events->lNetworkEvents & FD_CLOSE) {
+		DEBUG_INFO("connection failed");
+		tc->dead = true;
+		return;
+	}
+
+	if (timer_get_ticks() >= tc->established_timeout) {
+		DEBUG_INFO("connection timeout");
 		tc->dead = true;
 		return;
 	}

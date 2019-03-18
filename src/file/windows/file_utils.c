@@ -136,7 +136,7 @@ bool file_delete(const char *path, bool result_on_not_found)
 
 	if (!DeleteFileW((wchar_t *)path_wstr)) {
 		DWORD err = GetLastError();
-		if (err == ERROR_FILE_NOT_FOUND) {
+		if ((err == ERROR_FILE_NOT_FOUND) || (err == ERROR_PATH_NOT_FOUND)) {
 			return result_on_not_found;
 		}
 

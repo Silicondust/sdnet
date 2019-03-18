@@ -187,7 +187,7 @@ static webserver_page_result_t webserver_connection_execute(struct webserver_con
 		netbuf_set_pos_to_start(connection->params_nb);
 	}
 
-	return page->start_callback(page->callback_arg, connection, connection->uri_nb, connection->params_nb, &connection->page_callback_state);
+	return page->start_callback(page->callback_arg, connection, connection->method, connection->uri_nb, connection->params_nb, &connection->page_callback_state);
 }
 
 static http_parser_error_t webserver_connection_http_tag_host(void *arg, const char *header, struct netbuf *nb)
@@ -291,6 +291,32 @@ static http_parser_error_t webserver_connection_http_event(void *arg, http_parse
 			return HTTP_PARSER_ESTOP;
 		}
 		ret = webserver_connection_execute(connection);
+		if (ret == WEBSERVER_PAGE_RESULT_CLOSE) {
+			webserver_connection_free(connection);
+			return HTTP_PARSER_ESTOP;
+		}
+		if (ret == WEBSERVER_PAGE_RESULT_CAPTURE_POST) {
+			return HTTP_PARSER_OK;
+		}
+		if (ret == WEBSERVER_PAGE_RESULT_PAUSE) {
+			connection->page_active_state = false;
+			return HTTP_PARSER_ESTOP;
+		}
+		DEBUG_ASSERT(ret == WEBSERVER_PAGE_RESULT_CONTINUE, "unexpected result");
+		webserver_connection_page_resume(connection);
+		return HTTP_PARSER_ESTOP;
+
+	case HTTP_PARSER_EVENT_DATA:
+		ret = connection->page->post_callback(connection->page->callback_arg, connection, nb, connection->page_callback_state);
+		if (ret == WEBSERVER_PAGE_RESULT_CLOSE) {
+			webserver_connection_free(connection);
+			return HTTP_PARSER_ESTOP;
+		}
+		DEBUG_ASSERT(ret == WEBSERVER_PAGE_RESULT_CAPTURE_POST, "unexpected result");
+		return HTTP_PARSER_OK;
+
+	case HTTP_PARSER_EVENT_DATA_COMPLETE:
+		ret = connection->page->post_callback(connection->page->callback_arg, connection, NULL, connection->page_callback_state);
 		if (ret == WEBSERVER_PAGE_RESULT_CLOSE) {
 			webserver_connection_free(connection);
 			return HTTP_PARSER_ESTOP;

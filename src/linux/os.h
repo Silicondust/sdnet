@@ -54,12 +54,15 @@
 #include <net/udp_dhcp.h>
 #include <net/tcp.h>
 #include <net/tls_prf.h>
-#include <net/tls_client_connection.h>
+#include <net/tls_client.h>
+#include <net/tls_server.h>
 #include <appfs/appfs.h>
 #include <file/dir_change_notification.h>
 #include <file/dir_utils.h>
 #include <file/file_utils.h>
 #include <file/linux/file_utils.h>
+#include <file/linux/hdparm.h>
+#include <file/linux/gpt.h>
 #include <file/filename_utils.h>
 #include <debug.h>
 #include <log.h>
@@ -88,7 +91,6 @@
 #include <thread/linux/thread.h>
 #include <net/libc/tcp.h>
 #include <net/libc/udp.h>
-#include <linux/fs.h>
 
 #if defined(TB100)
 #include <timer/tb100/timer.h>

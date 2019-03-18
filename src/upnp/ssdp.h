@@ -18,7 +18,7 @@ extern void ssdp_manager_stop(void);
 
 struct ssdp_service_t;
 extern const char ssdp_service_root_device_urn[];
-extern struct ssdp_service_t *ssdp_service_manager_add_service(const char *uuid, const char *urn, const char *device_xml_uri);
+extern struct ssdp_service_t *ssdp_service_manager_add_service(struct guid *uuid, const char *urn, const char *device_xml_uri);
 extern void ssdp_service_manager_resend_notify_now(void);
 
 struct ssdp_client_t;
@@ -39,7 +39,7 @@ struct ssdp_service_discover_reply_t {
 struct ssdp_service_t {
 	struct slist_prefix_t slist_prefix;
 	struct ssdp_service_t *discover_next;
-	const char *uuid;
+	struct guid uuid;
 	const char *urn;
 	const char *device_xml_uri;
 };

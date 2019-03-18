@@ -29,13 +29,6 @@ static void system_signal_handler_ignore(int signal, siginfo_t *si, void *contex
 	DEBUG_ERROR("-- SIGNAL %d --", signal);
 }
 
-static void system_signal_handler_child(int signal, siginfo_t *si, void *context_addr)
-{
-	pid_t pid;
-	pid = waitpid(-1, NULL, WNOHANG);
-	DEBUG_ERROR("-- SIGNAL SIGCHLD for pid %d --", pid);
-}
-
 static void system_signal_handler_quit(int signal, siginfo_t *si, void *context_addr)
 {
 	DEBUG_ERROR("-- SIGNAL SIGQUIT --");
@@ -100,9 +93,6 @@ static void system_signal_handler_init(void)
 	sigaction(SIGFPE, &sigaction_ignore, NULL);
 	sigaction(SIGPIPE, &sigaction_ignore, NULL);
 
-	const struct sigaction sigaction_child = { .sa_flags = SA_SIGINFO, .sa_sigaction = system_signal_handler_child };
-	sigaction(SIGCHLD, &sigaction_child, NULL);
-
 	const struct sigaction sigaction_quit = { .sa_flags = SA_SIGINFO, .sa_sigaction = system_signal_handler_quit };
 	sigaction(SIGQUIT, &sigaction_quit, NULL); /* Reboot requested */
 
@@ -133,7 +123,7 @@ void system_drop_root(void)
 
 	header.version = _LINUX_CAPABILITY_VERSION;
 	header.pid = 0;
-	cap.permitted = (1 << CAP_SYS_BOOT) | (1 << CAP_SYS_TIME) | (1 << CAP_NET_ADMIN) | (1 << CAP_NET_RAW) | (1 << CAP_NET_BROADCAST);
+	cap.permitted = (1 << CAP_SYS_BOOT) | (1 << CAP_SYS_TIME) | (1 << CAP_NET_ADMIN) | (1 << CAP_NET_RAW) | (1 << CAP_NET_BROADCAST) | (1 << CAP_SYS_RAWIO);
 	cap.effective = cap.permitted; 
 	cap.inheritable = 0;
 	status |= capset(&header, &cap);

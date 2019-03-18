@@ -38,8 +38,6 @@ int os_main(int argc, char *argv[])
 	netbuf_manager_init();
 	exe_args_init(argc, argv);
 
-	fs_init();
-
 	flash_init();
 	thread_manager_init();
 	oneshot_manager_init();

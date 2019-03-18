@@ -68,6 +68,11 @@ extern uint32_t slist_get_count(struct slist_t *list);
 #define slist_clear(type, list, callback_func) slist_clear_impl(list, (slist_clear_callback_func_t)callback_func)
 #define slist_clear_custom(type, list, state, custom_func, callback_func) slist_clear_custom_impl(list, state, (slist_clear_custom_func_t)custom_func, (slist_clear_callback_func_t)callback_func)
 
+/*
+ * steal: move all elements in src to the tail of dst.
+ */
+extern void slist_steal(struct slist_t *dst, struct slist_t *src);
+
 /* Implementation. */
 static inline struct slist_prefix_t **slist_get_phead_impl(struct slist_t *list) { return &list->head; }
 static inline struct slist_prefix_t **slist_get_pnext_impl(struct slist_prefix_t *item) { return &item->next; }

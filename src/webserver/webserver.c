@@ -110,7 +110,7 @@ struct webserver_page_t *webserver_find_page_handler(struct webserver_t *webserv
 	return webserver->page_filesystem;
 }
 
-static struct webserver_page_t *webserver_create_page(webserver_page_start_handler_t start_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg)
+static struct webserver_page_t *webserver_create_page(webserver_page_start_handler_t start_callback, webserver_page_post_handler_t post_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg)
 {
 	struct webserver_page_t *page = (struct webserver_page_t *)heap_alloc_and_zero(sizeof(struct webserver_page_t), PKG_OS, MEM_TYPE_OS_WEBSERVER_PAGE);
 	if (!page) {
@@ -118,6 +118,7 @@ static struct webserver_page_t *webserver_create_page(webserver_page_start_handl
 	}
 
 	page->start_callback = start_callback;
+	page->post_callback = post_callback;
 	page->continue_callback = continue_callback;
 	page->free_callback = free_callback;
 	page->callback_arg = callback_arg;
@@ -125,9 +126,9 @@ static struct webserver_page_t *webserver_create_page(webserver_page_start_handl
 	return page;
 }
 
-void webserver_register_page_custom(struct webserver_t *webserver, const char *uri, webserver_page_start_handler_t start_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg)
+void webserver_register_page_custom(struct webserver_t *webserver, const char *uri, webserver_page_start_handler_t start_callback, webserver_page_post_handler_t post_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg)
 {
-	struct webserver_page_t *page = webserver_create_page(start_callback, continue_callback, free_callback, callback_arg);
+	struct webserver_page_t *page = webserver_create_page(start_callback, post_callback, continue_callback, free_callback, callback_arg);
 	if (!page) {
 		return;
 	}
@@ -139,7 +140,7 @@ void webserver_register_page_custom(struct webserver_t *webserver, const char *u
 void webserver_register_page_filesystem(struct webserver_t *webserver, const char *filesystem_chroot, webserver_page_start_handler_t start_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg)
 {
 	DEBUG_ASSERT(!webserver->page_filesystem, "filesystem page handler already registered");
-	struct webserver_page_t *page = webserver_create_page(start_callback, continue_callback, free_callback, callback_arg);
+	struct webserver_page_t *page = webserver_create_page(start_callback, NULL, continue_callback, free_callback, callback_arg);
 	if (!page) {
 		return;
 	}

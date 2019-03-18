@@ -22,7 +22,7 @@ THIS_FILE("tls_client_connection");
 #define TLS_MAX_APPLICATION_DATA_LENGTH 16384
 
 #define TLS_CLIENT_CONNECTION_STATE_NULL 0
-#define TLS_CLIENT_CONNECTION_STATE_CLIENT_CONNECTING 1
+#define TLS_CLIENT_CONNECTION_STATE_CONNECTING 1
 #define TLS_CLIENT_CONNECTION_STATE_CLIENT_HELLO_SENT_EXPECTING_SERVER_HELLO 2
 #define TLS_CLIENT_CONNECTION_STATE_SERVER_HELLO_RECV_EXPECTING_CERTIFICATE 3
 #define TLS_CLIENT_CONNECTION_STATE_CERTIFICATE_RECV_EXPECTING_SERVER_HELLO_DONE 4
@@ -88,14 +88,20 @@ struct tls_client_connection_t {
 	uint64_t client_write_sequence;
 	uint64_t server_write_sequence;
 
-	tls_client_connection_establish_callback_t establish_callback;
-	tls_client_connection_recv_callback_t recv_callback;
-	tls_client_connection_send_resume_callback_t send_resume_callback;
-	tls_client_connection_close_callback_t close_callback;
+	tls_client_establish_callback_t establish_callback;
+	tls_client_recv_callback_t recv_callback;
+	tls_client_send_resume_callback_t send_resume_callback;
+	tls_client_close_callback_t close_callback;
 	void *callback_arg;
 };
 
-static struct slist_t tls_client_connection_root_certs;
+struct tls_client_manager_t {
+	struct slist_t root_certs;
+	struct slist_t client_cert_chain_optional;
+	struct rsa_key_t *client_key_optional;
+};
+
+static struct tls_client_manager_t tls_client_manager;
 
 struct tls_client_connection_t *tls_client_connection_ref(struct tls_client_connection_t *tls_conn)
 {
@@ -113,18 +119,6 @@ int tls_client_connection_deref(struct tls_client_connection_t *tls_conn)
 	if (tls_conn->state != TLS_CLIENT_CONNECTION_STATE_NULL) {
 		DEBUG_ASSERT(0, "deref to 0 when active");
 		tls_client_connection_close(tls_conn);
-	}
-
-	heap_free(tls_conn);
-	return 0;
-}
-
-void tls_client_connection_close(struct tls_client_connection_t *tls_conn)
-{
-	if (tls_conn->conn) {
-		tcp_connection_close(tls_conn->conn);
-		tcp_connection_deref(tls_conn->conn);
-		tls_conn->conn = NULL;
 	}
 
 	if (tls_conn->partial_rxnb) {
@@ -162,6 +156,18 @@ void tls_client_connection_close(struct tls_client_connection_t *tls_conn)
 		tls_conn->handshake_long_task_handshake_finished_nb = NULL;
 	}
 
+	heap_free(tls_conn);
+	return 0;
+}
+
+void tls_client_connection_close(struct tls_client_connection_t *tls_conn)
+{
+	if (tls_conn->conn) {
+		tcp_connection_close(tls_conn->conn);
+		tcp_connection_deref(tls_conn->conn);
+		tls_conn->conn = NULL;
+	}
+
 	tls_conn->state = TLS_CLIENT_CONNECTION_STATE_NULL;
 	tls_conn->establish_callback = NULL;
 	tls_conn->recv_callback = NULL;
@@ -171,7 +177,7 @@ void tls_client_connection_close(struct tls_client_connection_t *tls_conn)
 
 static void tls_client_connection_close_and_notify(struct tls_client_connection_t *tls_conn)
 {
-	tls_client_connection_close_callback_t close_callback = tls_conn->close_callback;
+	tls_client_close_callback_t close_callback = tls_conn->close_callback;
 	tls_client_connection_close(tls_conn);
 
 	if (close_callback) {
@@ -527,15 +533,11 @@ static bool tls_client_connection_send_client_certificate(struct tls_client_conn
 		return false;
 	}
 
-	size_t file_length;
-	uint8_t *ptr = appfs_file_mmap("/tls/client.crt", "", &file_length);
-	if (ptr) {
-		uint8_t *end = ptr + file_length;
-		while (ptr < end) {
-			size_t cert_length = x509_certificate_import_length(ptr, end - ptr);
-			if (cert_length == 0) {
-				break;
-			}
+	if (tls_client_manager.client_key_optional) {
+		struct x509_certificate_t *cert = slist_get_head(struct x509_certificate_t, &tls_client_manager.client_cert_chain_optional);
+		while (cert) {
+			uint8_t *cert_data = x509_certificate_get_raw_data(cert);
+			size_t cert_length = x509_certificate_get_raw_length(cert);
 
 			if (!netbuf_fwd_make_space(txnb, 3 + cert_length)) {
 				DEBUG_ERROR("out of memory");
@@ -544,15 +546,16 @@ static bool tls_client_connection_send_client_certificate(struct tls_client_conn
 			}
 
 			netbuf_fwd_write_u24(txnb, (uint32_t)cert_length);
-			netbuf_fwd_write(txnb, ptr, cert_length);
-			ptr += cert_length;
+			netbuf_fwd_write(txnb, cert_data, cert_length);
+
+			cert = slist_get_next(struct x509_certificate_t, cert);
 		}
 
 		netbuf_set_pos_to_start(txnb);
+	} else {
+		/* Prevent further client certificate work if there is no client certificate */
+		tls_conn->client_certificate_requested = false;
 	}
-
-	/* Prevent further client certificate work if there is no client certificate */
-	tls_conn->client_certificate_requested = (netbuf_get_remaining(txnb) > 0);
 
 	if (!netbuf_rev_make_space(txnb, 7)) {
 		DEBUG_ERROR("out of memory");
@@ -715,7 +718,7 @@ static struct rsa_key_t *tls_client_connection_handshake_long_task_verify_certif
 		return NULL;
 	}
 
-	if (!x509_chain_verify(server_cert_chain, &tls_client_connection_root_certs, true)) {
+	if (!x509_chain_verify(server_cert_chain, &tls_client_manager.root_certs, true)) {
 		DEBUG_WARN("cert chain verify failed");
 		return NULL;
 	}
@@ -775,35 +778,20 @@ static struct netbuf *tls_client_connection_handshake_long_task_generate_client_
 	sha256_digest_t sha256_hash;
 	sha256_compute_digest_netbuf(&sha256_hash, tls_conn->handshake_hash_data_nb, handshake_data_length);
 
-	/* Import client key */
-	size_t key_length;
-	uint8_t *key_data = appfs_file_mmap("/tls/client.key", "", &key_length);
-	if (!key_data) {
-		return NULL;
-	}
-
-	struct rsa_key_t *key = rsa_key_import_private(key_data, key_length);
-	if (!key) {
-		return NULL;
-	}
-
+	/* Sign with client key */
 	uint8_t signature[512];
-	size_t signature_len = rsa_key_get_size_bytes(key);
+	size_t signature_len = rsa_key_get_size_bytes(tls_client_manager.client_key_optional);
 	if (signature_len > sizeof(signature)) {
 		DEBUG_WARN("rsa key > 4096 bit");
-		rsa_key_free(key);
 		return NULL;
 	}
 
 	pkcs1_v15_pad_sha256(&sha256_hash, signature, signature_len);
 
-	if (!rsa_exptmod_auto(signature, signature, signature_len, key)) {
+	if (!rsa_exptmod_auto(signature, signature, signature_len, tls_client_manager.client_key_optional)) {
 		DEBUG_WARN("rsa encrypt failed");
-		rsa_key_free(key);
 		return NULL;
 	}
-
-	rsa_key_free(key);
 
 	/* Generate client certificate verify packet */
 	struct netbuf *txnb = netbuf_alloc_with_rev_space(8 + signature_len);
@@ -1348,7 +1336,7 @@ static void tls_client_connection_tcp_establish_callback(void *arg)
 	tls_conn->state = TLS_CLIENT_CONNECTION_STATE_CLIENT_HELLO_SENT_EXPECTING_SERVER_HELLO;
 }
 
-bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, const char *host_name, tls_client_connection_establish_callback_t est, tls_client_connection_recv_callback_t recv, tls_client_connection_send_resume_callback_t send_resume, tls_client_connection_close_callback_t close, void *callback_arg)
+bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, const char *host_name, tls_client_establish_callback_t est, tls_client_recv_callback_t recv, tls_client_send_resume_callback_t send_resume, tls_client_close_callback_t close, void *callback_arg)
 {
 	if (tls_conn->state != TLS_CLIENT_CONNECTION_STATE_NULL) {
 		DEBUG_ASSERT(0, "attempt to connect when already active");
@@ -1367,7 +1355,7 @@ bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv
 	tls_conn->close_callback = close;
 	tls_conn->callback_arg = callback_arg;
 
-	tls_conn->state = TLS_CLIENT_CONNECTION_STATE_CLIENT_CONNECTING;
+	tls_conn->state = TLS_CLIENT_CONNECTION_STATE_CONNECTING;
 
 	tls_conn->conn = tcp_connection_alloc();
 	if (!tls_conn->conn) {
@@ -1506,10 +1494,44 @@ static void tls_client_load_certs_from_appfs_file(const char *filename, struct s
 	}
 }
 
-void tls_client_init(void)
+void tls_client_set_client_cert_appfs(const char *client_crt_appfs_filename, const char *client_key_appfs_filename)
 {
-	tls_client_load_certs_from_appfs_file("/tls/public_root_certs", &tls_client_connection_root_certs);
-	DEBUG_INFO("imported %u root certs", slist_get_count(&tls_client_connection_root_certs));
+	if (tls_client_manager.client_key_optional) {
+		slist_clear(struct x509_certificate_t, &tls_client_manager.client_cert_chain_optional, x509_certificate_free);
+		rsa_key_free(tls_client_manager.client_key_optional);
+		tls_client_manager.client_key_optional = NULL;
+	}
+
+	size_t key_length;
+	uint8_t *key_data = appfs_file_mmap(client_key_appfs_filename, "", &key_length);
+	if (!key_data) {
+		DEBUG_ERROR("failed to load client key %s", client_key_appfs_filename);
+		return;
+	}
+
+	tls_client_manager.client_key_optional = rsa_key_import_private(key_data, key_length);
+	if (!tls_client_manager.client_key_optional) {
+		DEBUG_ERROR("failed to load client key %s", client_key_appfs_filename);
+		return;
+	}
+
+	tls_client_load_certs_from_appfs_file(client_crt_appfs_filename, &tls_client_manager.client_cert_chain_optional);
+	if (!slist_get_head(struct x509_certificate_t, &tls_client_manager.client_cert_chain_optional)) {
+		DEBUG_ERROR("failed to load client certificate %s", client_crt_appfs_filename);
+		rsa_key_free(tls_client_manager.client_key_optional);
+		return;
+	}
+}
+
+void tls_client_init()
+{
+	tls_client_load_certs_from_appfs_file("/tls/public_root_certs", &tls_client_manager.root_certs);
+	DEBUG_INFO("imported %u root certs", slist_get_count(&tls_client_manager.root_certs));
+
+	size_t length;
+	if (appfs_file_mmap("/tls/client.key", "", &length)) {
+		tls_client_set_client_cert_appfs("/tls/client.crt", "/tls/client.key");
+	}
 }
 
 #if defined(DEBUG)

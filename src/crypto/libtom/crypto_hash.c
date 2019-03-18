@@ -22,7 +22,7 @@ void md5_compute_digest(md5_digest_t *hash, uint8_t *data, size_t length)
 {
 	hash_state md;
 	md5_init(&md);
-	md5_process(&md, data, length);
+	md5_process(&md, data, (unsigned long)length);
 	md5_done(&md, hash->u8);
 }
 
@@ -51,7 +51,7 @@ void md5_hmac_compute_digest(md5_digest_t *hash, uint8_t *input, size_t input_le
 	hash_state md;
 	md5_init(&md);
 	md5_process(&md, (uint8_t *)key_xor, sizeof(key_xor));
-	md5_process(&md, input, input_len);
+	md5_process(&md, input, (unsigned long)input_len);
 	md5_done(&md, hash->u8);
 
 	for (size_t i = 0; i < 64 / 4; i++) {
@@ -79,7 +79,7 @@ void sha1_compute_digest(sha1_digest_t *hash, uint8_t *data, size_t length)
 {
 	hash_state md;
 	sha1_init(&md);
-	sha1_process(&md, data, length);
+	sha1_process(&md, data, (unsigned long)length);
 	sha1_done(&md, hash->u8);
 }
 
@@ -108,7 +108,7 @@ void sha1_hmac_compute_digest(sha1_digest_t *hash, uint8_t *input, size_t input_
 	hash_state md;
 	sha1_init(&md);
 	sha1_process(&md, (uint8_t *)key_xor, sizeof(key_xor));
-	sha1_process(&md, input, input_len);
+	sha1_process(&md, input, (unsigned long)input_len);
 	sha1_done(&md, hash->u8);
 
 	for (size_t i = 0; i < 64 / 4; i++) {
@@ -136,7 +136,7 @@ void sha256_compute_digest(sha256_digest_t *hash, uint8_t *data, size_t length)
 {
 	hash_state md;
 	sha256_init(&md);
-	sha256_process(&md, data, length);
+	sha256_process(&md, data, (unsigned long)length);
 	sha256_done(&md, hash->u8);
 }
 
@@ -165,7 +165,7 @@ void sha256_hmac_compute_digest(sha256_digest_t *hash, uint8_t *input, size_t in
 	hash_state md;
 	sha256_init(&md);
 	sha256_process(&md, (uint8_t *)key_xor, sizeof(key_xor));
-	sha256_process(&md, input, input_len);
+	sha256_process(&md, input, (unsigned long)input_len);
 	sha256_done(&md, hash->u8);
 
 	for (size_t i = 0; i < 64 / 4; i++) {
@@ -199,7 +199,7 @@ void sha384_compute_digest(sha384_digest_t *hash, uint8_t *data, size_t length)
 {
 	hash_state md;
 	sha384_init(&md);
-	sha384_process(&md, data, length);
+	sha384_process(&md, data, (unsigned long)length);
 	sha384_done(&md, hash->u8);
 }
 
@@ -228,7 +228,7 @@ void sha384_hmac_compute_digest(sha384_digest_t *hash, uint8_t *input, size_t in
 	hash_state md;
 	sha384_init(&md);
 	sha384_process(&md, (uint8_t *)key_xor, sizeof(key_xor));
-	sha384_process(&md, input, input_len);
+	sha384_process(&md, input, (unsigned long)input_len);
 	sha384_done(&md, hash->u8);
 
 	for (size_t i = 0; i < 64 / 4; i++) {
@@ -262,7 +262,7 @@ void sha512_compute_digest(sha512_digest_t *hash, uint8_t *data, size_t length)
 {
 	hash_state md;
 	sha512_init(&md);
-	sha512_process(&md, data, length);
+	sha512_process(&md, data, (unsigned long)length);
 	sha512_done(&md, hash->u8);
 }
 
@@ -291,7 +291,7 @@ void sha512_hmac_compute_digest(sha512_digest_t *hash, uint8_t *input, size_t in
 	hash_state md;
 	sha512_init(&md);
 	sha512_process(&md, (uint8_t *)key_xor, sizeof(key_xor));
-	sha512_process(&md, input, input_len);
+	sha512_process(&md, input, (unsigned long)input_len);
 	sha512_done(&md, hash->u8);
 
 	for (size_t i = 0; i < 64 / 4; i++) {

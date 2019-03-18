@@ -11,8 +11,6 @@
 #include <windows/os_include.h>
 #include <default/netbuf.h>
 
-#define FILE_ASYNC_SUPPORT 1
-
 #include <os_enums.h>
 #include <utils/byteswap_le.h>
 #include <utils/mem_int.h>
@@ -49,7 +47,8 @@
 #include <net/udp.h>
 #include <net/tcp.h>
 #include <net/tls_prf.h>
-#include <net/tls_client_connection.h>
+#include <net/tls_client.h>
+#include <net/tls_server.h>
 #include <appfs/appfs.h>
 #include <file/dir_change_notification.h>
 #include <file/dir_utils.h>

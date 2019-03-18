@@ -145,18 +145,32 @@ bool dir_chdir(const char *name)
 	return (bool)SetCurrentDirectoryW((wchar_t *)name_wchar);
 }
 
+uint64_t dir_get_totalspace(const char *path)
+{
+	uint16_t path_wchar[MAX_PATH];
+	str_utf8_to_utf16(path_wchar, path_wchar + MAX_PATH, path);
+
+	ULARGE_INTEGER totalspace;
+	if (!GetDiskFreeSpaceExW((wchar_t *)path_wchar, NULL, &totalspace, NULL)) {
+		DEBUG_ERROR("GetDiskFreeSpaceExW returned error %d", GetLastError());
+		return 0;
+	}
+
+	return (uint64_t)totalspace.QuadPart;
+}
+
 uint64_t dir_get_freespace(const char *path)
 {
 	uint16_t path_wchar[MAX_PATH];
 	str_utf8_to_utf16(path_wchar, path_wchar + MAX_PATH, path);
 
-	ULARGE_INTEGER free_bytes_available;
-	if (!GetDiskFreeSpaceExW((wchar_t *)path_wchar, &free_bytes_available, NULL, NULL)) {
+	ULARGE_INTEGER freespace;
+	if (!GetDiskFreeSpaceExW((wchar_t *)path_wchar, &freespace, NULL, NULL)) {
 		DEBUG_ERROR("GetDiskFreeSpaceExW returned error %d", GetLastError());
 		return 0;
 	}
 
-	return (uint64_t)free_bytes_available.QuadPart;
+	return (uint64_t)freespace.QuadPart;
 }
 
 bool dir_get_fs_type(char *str, char *end, const char *path)

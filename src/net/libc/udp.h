@@ -15,6 +15,7 @@ struct udp_socket {
 	uint16_t port;
 	uint8_t ttl_set;
 	uint8_t tos_set;
+	size_t recv_netbuf_size;
 	udp_recv_callback_t recv_callback;
 	volatile udp_recv_icmp_callback_t recv_icmp_callback;
 	void *callback_inst;

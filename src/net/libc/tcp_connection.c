@@ -510,37 +510,6 @@ static inline void tcp_connection_update_recv_event_mask(struct tcp_connection *
 	poll_fds->events |= POLLIN;
 }
 
-static void tcp_connection_thread_execute_est(struct tcp_connection *tc, struct pollfd *poll_fds)
-{
-	if (poll_fds->revents & (POLLERR | POLLHUP | POLLNVAL)) {
-		DEBUG_INFO("connection failed");
-		tc->dead = true;
-		return;
-	}
-
-	if (poll_fds->revents & POLLOUT) {
-		DEBUG_TRACE("connection established");
-		tcp_manager.network_ok_indication = true;
-		tc->established_timeout = 0;
-		tcp_connection_update_send_event_mask(tc, poll_fds);
-		tcp_connection_update_recv_event_mask(tc, poll_fds);
-
-		if (tc->est_callback && !tc->app_closed) {
-			thread_main_enter();
-			tcp_connection_notify_established(tc);
-			thread_main_exit();
-		}
-
-		return;
-	}
-
-	if (timer_get_ticks() >= tc->established_timeout) {
-		DEBUG_INFO("connection timeout");
-		tc->dead = true;
-		return;
-	}
-}
-
 static void tcp_connection_thread_execute_active(struct tcp_connection *tc, struct pollfd *poll_fds)
 {
 	if (tc->send_nb) {
@@ -566,6 +535,38 @@ static void tcp_connection_thread_execute_active(struct tcp_connection *tc, stru
 	}
 
 	if (tc->close_event_received) {
+		tc->dead = true;
+		return;
+	}
+}
+
+static void tcp_connection_thread_execute_est(struct tcp_connection *tc, struct pollfd *poll_fds)
+{
+	if (poll_fds->revents & POLLOUT) {
+		DEBUG_TRACE("connection established");
+		tcp_manager.network_ok_indication = true;
+		tc->established_timeout = 0;
+		tcp_connection_update_send_event_mask(tc, poll_fds);
+		tcp_connection_update_recv_event_mask(tc, poll_fds);
+
+		if (tc->est_callback && !tc->app_closed) {
+			thread_main_enter();
+			tcp_connection_notify_established(tc);
+			thread_main_exit();
+		}
+
+		tcp_connection_thread_execute_active(tc, poll_fds);
+		return;
+	}
+
+	if (poll_fds->revents & (POLLERR | POLLHUP | POLLNVAL)) {
+		DEBUG_INFO("connection failed");
+		tc->dead = true;
+		return;
+	}
+
+	if (timer_get_ticks() >= tc->established_timeout) {
+		DEBUG_INFO("connection timeout");
 		tc->dead = true;
 		return;
 	}

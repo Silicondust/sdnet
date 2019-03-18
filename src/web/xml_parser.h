@@ -41,6 +41,9 @@ extern void xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb);
 extern void xml_parser_recv_str(struct xml_parser_t *xpi, const char *str);
 extern void xml_parser_reset(struct xml_parser_t *xpi);
 
+extern bool xml_parser_nb_to_str(char *str, char *end, struct netbuf *nb);
+extern bool xml_parser_path_apply(xml_parser_event_t xml_event, char *path, char *end, struct netbuf *nb);
+
 /* Internal */
 typedef enum {
 	XML_PARSER_UTF8 = 0,

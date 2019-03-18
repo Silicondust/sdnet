@@ -43,6 +43,7 @@
     <ClCompile Include="..\net\libc\dns_lookup.c" />
     <ClCompile Include="..\net\tls_client_connection.c" />
     <ClCompile Include="..\net\tls_prf.c" />
+    <ClCompile Include="..\net\tls_server_socket.c" />
     <ClCompile Include="..\net\windows\igmp.c" />
     <ClCompile Include="..\net\windows\ip_passive.c" />
     <ClCompile Include="..\net\windows\tcp_connection.c" />
@@ -102,6 +103,7 @@
     <ClCompile Include="..\web\url.c" />
     <ClCompile Include="..\web\url_params.c" />
     <ClCompile Include="..\web\xml_parser.c" />
+    <ClCompile Include="..\web\xml_parser_utils.c" />
     <ClCompile Include="os.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>

@@ -72,6 +72,17 @@ bool dir_chdir(const char *name)
 	return true;
 }
 
+uint64_t dir_get_totalspace(const char *path)
+{
+	struct statfs64 stats;
+	if (statfs64(path, &stats) < 0) {
+		DEBUG_ERROR("statfs64 returned error %d", errno);
+		return 0;
+	}
+
+	return (uint64_t)stats.f_blocks * (uint64_t)stats.f_bsize;
+}
+
 uint64_t dir_get_freespace(const char *path)
 {
 	struct statfs64 stats;
@@ -98,6 +109,7 @@ static struct dir_get_fs_type_lookup_t dir_get_fs_type_lookup[] =
 	{0x52654973, "reiserfs"},
 	{0x5346544e, "ntfs"},
 	{0x58465342, "xfs"},
+	{0x5dca2df5, "sdcardfs"},
 	{0x65735546, "fuse"},
 	{0x9123683e, "btrfs"},
 	{0xff534d42, "cifs"},

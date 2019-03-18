@@ -22,4 +22,7 @@ extern void guid_create_ubicom(struct guid *guid, uint8_t mac_addr[6], uint8_t s
 extern bool guid_read_string(struct guid *guid, const char *str);
 extern bool guid_read_netbuf(struct guid *guid, struct netbuf *nb);
 extern void guid_write_string(struct guid *guid, char *str);
-extern void guid_write_string_upper(struct guid *guid, char *str);
+extern bool guid_write_netbuf(struct guid *guid, struct netbuf *nb);
+extern bool guid_is_zero(struct guid *guid);
+extern bool guid_is_match(struct guid *guid_a, struct guid *guid_b);
+extern int guid_compare(struct guid *guid_a, struct guid *guid_b);

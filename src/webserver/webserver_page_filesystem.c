@@ -248,7 +248,7 @@ static bool webserver_page_filesystem_detect_ssi(struct appfs_file_t *file)
 	return true;
 }
 
-static webserver_page_result_t webserver_page_filesystem_start(void *arg, struct webserver_connection_t *connection, struct netbuf *uri_nb, struct netbuf *params_nb, void **pstate)
+static webserver_page_result_t webserver_page_filesystem_start(void *arg, struct webserver_connection_t *connection, http_server_connection_method_t method, struct netbuf *uri_nb, struct netbuf *params_nb, void **pstate)
 {
 	/*
 	 * Open file.
@@ -266,6 +266,12 @@ static webserver_page_result_t webserver_page_filesystem_start(void *arg, struct
 		DEBUG_INFO("'%s' not found", filename);
 		heap_free(filename);
 		webserver_connection_send_error(connection, http_result_not_found);
+		return WEBSERVER_PAGE_RESULT_CLOSE;
+	}
+
+	if ((method != HTTP_SERVER_CONNECTION_METHOD_GET) && (method != HTTP_SERVER_CONNECTION_METHOD_HEAD)) {
+		heap_free(filename);
+		webserver_connection_send_error(connection, http_result_bad_request);
 		return WEBSERVER_PAGE_RESULT_CLOSE;
 	}
 

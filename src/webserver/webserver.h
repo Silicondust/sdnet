@@ -23,11 +23,13 @@ typedef enum {
 	WEBSERVER_PAGE_RESULT_CLOSE = 0,
 	WEBSERVER_PAGE_RESULT_CONTINUE = 1,
 	WEBSERVER_PAGE_RESULT_PAUSE = 2,
+	WEBSERVER_PAGE_RESULT_CAPTURE_POST = 3,
 	WEBSERVER_PAGE_RESULT_MASK = 0x0F,
 	WEBSERVER_PAGE_SSI_RESULT_REPEAT_LAST_SSI = 0x10
 } webserver_page_result_t;
 
-typedef webserver_page_result_t (*webserver_page_start_handler_t)(void *arg, struct webserver_connection_t *connection, struct netbuf *uri_nb, struct netbuf *params_nb, void **pstate);
+typedef webserver_page_result_t (*webserver_page_start_handler_t)(void *arg, struct webserver_connection_t *connection, http_server_connection_method_t method, struct netbuf *uri_nb, struct netbuf *params_nb, void **pstate);
+typedef webserver_page_result_t (*webserver_page_post_handler_t)(void *arg, struct webserver_connection_t *connection, struct netbuf *nb, void *state);
 typedef webserver_page_result_t (*webserver_page_continue_handler_t)(void *arg, struct webserver_connection_t *connection, void *state);
 typedef void (*webserver_page_free_handler_t)(void *arg, struct webserver_connection_t *connection, void *state);
 typedef void(*webserver_error_page_handler_t)(struct webserver_connection_t *connection, const char *http_result);
@@ -41,7 +43,7 @@ extern void webserver_register_uri_fixup_handler(struct webserver_t *webserver, 
 extern void webserver_register_error_page_handler(struct webserver_t *webserver, webserver_error_page_handler_t error_page_handler);
 extern void webserver_register_ssi_handler(struct webserver_t *webserver, webserver_ssi_start_handler_t start_callback, webserver_ssi_free_handler_t free_callback, const webserver_ssi_tag_handler_t *tag_table, uint8_t tag_table_entry_count);
 extern void webserver_register_page_filesystem(struct webserver_t *webserver, const char *filesystem_chroot, webserver_page_start_handler_t start_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg);
-extern void webserver_register_page_custom(struct webserver_t *webserver, const char *uri, webserver_page_start_handler_t start_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg);
+extern void webserver_register_page_custom(struct webserver_t *webserver, const char *uri, webserver_page_start_handler_t start_callback, webserver_page_post_handler_t post_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg);
 extern uint16_t webserver_get_port(struct webserver_t *webserver);
 
 extern ipv4_addr_t webserver_connection_get_local_ip(struct webserver_connection_t *connection);
@@ -66,6 +68,7 @@ struct webserver_page_t {
 	struct slist_prefix_t slist_prefix;
 	sha1_digest_t uri_hash;
 	webserver_page_start_handler_t start_callback;
+	webserver_page_post_handler_t post_callback;
 	webserver_page_continue_handler_t continue_callback;
 	webserver_page_free_handler_t free_callback;
 	void *callback_arg;

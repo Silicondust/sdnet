@@ -24,12 +24,13 @@ THIS_FILE("udp");
  *  callbacks sent from main thread.
  */
 
-#define UDP_RX_NETBUF_SIZE 1460
+#define UDP_DEFAULT_RECV_NETBUF_SIZE 1460
 
 struct udp_socket {
 	struct udp_socket *next;
 	int sock;
 	HANDLE event_handle;
+	size_t recv_netbuf_size;
 	udp_recv_callback_t recv_callback;
 	volatile udp_recv_icmp_callback_t recv_icmp_callback;
 	void *callback_inst;
@@ -46,6 +47,15 @@ struct udp_manager_t {
 };
 
 static struct udp_manager_t udp_manager;
+
+uint16_t udp_socket_get_port(struct udp_socket *us)
+{
+	struct sockaddr_in local_addr;
+	memset(&local_addr, 0, sizeof(local_addr));
+	socklen_t addr_len = sizeof(local_addr);
+	getsockname(us->sock, (struct sockaddr *)&local_addr, &addr_len);
+	return ntohs(local_addr.sin_port);
+}
 
 udp_error_t udp_socket_send_netbuf(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
 {
@@ -72,17 +82,19 @@ udp_error_t udp_socket_send_netbuf(struct udp_socket *us, ipv4_addr_t dest_addr,
 static void udp_socket_thread_recv(struct udp_socket *us)
 {
 	if (!udp_manager.socket_rxnb) {
-		udp_manager.socket_rxnb = netbuf_alloc_with_fwd_space(UDP_RX_NETBUF_SIZE);
+		udp_manager.socket_rxnb = netbuf_alloc_with_fwd_space(us->recv_netbuf_size);
 		if (!udp_manager.socket_rxnb) {
 			return;
 		}
 	}
 
 	uint8_t *buffer = netbuf_get_ptr(udp_manager.socket_rxnb);
+	size_t buffer_length = netbuf_get_remaining(udp_manager.socket_rxnb);
+
 	struct sockaddr_in sock_addr;
 	socklen_t sockaddr_size = sizeof(sock_addr);
 
-	int rx_length = recvfrom(us->sock, (char *)buffer, UDP_RX_NETBUF_SIZE, 0, (struct sockaddr *)&sock_addr, &sockaddr_size);
+	int rx_length = recvfrom(us->sock, (char *)buffer, (int)buffer_length, 0, (struct sockaddr *)&sock_addr, &sockaddr_size);
 	if (rx_length <= 0) {
 		return;
 	}
@@ -134,12 +146,19 @@ void udp_socket_set_icmp_callback(struct udp_socket *us, udp_recv_icmp_callback_
 	us->recv_icmp_callback = recv_icmp;
 }
 
+void udp_socket_set_recv_netbuf_size(struct udp_socket *us, size_t recv_netbuf_size)
+{
+	us->recv_netbuf_size = recv_netbuf_size;
+}
+
 struct udp_socket *udp_socket_alloc(void)
 {
 	struct udp_socket *us = (struct udp_socket *)heap_alloc_and_zero(sizeof(struct udp_socket), PKG_OS, MEM_TYPE_OS_UDP_SOCKET);
 	if (!us) {
 		return NULL;
 	}
+
+	us->recv_netbuf_size = UDP_DEFAULT_RECV_NETBUF_SIZE;
 
 	/* Create socket. */
 	us->sock = (int)socket(AF_INET, SOCK_DGRAM, 0);

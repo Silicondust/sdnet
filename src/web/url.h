@@ -36,4 +36,5 @@ extern bool url_parse_nb_with_base(struct url_t *output, struct url_t *base, str
 
 extern bool url_append_parameter(struct url_t *url, const char *name, const char *value);
 
+extern void url_wipe(struct url_t *output);
 extern bool url_compare(struct url_t *a, struct url_t *b);

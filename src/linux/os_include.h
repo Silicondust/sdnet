@@ -30,14 +30,16 @@
 #include <pthread.h>
 #include <signal.h>
 #include <dirent.h>
+#include <ifaddrs.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <sys/uio.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 #include <arpa/inet.h>
-#include <linux/if.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/prctl.h>
