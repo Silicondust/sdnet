@@ -64,6 +64,17 @@ bool dir_chdir(const char *name)
 	return true;
 }
 
+uint64_t dir_get_totalspace(const char *path)
+{
+	struct statfs stats;
+	if (statfs(path, &stats) < 0) {
+		DEBUG_ERROR("statfs returned error %d", errno);
+		return 0;
+	}
+
+	return (uint64_t)stats.f_blocks * (uint64_t)stats.f_bsize;
+}
+
 uint64_t dir_get_freespace(const char *path)
 {
 	struct statfs stats;

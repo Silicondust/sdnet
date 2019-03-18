@@ -207,6 +207,34 @@ void ip_datalink_set_ipaddr(struct ip_datalink_instance *idi, ipv4_addr_t ip_add
 	}
 }
 
+void ip_datalink_set_loopback(struct ip_datalink_instance *idi)
+{
+	idi->ip_addr = LOCALHOST;
+	idi->subnet_mask = 0xFF000000;
+
+	struct ifreq ifr;
+	memset(&ifr, 0, sizeof(struct ifreq));
+	strncpy(ifr.ifr_name, idi->interface_name, IFNAMSIZ);
+
+	struct sockaddr_in *ifraddr = (struct sockaddr_in *)&ifr.ifr_addr;
+	ifraddr->sin_family = AF_INET;
+
+	ifraddr->sin_addr.s_addr = htonl(idi->ip_addr);
+	if (ioctl(idi->ioctl_sock, SIOCSIFADDR, &ifr)) {
+		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+	}
+
+	ifraddr->sin_addr.s_addr = htonl(idi->subnet_mask);
+	if (ioctl(idi->ioctl_sock, SIOCSIFNETMASK, &ifr)) {
+		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+	}
+
+	struct ifreq ifflags;
+	ip_datalink_get_ifflags(idi, &ifflags);
+	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
+	ip_datalink_set_ifflags(idi, &ifflags);
+}
+
 bool ip_datalink_read_ethernet_mii_register(struct ip_datalink_instance *idi, uint8_t reg_addr, uint16_t *presult)
 {
 	struct ifreq ifr;

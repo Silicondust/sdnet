@@ -34,8 +34,10 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <sys/uio.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 #include <arpa/inet.h>
 #include <linux/if.h>
 #include <netinet/in.h>

@@ -273,5 +273,8 @@
     <ClCompile Include="..\webclient\webclient.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\net\tls_server_socket.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

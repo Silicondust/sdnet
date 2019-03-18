@@ -12,5 +12,6 @@ extern bool dir_exists(const char *name);
 extern bool dir_mkdir(const char *name);
 extern bool dir_rmdir(const char *name);
 extern bool dir_chdir(const char *name);
+extern uint64_t dir_get_totalspace(const char *path);
 extern uint64_t dir_get_freespace(const char *path);
 extern bool dir_get_fs_type(char *str, char *end, const char *path);

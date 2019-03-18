@@ -18,15 +18,36 @@
 
 THIS_FILE("crypto_aes");
 
-void des3_ede_ecb_decrypt_inplace(uint8_t *ptr, uint8_t *end, des3_key_t *key)
+struct des3_instance_t {
+	symmetric_key skey;
+};
+
+void des3_instance_free(struct des3_instance_t *des3)
+{
+	heap_free(des3);
+}
+
+void des3_instance_ecb_decrypt_inplace(struct des3_instance_t *des3, uint8_t *ptr, uint8_t *end)
 {
 	DEBUG_ASSERT(((end - ptr) % 8) == 0, "bad length %u", end - ptr);
 
-	symmetric_key skey;
-	des3_setup(key->u8, 24, 0, &skey);
-
 	while (ptr < end) {
-		des3_ecb_decrypt(ptr, ptr, &skey);
+		des3_ecb_decrypt(ptr, ptr, &des3->skey);
 		ptr += 8;
 	}
+}
+
+void des3_instance_set_key(struct des3_instance_t *des3, des3_key_t *key)
+{
+	des3_setup(key->u8, 24, 0, &des3->skey);
+}
+
+struct des3_instance_t *des3_instance_alloc(void)
+{
+	struct des3_instance_t *des3 = (struct des3_instance_t *)heap_alloc_and_zero(sizeof(struct des3_instance_t), PKG_OS, MEM_TYPE_OS_DES3_INSTANCE);
+	if (!des3) {
+		return NULL;
+	}
+
+	return des3;
 }

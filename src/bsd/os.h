@@ -52,7 +52,8 @@
 #include <net/udp.h>
 #include <net/tcp.h>
 #include <net/tls_prf.h>
-#include <net/tls_client_connection.h>
+#include <net/tls_client.h>
+#include <net/tls_server.h>
 #include <appfs/appfs.h>
 #include <file/dir_change_notification.h>
 #include <file/dir_utils.h>

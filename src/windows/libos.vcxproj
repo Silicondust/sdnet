@@ -43,6 +43,7 @@
     <ClCompile Include="..\net\libc\dns_lookup.c" />
     <ClCompile Include="..\net\tls_client_connection.c" />
     <ClCompile Include="..\net\tls_prf.c" />
+    <ClCompile Include="..\net\tls_server_socket.c" />
     <ClCompile Include="..\net\windows\igmp.c" />
     <ClCompile Include="..\net\windows\ip_passive.c" />
     <ClCompile Include="..\net\windows\tcp_connection.c" />

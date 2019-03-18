@@ -18,6 +18,8 @@ extern inline void crypto_test(void) {}
 /*
  * AES.
  */
+struct aes_instance_t;
+
 typedef union {
 	uint8_t u8[16];
 	uint32_t u32be[4];
@@ -33,15 +35,30 @@ extern void aes_ecb_128_decrypt_inplace(uint8_t *ptr, uint8_t *end, aes_128_key_
 extern void aes_cbc_128_encrypt_inplace(uint8_t *ptr, uint8_t *end, aes_128_iv_t *iv, aes_128_key_t *key);
 extern void aes_cbc_128_decrypt_inplace(uint8_t *ptr, uint8_t *end, aes_128_iv_t *iv, aes_128_key_t *key);
 
+extern struct aes_instance_t *aes_instance_alloc(void);
+extern void aes_instance_free(struct aes_instance_t *aes);
+extern void aes_instance_ecb_128_set_key(struct aes_instance_t *aes, aes_128_key_t *key);
+extern void aes_instance_ecb_128_encrypt_inplace(struct aes_instance_t *aes, uint8_t *ptr, uint8_t *end);
+extern void aes_instance_ecb_128_decrypt_inplace(struct aes_instance_t *aes, uint8_t *ptr, uint8_t *end);
+extern void aes_instance_cbc_128_set_iv_key(struct aes_instance_t *aes, aes_128_iv_t *iv, aes_128_key_t *key);
+extern void aes_instance_cbc_128_get_iv(struct aes_instance_t *aes, aes_128_iv_t *iv);
+extern void aes_instance_cbc_128_encrypt_inplace(struct aes_instance_t *aes, uint8_t *ptr, uint8_t *end);
+extern void aes_instance_cbc_128_decrypt_inplace(struct aes_instance_t *aes, uint8_t *ptr, uint8_t *end);
+
 /*
  * DES3.
  */
+struct des3_instance_t;
+
 typedef union {
 	uint8_t u8[24];
 	uint32_t u32be[6];
 } des3_key_t;
 
-extern void des3_ede_ecb_decrypt_inplace(uint8_t *ptr, uint8_t *end, des3_key_t *key);
+extern struct des3_instance_t *des3_instance_alloc(void);
+extern void des3_instance_free(struct des3_instance_t *des3);
+extern void des3_instance_set_key(struct des3_instance_t *des3, des3_key_t *key);
+extern void des3_instance_ecb_decrypt_inplace(struct des3_instance_t *des3, uint8_t *ptr, uint8_t *end);
 
 /*
  * RC5
@@ -76,3 +93,8 @@ static inline bool rsa_exptmod_4096(uint8_t input[512], uint8_t output[512], str
 {
 	return rsa_exptmod_auto(input, output, 512, key);
 }
+
+/*
+ * Internal
+ */
+extern void aes_init(void);
