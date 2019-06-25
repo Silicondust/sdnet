@@ -19,7 +19,7 @@
 THIS_FILE("tcp_socket");
 
 struct tcp_socket {
-	struct tcp_socket *next;
+	struct slist_prefix_t slist_prefix;
 	int sock;
 	int accept_connection_sock;
 	HANDLE event_handle;
@@ -103,8 +103,7 @@ tcp_error_t tcp_socket_listen(struct tcp_socket *ts, struct ip_datalink_instance
 	}
 
 	spinlock_lock(&tcp_manager.socket_new_lock);
-	ts->next = tcp_manager.socket_new_list;
-	tcp_manager.socket_new_list = ts;
+	slist_attach_head(struct tcp_socket, &tcp_manager.socket_new_list, ts);
 	spinlock_unlock(&tcp_manager.socket_new_lock);
 	SetEvent(tcp_manager.socket_poll_signal);
 
@@ -140,14 +139,9 @@ struct tcp_socket *tcp_socket_alloc(void)
 
 static inline void tcp_socket_thread_new_sockets(void)
 {
-	size_t add_count = 0;
-	struct tcp_socket *ts = tcp_manager.socket_new_list;
-	while (ts) {
-		add_count++;
-		ts = ts->next;
-	}
-
+	size_t add_count = slist_get_count(&tcp_manager.socket_new_list);
 	size_t total_count = tcp_manager.socket_poll_count + add_count;
+
 	HANDLE *poll_handles = (HANDLE *)heap_realloc(tcp_manager.socket_poll_handles, sizeof(HANDLE) * total_count, PKG_OS, MEM_TYPE_OS_TCP_POLL);
 	if (!poll_handles) {
 		DEBUG_ERROR("out of memory");
@@ -157,15 +151,18 @@ static inline void tcp_socket_thread_new_sockets(void)
 	tcp_manager.socket_poll_handles = poll_handles;
 	poll_handles += tcp_manager.socket_poll_count;
 
-	struct tcp_socket **pprev = &tcp_manager.socket_active_list;
-	struct tcp_socket *p = tcp_manager.socket_active_list;
+	struct tcp_socket **pprev = slist_get_phead(struct tcp_socket, &tcp_manager.socket_active_list);
+	struct tcp_socket *p = slist_get_head(struct tcp_socket, &tcp_manager.socket_active_list);
 	while (p) {
-		pprev = &p->next;
-		p = p->next;
+		pprev = slist_get_pnext(struct tcp_socket, p);
+		p = slist_get_next(struct tcp_socket, p);
 	}
 
-	while (tcp_manager.socket_new_list) {
-		ts = tcp_manager.socket_new_list;
+	while (1) {
+		struct tcp_socket *ts = slist_get_head(struct tcp_socket, &tcp_manager.socket_new_list);
+		if (!ts) {
+			break;
+		}
 
 		HANDLE event_handle = CreateEvent(NULL, false, false, NULL);
 		if (!event_handle) {
@@ -181,27 +178,26 @@ static inline void tcp_socket_thread_new_sockets(void)
 		*poll_handles++ = event_handle;
 		tcp_manager.socket_poll_count++;
 
-		tcp_manager.socket_new_list = ts->next;
-		ts->next = NULL;
+		slist_detach_head(struct tcp_socket, &tcp_manager.socket_new_list);
+		slist_insert_pprev(struct tcp_socket, pprev, ts);
 
-		*pprev = ts;
-		pprev = &ts->next;
+		pprev = slist_get_pnext(struct tcp_socket, ts);
 	}
 }
 
 void tcp_socket_thread_execute(void *arg)
 {
 	while (1) {
-		struct tcp_socket *ts = tcp_manager.socket_active_list;
+		struct tcp_socket *ts = slist_get_head(struct tcp_socket, &tcp_manager.socket_active_list);
 		HANDLE *poll_handles = tcp_manager.socket_poll_handles + 1;
 		while (ts) {
 			DEBUG_ASSERT(ts->event_handle == *poll_handles, "list error");
 			tcp_socket_thread_accept(ts);
-			ts = ts->next;
+			ts = slist_get_next(struct tcp_socket, ts);
 			poll_handles++;
 		}
 
-		if (tcp_manager.socket_new_list) {
+		if (slist_get_head(struct tcp_socket, &tcp_manager.socket_new_list)) {
 			spinlock_lock(&tcp_manager.socket_new_lock);
 			tcp_socket_thread_new_sockets();
 			spinlock_unlock(&tcp_manager.socket_new_lock);

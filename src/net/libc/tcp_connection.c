@@ -364,8 +364,7 @@ tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_a
 	tcp_connection_ref(tc);
 
 	spinlock_lock(&tcp_manager.connection_new_lock);
-	tc->next = tcp_manager.connection_new_list;
-	tcp_manager.connection_new_list = tc;
+	slist_attach_head(struct tcp_connection, &tcp_manager.connection_new_list, tc);
 	spinlock_unlock(&tcp_manager.connection_new_lock);
 
 	tcp_connection_trigger_poll();
@@ -401,8 +400,7 @@ void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_ca
 	tcp_connection_ref(tc);
 
 	spinlock_lock(&tcp_manager.connection_new_lock);
-	tc->next = tcp_manager.connection_new_list;
-	tcp_manager.connection_new_list = tc;
+	slist_attach_head(struct tcp_connection, &tcp_manager.connection_new_list, tc);
 	spinlock_unlock(&tcp_manager.connection_new_lock);
 
 	tcp_connection_trigger_poll();
@@ -436,14 +434,9 @@ static void tcp_connection_notify_close(struct tcp_connection *tc)
 
 static inline void tcp_connection_thread_new_connections(void)
 {
-	size_t add_count = 0;
-	struct tcp_connection *tc = tcp_manager.connection_new_list;
-	while (tc) {
-		add_count++;
-		tc = tc->next;
-	}
-
+	size_t add_count = slist_get_count(&tcp_manager.connection_new_list);
 	size_t total_count = tcp_manager.connection_poll_count + add_count;
+
 	struct pollfd *poll_fds = (struct pollfd *)heap_realloc(tcp_manager.connection_poll_fds, sizeof(struct pollfd) * total_count, PKG_OS, MEM_TYPE_OS_TCP_POLL);
 	if (!poll_fds) {
 		DEBUG_ERROR("out of memory");
@@ -453,25 +446,26 @@ static inline void tcp_connection_thread_new_connections(void)
 	tcp_manager.connection_poll_fds = poll_fds;
 	poll_fds += tcp_manager.connection_poll_count;
 
-	struct tcp_connection **pprev = &tcp_manager.connection_active_list;
-	struct tcp_connection *p = tcp_manager.connection_active_list;
+	struct tcp_connection **pprev = slist_get_phead(struct tcp_connection, &tcp_manager.connection_active_list);
+	struct tcp_connection *p = slist_get_head(struct tcp_connection, &tcp_manager.connection_active_list);
 	while (p) {
-		pprev = &p->next;
-		p = p->next;
+		pprev = slist_get_pnext(struct tcp_connection, p);
+		p = slist_get_next(struct tcp_connection, p);
 	}
 
-	while (tcp_manager.connection_new_list) {
-		struct tcp_connection *tc = tcp_manager.connection_new_list;
-		tcp_manager.connection_new_list = tc->next;
-		tc->next = NULL;
+	while (1) {
+		struct tcp_connection *tc = slist_detach_head(struct tcp_connection, &tcp_manager.connection_new_list);
+		if (!tc) {
+			break;
+		}
 
 		poll_fds->fd = tc->sock;
 		poll_fds->events = POLLOUT;
 		poll_fds->revents = 0;
 		poll_fds++;
 
-		*pprev = tc;
-		pprev = &tc->next;
+		slist_insert_pprev(struct tcp_connection, pprev, tc);
+		pprev = slist_get_pnext(struct tcp_connection, tc);
 	}
 
 	tcp_manager.connection_poll_count = total_count;
@@ -575,7 +569,7 @@ static void tcp_connection_thread_execute_est(struct tcp_connection *tc, struct 
 void tcp_connection_thread_execute(void *arg)
 {
 	while (1) {
-		if (tcp_manager.connection_new_list) {
+		if (slist_get_head(struct tcp_connection, &tcp_manager.connection_new_list)) {
 			spinlock_lock(&tcp_manager.connection_new_lock);
 			tcp_connection_thread_new_connections();
 			spinlock_unlock(&tcp_manager.connection_new_lock);
@@ -594,8 +588,8 @@ void tcp_connection_thread_execute(void *arg)
 
 		poll_fds++;
 
-		struct tcp_connection **pprev = &tcp_manager.connection_active_list;
-		struct tcp_connection *tc = tcp_manager.connection_active_list;
+		struct tcp_connection **pprev = slist_get_phead(struct tcp_connection, &tcp_manager.connection_active_list);
+		struct tcp_connection *tc = slist_get_head(struct tcp_connection, &tcp_manager.connection_active_list);
 		while (tc) {
 			DEBUG_ASSERT(tc->sock == poll_fds->fd, "list error");
 
@@ -610,10 +604,12 @@ void tcp_connection_thread_execute(void *arg)
 					thread_main_exit();
 				}
 
+				struct tcp_connection *discard = tc;
+				tc = slist_get_next(struct tcp_connection, tc);
+
 				tcp_connection_thread_delete_connection_from_poll_fds(poll_fds);
-				*pprev = tc->next;
-				tcp_connection_deref(tc);
-				tc = *pprev;
+				(void)slist_detach_pprev(struct tcp_connection, pprev, discard);
+				tcp_connection_deref(discard);
 				continue;
 			}
 
@@ -623,8 +619,8 @@ void tcp_connection_thread_execute(void *arg)
 				tcp_connection_thread_execute_active(tc, poll_fds);
 			}
 
-			pprev = &tc->next;
-			tc = tc->next;
+			pprev = slist_get_pnext(struct tcp_connection, tc);
+			tc = slist_get_next(struct tcp_connection, tc);
 			poll_fds++;
 		}
 	}

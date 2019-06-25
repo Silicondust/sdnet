@@ -27,8 +27,8 @@ THIS_FILE("udp");
 #define UDP_DEFAULT_RECV_NETBUF_SIZE 1460
 
 struct udp_manager_t {
-	struct udp_socket *socket_active_list;
-	struct udp_socket *socket_new_list;
+	struct slist_t socket_active_list;
+	struct slist_t socket_new_list;
 	struct spinlock socket_new_lock;
 	struct pollfd *socket_poll_fds;
 	size_t socket_poll_count;
@@ -47,11 +47,7 @@ static void udp_socket_trigger_poll(void)
 
 uint16_t udp_socket_get_port(struct udp_socket *us)
 {
-	struct sockaddr_in local_addr;
-	memset(&local_addr, 0, sizeof(local_addr));
-	socklen_t addr_len = sizeof(local_addr);
-	getsockname(us->sock, (struct sockaddr *)&local_addr, &addr_len);
-	return ntohs(local_addr.sin_port);
+	return us->port;
 }
 
 udp_error_t udp_socket_send_netbuf(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
@@ -168,6 +164,7 @@ udp_error_t udp_socket_listen(struct udp_socket *us, struct ip_datalink_instance
 	us->recv_callback = recv;
 	us->recv_icmp_callback = recv_icmp;
 	us->callback_inst = inst;
+	us->addr = addr;
 	us->port = port;
 
 	/* Listen for ICMP messages. */
@@ -189,9 +186,15 @@ udp_error_t udp_socket_listen(struct udp_socket *us, struct ip_datalink_instance
 		return UDP_ERROR_SOCKET_BUSY;
 	}
 
+	if (port == 0) {
+		memset(&sock_addr, 0, sizeof(sock_addr));
+		socklen_t addr_len = sizeof(sock_addr);
+		getsockname(us->sock, (struct sockaddr *)&sock_addr, &addr_len);
+		us->port = ntohs(sock_addr.sin_port);
+	}
+
 	spinlock_lock(&udp_manager.socket_new_lock);
-	us->next = udp_manager.socket_new_list;
-	udp_manager.socket_new_list = us;
+	slist_attach_head(struct udp_socket, &udp_manager.socket_new_list, us);
 	spinlock_unlock(&udp_manager.socket_new_lock);
 
 	udp_socket_trigger_poll();
@@ -253,14 +256,9 @@ struct udp_socket *udp_socket_alloc(void)
 
 static void udp_manager_thread_new_sockets(void)
 {
-	size_t add_count = 0;
-	struct udp_socket *us = udp_manager.socket_new_list;
-	while (us) {
-		add_count++;
-		us = us->next;
-	}
-
+	size_t add_count = slist_get_count(&udp_manager.socket_new_list);
 	size_t total_count = udp_manager.socket_poll_count + add_count;
+
 	struct pollfd *poll_fds = (struct pollfd *)heap_realloc(udp_manager.socket_poll_fds, sizeof(struct pollfd) * total_count, PKG_OS, MEM_TYPE_OS_UDP_POLL);
 	if (!poll_fds) {
 		DEBUG_ERROR("out of memory");
@@ -270,25 +268,26 @@ static void udp_manager_thread_new_sockets(void)
 	udp_manager.socket_poll_fds = poll_fds;
 	poll_fds += udp_manager.socket_poll_count;
 
-	struct udp_socket **pprev = &udp_manager.socket_active_list;
-	struct udp_socket *p = udp_manager.socket_active_list;
+	struct udp_socket **pprev = slist_get_phead(struct udp_socket, &udp_manager.socket_active_list);
+	struct udp_socket *p = slist_get_head(struct udp_socket, &udp_manager.socket_active_list);
 	while (p) {
-		pprev = &p->next;
-		p = p->next;
+		pprev = slist_get_pnext(struct udp_socket, p);
+		p = slist_get_next(struct udp_socket, p);
 	}
 
-	while (udp_manager.socket_new_list) {
-		struct udp_socket *us = udp_manager.socket_new_list;
-		udp_manager.socket_new_list = us->next;
-		us->next = NULL;
+	while (1) {
+		struct udp_socket *us = slist_detach_head(struct udp_socket, &udp_manager.socket_new_list);
+		if (!us) {
+			break;
+		}
 
 		poll_fds->fd = us->sock;
 		poll_fds->events = POLLIN;
 		poll_fds->revents = 0;
 		poll_fds++;
 
-		*pprev = us;
-		pprev = &us->next;
+		slist_insert_pprev(struct udp_socket, pprev, us);
+		pprev = slist_get_pnext(struct udp_socket, us);
 	}
 
 	udp_manager.socket_poll_count = total_count;
@@ -310,7 +309,7 @@ static void udp_manager_thread_execute_sock(struct udp_socket *us, struct pollfd
 static void udp_manager_thread_execute(void *arg)
 {
 	while (1) {
-		if (udp_manager.socket_new_list) {
+		if (slist_get_head(struct udp_socket, &udp_manager.socket_new_list)) {
 			spinlock_lock(&udp_manager.socket_new_lock);
 			udp_manager_thread_new_sockets();
 			spinlock_unlock(&udp_manager.socket_new_lock);
@@ -332,7 +331,7 @@ static void udp_manager_thread_execute(void *arg)
 
 		poll_fds++;
 
-		struct udp_socket *us = udp_manager.socket_active_list;
+		struct udp_socket *us = slist_get_head(struct udp_socket, &udp_manager.socket_active_list);
 		while (us) {
 			DEBUG_ASSERT(us->sock == poll_fds->fd, "list error");
 
@@ -340,7 +339,7 @@ static void udp_manager_thread_execute(void *arg)
 				udp_manager_thread_execute_sock(us, poll_fds);
 			}
 
-			us = us->next;
+			us = slist_get_next(struct udp_socket, us);
 			poll_fds++;
 		}
 	}

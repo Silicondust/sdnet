@@ -10,6 +10,7 @@
 
 #include <os.h>
 #include <net/ip_passive_common.h>
+#include <ifaddrs.h>
 
 #if defined(DEBUG)
 #define RUNTIME_DEBUG 1

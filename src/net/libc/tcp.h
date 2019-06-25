@@ -16,7 +16,7 @@ struct tcp_connection;
 struct tcp_socket;
 
 struct tcp_connection {
-	struct tcp_connection *next;
+	struct slist_prefix_t slist_prefix;
 	int refs;
 	int sock;
 	uint8_t ttl;
@@ -40,15 +40,15 @@ struct tcp_connection {
 };
 
 struct tcp_manager_t {
-	struct tcp_socket *socket_active_list;
-	struct tcp_socket *socket_new_list;
+	struct slist_t socket_active_list;
+	struct slist_t socket_new_list;
 	struct spinlock socket_new_lock;
 	struct pollfd *socket_poll_fds;
 	size_t socket_poll_count;
 	int socket_poll_trigger_fd;
 
-	struct tcp_connection *connection_active_list;
-	struct tcp_connection *connection_new_list;
+	struct slist_t connection_active_list;
+	struct slist_t connection_new_list;
 	struct spinlock connection_new_lock;
 	struct pollfd *connection_poll_fds;
 	size_t connection_poll_count;

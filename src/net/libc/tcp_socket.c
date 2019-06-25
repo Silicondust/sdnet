@@ -19,7 +19,7 @@
 THIS_FILE("tcp_socket");
 
 struct tcp_socket {
-	struct tcp_socket *next;
+	struct slist_prefix_t slist_prefix;
 	int sock;
 	int accept_connection_sock;
 	tcp_connect_callback_t connect_callback;
@@ -118,8 +118,7 @@ tcp_error_t tcp_socket_listen(struct tcp_socket *ts, struct ip_datalink_instance
 	}
 
 	spinlock_lock(&tcp_manager.socket_new_lock);
-	ts->next = tcp_manager.socket_new_list;
-	tcp_manager.socket_new_list = ts;
+	slist_attach_head(struct tcp_socket, &tcp_manager.socket_new_list, ts);
 	spinlock_unlock(&tcp_manager.socket_new_lock);
 
 	tcp_socket_trigger_poll();
@@ -160,14 +159,9 @@ struct tcp_socket *tcp_socket_alloc(void)
 
 static inline void tcp_socket_thread_new_sockets(void)
 {
-	size_t add_count = 0;
-	struct tcp_socket *ts = tcp_manager.socket_new_list;
-	while (ts) {
-		add_count++;
-		ts = ts->next;
-	}
-
+	size_t add_count = slist_get_count(&tcp_manager.socket_new_list);
 	size_t total_count = tcp_manager.socket_poll_count + add_count;
+
 	struct pollfd *poll_fds = (struct pollfd *)heap_realloc(tcp_manager.socket_poll_fds, sizeof(struct pollfd) * total_count, PKG_OS, MEM_TYPE_OS_TCP_POLL);
 	if (!poll_fds) {
 		DEBUG_ERROR("out of memory");
@@ -177,25 +171,26 @@ static inline void tcp_socket_thread_new_sockets(void)
 	tcp_manager.socket_poll_fds = poll_fds;
 	poll_fds += tcp_manager.socket_poll_count;
 
-	struct tcp_socket **pprev = &tcp_manager.socket_active_list;
-	struct tcp_socket *p = tcp_manager.socket_active_list;
+	struct tcp_socket **pprev = slist_get_phead(struct tcp_socket, &tcp_manager.socket_active_list);
+	struct tcp_socket *p = slist_get_head(struct tcp_socket, &tcp_manager.socket_active_list);
 	while (p) {
-		pprev = &p->next;
-		p = p->next;
+		pprev = slist_get_pnext(struct tcp_socket, p);
+		p = slist_get_next(struct tcp_socket, p);
 	}
 
-	while (tcp_manager.socket_new_list) {
-		struct tcp_socket *ts = tcp_manager.socket_new_list;
-		tcp_manager.socket_new_list = ts->next;
-		ts->next = NULL;
+	while (1) {
+		struct tcp_socket *ts = slist_detach_head(struct tcp_socket, &tcp_manager.socket_new_list);
+		if (!ts) {
+			break;
+		}
 
 		poll_fds->fd = ts->sock;
 		poll_fds->events = POLLIN;
 		poll_fds->revents = 0;
 		poll_fds++;
 
-		*pprev = ts;
-		pprev = &ts->next;
+		slist_insert_pprev(struct tcp_socket, pprev, ts);
+		pprev = slist_get_pnext(struct tcp_socket, ts);
 	}
 
 	tcp_manager.socket_poll_count = total_count;
@@ -213,7 +208,7 @@ static void tcp_socket_thread_execute_sock(struct tcp_socket *ts, struct pollfd 
 void tcp_socket_thread_execute(void *arg)
 {
 	while (1) {
-		if (tcp_manager.socket_new_list) {
+		if (slist_get_head(struct tcp_socket, &tcp_manager.socket_new_list)) {
 			spinlock_lock(&tcp_manager.socket_new_lock);
 			tcp_socket_thread_new_sockets();
 			spinlock_unlock(&tcp_manager.socket_new_lock);
@@ -235,7 +230,7 @@ void tcp_socket_thread_execute(void *arg)
 
 		poll_fds++;
 
-		struct tcp_socket *ts = tcp_manager.socket_active_list;
+		struct tcp_socket *ts = slist_get_head(struct tcp_socket, &tcp_manager.socket_active_list);
 		while (ts) {
 			DEBUG_ASSERT(ts->sock == poll_fds->fd, "list error");
 
@@ -243,7 +238,7 @@ void tcp_socket_thread_execute(void *arg)
 				tcp_socket_thread_execute_sock(ts, poll_fds);
 			}
 
-			ts = ts->next;
+			ts = slist_get_next(struct tcp_socket, ts);
 			poll_fds++;
 		}
 	}

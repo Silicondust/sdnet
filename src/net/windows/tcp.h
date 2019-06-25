@@ -12,15 +12,15 @@ struct tcp_connection;
 struct tcp_socket;
 
 struct tcp_manager_t {
-	struct tcp_socket *socket_active_list;
-	struct tcp_socket *socket_new_list;
+	struct slist_t socket_active_list;
+	struct slist_t socket_new_list;
 	struct spinlock socket_new_lock;
 	HANDLE *socket_poll_handles;
 	size_t socket_poll_count;
 	HANDLE socket_poll_signal;
 
-	struct tcp_connection *connection_active_list;
-	struct tcp_connection *connection_new_list;
+	struct slist_t connection_active_list;
+	struct slist_t connection_new_list;
 	struct spinlock connection_new_lock;
 	HANDLE *connection_poll_handles;
 	size_t connection_poll_count;

@@ -9,10 +9,13 @@
  */
 
 struct udp_socket {
-	struct udp_socket *next;
+	struct slist_prefix_t slist_prefix;
+	struct slist_t multipath_list;
 	struct ip_datalink_instance *link;
 	int sock;
+	ipv4_addr_t addr;
 	uint16_t port;
+	bool onesbcast_set;
 	uint8_t ttl_set;
 	uint8_t tos_set;
 	size_t recv_netbuf_size;

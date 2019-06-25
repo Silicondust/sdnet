@@ -30,7 +30,6 @@
 #include <pthread.h>
 #include <signal.h>
 #include <dirent.h>
-#include <ifaddrs.h>
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/stat.h>
