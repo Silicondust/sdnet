@@ -30,6 +30,7 @@ struct udp_multipath_t {
 	struct slist_prefix_t slist_prefix;
 	struct udp_socket *us;
 	ipv4_addr_t addr;
+	bool bind_ok;
 };
 
 struct udp_socket {
@@ -106,7 +107,9 @@ static struct udp_multipath_t *udp_socket_multipath_find_create(struct udp_socke
 		return NULL;
 	}
 
-	udp_socket_listen(ump->us, idi, addr, us->port, us->recv_callback, us->recv_icmp_callback, us->callback_inst);
+	ump->addr = addr;
+	ump->bind_ok = (udp_socket_listen(ump->us, idi, addr, us->port, us->recv_callback, us->recv_icmp_callback, us->callback_inst) == UDP_OK);
+
 	slist_attach_head(struct udp_multipath_t, &us->multipath_list, ump);
 	return ump;
 }
@@ -139,7 +142,7 @@ udp_error_t udp_socket_send_multipath(struct udp_socket *us, ipv4_addr_t dest_ad
 		}
 
 		struct udp_multipath_t *ump = udp_socket_multipath_find_create(us, idi, addr);
-		if (!ump) {
+		if (!ump || !ump->bind_ok) {
 			idi = slist_get_next(struct ip_datalink_instance, idi);
 			continue;
 		}

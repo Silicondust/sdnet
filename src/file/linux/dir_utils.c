@@ -1,7 +1,7 @@
 /*
  * dir_utils.c
  *
- * Copyright © 2014-2016 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2014-2019 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -72,6 +72,20 @@ bool dir_chdir(const char *name)
 	return true;
 }
 
+void dir_get_totalspace_freespace(const char *path, uint64_t *ptotalspace, uint64_t *pfreespace)
+{
+	struct statfs64 stats;
+	if (statfs64(path, &stats) < 0) {
+		DEBUG_ERROR("statfs64 returned error %d", errno);
+		*ptotalspace = 0;
+		*pfreespace = 0;
+		return;
+	}
+
+	*ptotalspace = (uint64_t)stats.f_blocks * (uint64_t)stats.f_bsize;
+	*pfreespace = (uint64_t)stats.f_bavail * (uint64_t)stats.f_bsize;
+}
+
 uint64_t dir_get_totalspace(const char *path)
 {
 	struct statfs64 stats;
@@ -116,7 +130,7 @@ static struct dir_get_fs_type_lookup_t dir_get_fs_type_lookup[] =
 	{0x00000000, ""}
 };
 
-bool dir_get_fs_type(char *str, char *end, const char *path)
+bool dir_get_fs_type_statfs64(char *str, char *end, const char *path)
 {
 	struct statfs64 stats;
 	if (statfs64(path, &stats) < 0) {
@@ -138,3 +152,10 @@ bool dir_get_fs_type(char *str, char *end, const char *path)
 	sprintf_custom(str, end, "0x%08x", stats.f_type);
 	return true;
 }
+
+#if !defined(ANDROID)
+bool dir_get_fs_type(char *str, char *end, const char *path)
+{
+	return dir_get_fs_type_statfs64(str, end, path);
+}
+#endif

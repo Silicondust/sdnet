@@ -1,7 +1,7 @@
 /*
  * dir_utils.c
  *
- * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2014-2019 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -143,6 +143,24 @@ bool dir_chdir(const char *name)
 	str_utf8_to_utf16(name_wchar, name_wchar + MAX_PATH, name);
 
 	return (bool)SetCurrentDirectoryW((wchar_t *)name_wchar);
+}
+
+void dir_get_totalspace_freespace(const char *path, uint64_t *ptotalspace, uint64_t *pfreespace)
+{
+	uint16_t path_wchar[MAX_PATH];
+	str_utf8_to_utf16(path_wchar, path_wchar + MAX_PATH, path);
+
+	ULARGE_INTEGER freespace;
+	ULARGE_INTEGER totalspace;
+	if (!GetDiskFreeSpaceExW((wchar_t *)path_wchar, &freespace, &totalspace, NULL)) {
+		DEBUG_ERROR("GetDiskFreeSpaceExW returned error %d", GetLastError());
+		*ptotalspace = 0;
+		*pfreespace = 0;
+		return;
+	}
+
+	*ptotalspace = (uint64_t)totalspace.QuadPart;
+	*pfreespace = (uint64_t)freespace.QuadPart;
 }
 
 uint64_t dir_get_totalspace(const char *path)

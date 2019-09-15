@@ -1,7 +1,7 @@
 /*
  * dir_utils.c
  *
- * Copyright © 2014 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2014-2019 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -62,6 +62,20 @@ bool dir_chdir(const char *name)
 	}
 
 	return true;
+}
+
+void dir_get_totalspace_freespace(const char *path, uint64_t *ptotalspace, uint64_t *pfreespace)
+{
+	struct statfs stats;
+	if (statfs(path, &stats) < 0) {
+		DEBUG_ERROR("statfs returned error %d", errno);
+		*ptotalspace = 0;
+		*pfreespace = 0;
+		return;
+	}
+
+	*ptotalspace = (uint64_t)stats.f_blocks * (uint64_t)stats.f_bsize;
+	*pfreespace = (uint64_t)stats.f_bavail * (uint64_t)stats.f_bsize;
 }
 
 uint64_t dir_get_totalspace(const char *path)

@@ -60,6 +60,7 @@
 #include <file/dir_change_notification.h>
 #include <file/dir_utils.h>
 #include <file/file_utils.h>
+#include <file/linux/dir_utils.h>
 #include <file/linux/file_utils.h>
 #include <file/linux/hdparm.h>
 #include <file/linux/gpt.h>
