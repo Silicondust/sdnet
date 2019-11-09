@@ -59,6 +59,24 @@ void str_big5_to_utf8(char *out, char *end, char *in)
 	}
 }
 
+bool str_nb_to_str(char *out, char *end, struct netbuf *nb)
+{
+	bool success = true;
+	size_t len = netbuf_get_remaining(nb);
+
+	if (out + len >= end) {
+		len = end - out - 1;
+		success = false;
+	}
+
+	if (LIKELY(len > 0)) {
+		netbuf_fwd_read(nb, out, len);
+	}
+
+	out[len] = 0;
+	return success;
+}
+
 char *str_trim_whitespace(char *str)
 {
 	while (1) {
@@ -84,5 +102,21 @@ char *str_trim_whitespace(char *str)
 			end = ptr + 1;
 		}
 		ptr++;
+	}
+}
+
+int strprefixcmp(const char *str, const char *prefix)
+{
+	while (1) {
+		char b = *prefix++;
+		if (b == 0) {
+			return 0;
+		}
+
+		char a = *str++;
+		int ret = a - b;
+		if (ret != 0) {
+			return ret;
+		}
 	}
 }

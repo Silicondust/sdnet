@@ -33,7 +33,7 @@ void soap_service_manager_query_state_variable_self_test(void)
 	}
 }
 
-static bool soap_service_manager_http_service_probe(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri)
+static http_server_probe_result_t soap_service_manager_http_service_probe(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri)
 {
 	return soap_service_connection_accept(connection, method, uri);
 }

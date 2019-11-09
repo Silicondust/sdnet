@@ -25,6 +25,8 @@ extern void netbuf_free(struct netbuf *nb);
 
 extern void netbuf_reset(struct netbuf *nb);
 
+extern bool netbuf_exact_content_match(struct netbuf *nb1, struct netbuf *nb2);
+
 extern bool netbuf_fwd_check_space(struct netbuf *nb, size_t size);
 extern uint8_t netbuf_fwd_read_u8(struct netbuf *nb);
 extern uint16_t netbuf_fwd_read_u16(struct netbuf *nb);
@@ -102,3 +104,4 @@ extern void netbuf_queue_attach_head(struct netbuf_queue *queue, struct netbuf *
 extern void netbuf_queue_attach_tail(struct netbuf_queue *queue, struct netbuf *nb);
 extern bool netbuf_queue_attach_tail_limit(struct netbuf_queue *queue, struct netbuf *nb, size_t max_count);
 extern struct netbuf *netbuf_queue_detach_head(struct netbuf_queue *queue);
+extern void netbuf_queue_detach_and_free_all(struct netbuf_queue *queue);

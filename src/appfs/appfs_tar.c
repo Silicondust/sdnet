@@ -25,16 +25,23 @@ struct appfs_file_t {
 };
 
 struct appfs_tar_header_t {
-	char file_name[100];
+	char filename[100];
 	char file_mode[8];
-	char uid[8];
-	char gid[8];
+	char user_id[8];
+	char group_id[8];
 	char file_size[12];
-	char mtime[12];
-	char chksum[8];
-	char typeflag;
-	char t_linkname[100];
-	char reserved[255];
+	char modification_time[12];
+	char checksum[8];
+	char type_flag;
+	char linked_file[100];
+	char ustar_magic[6];
+	char ustar_version[2];
+	char user_name[32];
+	char group_name[32];
+	char device_major[8];
+	char device_minor[8];
+	char filename_prefix[155];
+	char reserved[12];
 };
 
 struct appfs_tar_manager_t {
@@ -92,8 +99,8 @@ struct appfs_file_t *appfs_file_open(const char *filename, const char *root)
 		struct appfs_tar_header_t *header = (struct appfs_tar_header_t *)ptr;
 		size_t file_size = strtoul(header->file_size, NULL, 8);
 
-		if (appfs_file_open_filename_compare((uint32_t *)(addr_t)header->file_name, desired_filename)) {
-			DEBUG_INFO("file %s = %u bytes", header->file_name, file_size);
+		if (appfs_file_open_filename_compare((uint32_t *)(addr_t)header->filename, desired_filename)) {
+			DEBUG_INFO("file %s = %u bytes", header->filename, file_size);
 			ptr += 512;
 			end = ptr + file_size;
 			break;

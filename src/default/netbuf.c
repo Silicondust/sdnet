@@ -164,6 +164,18 @@ void netbuf_reset(struct netbuf *nb)
 	memset(nb, 0, sizeof(struct netbuf));
 }
 
+bool netbuf_exact_content_match(struct netbuf *nb1, struct netbuf *nb2)
+{
+	size_t nb1_length = nb1->end - nb1->start;
+	size_t nb2_length = nb2->end - nb2->start;
+
+	if (nb1_length != nb2_length) {
+		return false;
+	}
+
+	return (memcmp(nb1->start, nb2->start, nb1_length) == 0);
+}
+
 bool netbuf_fwd_check_space(struct netbuf *nb, size_t size)
 {
 	return (nb->pos + size <= nb->end);
@@ -894,6 +906,17 @@ struct netbuf *netbuf_queue_detach_head(struct netbuf_queue *queue)
 	}
 
 	return nb;
+}
+
+void netbuf_queue_detach_and_free_all(struct netbuf_queue *queue)
+{
+	while (1) {
+		struct netbuf *nb = netbuf_queue_detach_head(queue);
+		if (!nb) {
+			return;
+		}
+		netbuf_free(nb);
+	}
 }
 
 size_t netbuf_manager_get_total_allocated(void)

@@ -37,10 +37,7 @@ const char http_content_type_json[] = "application/json; charset=\"utf-8\"";
 bool  http_header_write_cache_control(struct netbuf *header_nb, uint32_t duration)
 {
 	if (duration == 0) {
-		bool success = true;
-		success &= netbuf_sprintf(header_nb, "Cache-Control: no-cache\r\n");
-		success &= netbuf_sprintf(header_nb, "Pragma: no-cache\r\n");
-		return success;
+		return netbuf_sprintf(header_nb, "Cache-Control: no-cache\r\n");
 	}
 
 	return netbuf_sprintf(header_nb, "Cache-Control: max-age=%u\r\n", duration);

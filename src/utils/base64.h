@@ -17,6 +17,7 @@ extern bool base64_encode_netbuf_to_netbuf2(struct netbuf *raw_nb, size_t raw_si
 extern size_t base64_decode_max_length(size_t encoded_size);
 extern size_t base64_decode_str_max_length(const char *encoded_data);
 extern size_t base64_decode_str_to_mem(const char *encoded_data, uint8_t *buffer, size_t buffer_size);
+extern bool base64_decode_str_to_netbuf(const char *encoded_data, struct netbuf *output_nb);
 extern size_t base64_decode_netbuf_max_length(struct netbuf *nb);
 extern size_t base64_decode_netbuf_to_mem(struct netbuf *nb, uint8_t *buffer, size_t buffer_size);
-extern bool base64_decode_netbuf_to_netbuf2(struct netbuf *encoded_nb, size_t encoded_size, struct netbuf *output_nb);
+extern bool base64_decode_netbuf_to_netbuf2(struct netbuf *encoded_nb,struct netbuf *output_nb);

@@ -48,6 +48,10 @@ void webserver_connection_free(struct webserver_connection_t *connection)
 		netbuf_free(connection->params_nb);
 	}
 
+	if (connection->additional_response_header) {
+		heap_free(connection->additional_response_header);
+	}
+
 	heap_free(connection);
 }
 
@@ -120,6 +124,9 @@ bool webserver_connection_send_header(struct webserver_connection_t *connection,
 	}
 	success &= http_header_write_cache_control(txnb, cache_duration);
 	success &= netbuf_sprintf(txnb, "Access-Control-Allow-Origin: *\r\n");
+	if (connection->additional_response_header) {
+		success &= netbuf_sprintf(txnb, "%s", connection->additional_response_header);
+	}
 	success &= http_header_write_date_tag(txnb);
 	success &= netbuf_sprintf(txnb, "\r\n");
 	if (!success) {
@@ -385,12 +392,21 @@ void *webserver_connection_get_page_callback_state(struct webserver_connection_t
 	return connection->page_callback_state;
 }
 
+void webserver_connection_set_additional_response_header(struct webserver_connection_t *connection, const char *additional_response_header)
+{
+	if (connection->additional_response_header) {
+		heap_free(connection->additional_response_header);
+	}
+
+	connection->additional_response_header = heap_strdup(additional_response_header, PKG_OS, MEM_TYPE_OS_WEBSERVER_CONNECTION_ADDITIONAL_RESPONSE_HEADER);
+}
+
 void webserver_connection_disable_timeout(struct webserver_connection_t *connection)
 {
 	http_server_connection_disable_timeout(connection->http_connection);
 }
 
-bool webserver_connection_accept(struct webserver_t *webserver, struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri)
+http_server_probe_result_t webserver_connection_accept(struct webserver_t *webserver, struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri)
 {
 	/*
 	 * Create connection object.
@@ -398,7 +414,7 @@ bool webserver_connection_accept(struct webserver_t *webserver, struct http_serv
 	struct webserver_connection_t *connection = (struct webserver_connection_t *)heap_alloc_and_zero(sizeof(struct webserver_connection_t), PKG_OS, MEM_TYPE_OS_WEBSERVER_CONNECTION);
 	if (!connection) {
 		DEBUG_ERROR("out of memory");
-		return false;
+		return HTTP_SERVER_PROBE_RESULT_CLOSE;
 	}
 
 	connection->webserver = webserver;
@@ -411,7 +427,7 @@ bool webserver_connection_accept(struct webserver_t *webserver, struct http_serv
 	if (!connection->uri_nb) {
 		DEBUG_ERROR("out of memory");
 		heap_free(connection);
-		return false;
+		return HTTP_SERVER_PROBE_RESULT_CLOSE;
 	}
 
 	netbuf_rev_write(connection->uri_nb, uri, len);
@@ -442,5 +458,5 @@ bool webserver_connection_accept(struct webserver_t *webserver, struct http_serv
 		break;
 	}
 
-	return true;
+	return HTTP_SERVER_PROBE_RESULT_MATCH;
 }

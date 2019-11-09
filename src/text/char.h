@@ -20,4 +20,6 @@ extern uint16_t big5_get_wchar(char **pptr, uint16_t error_char);
 extern void str_utf16_to_utf8(char *out, char *end, uint16_t *in);
 extern void str_big5_to_utf8(char *out, char *end, char *in);
 extern void str_utf8_to_utf16(uint16_t *out, uint16_t *end, const char *in);
+extern bool str_nb_to_str(char *out, char *end, struct netbuf *nb);
 extern char *str_trim_whitespace(char *str);
+extern int strprefixcmp(const char *str, const char *prefix);

@@ -150,8 +150,12 @@ static http_parser_error_t http_server_connection_http_uri_event(struct http_ser
 	struct http_server_t *http_server = connection->http_server;
 	struct http_server_service_t *service = slist_get_head(struct http_server_service_t, &http_server->service_list);
 	while (service) {
-		if (service->probe(service->callback_arg, connection, connection->method, url.uri)) {
+		http_server_probe_result_t result = service->probe(service->callback_arg, connection, connection->method, url.uri);
+		if (result == HTTP_SERVER_PROBE_RESULT_MATCH) {
 			return HTTP_PARSER_OK;
+		}
+		if (result == HTTP_SERVER_PROBE_RESULT_CLOSE) {
+			break;
 		}
 
 		service = slist_get_next(struct http_server_service_t, service);

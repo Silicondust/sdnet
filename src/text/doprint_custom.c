@@ -52,6 +52,7 @@ static uint8_t doprint_custom_get_element_str(const char **pfmt, char element_st
 			break;
 
 		case 'd':
+		case 'o':
 		case 'u':
 		case 'x':
 		case 'X':

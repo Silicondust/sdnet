@@ -19,7 +19,7 @@ THIS_FILE("gena_service_manager");
 
 struct gena_service_manager_t gena_service_manager;
 
-static bool gena_service_manager_http_service_probe(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri)
+static http_server_probe_result_t gena_service_manager_http_service_probe(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri)
 {
 	return gena_service_connection_accept(connection, method, uri);
 }

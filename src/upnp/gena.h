@@ -104,7 +104,7 @@ extern void gena_service_add_subscription(struct gena_service_t *service, struct
 extern void gena_service_remove_subscription(struct gena_service_t *service, struct gena_subscription_t *subscription);
 extern void gena_service_network_reset(struct gena_service_t *service);
 
-extern bool gena_service_connection_accept(struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri);
+extern http_server_probe_result_t gena_service_connection_accept(struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri);
 extern void gena_service_connection_free(struct gena_service_connection_t *connection);
 
 extern struct gena_subscription_t *gena_subscription_accept(struct gena_service_t *service, ipv4_addr_t local_ip, ipv4_addr_t callback_ip, uint16_t callback_port, char *callback_uri, uint32_t subscription_period);

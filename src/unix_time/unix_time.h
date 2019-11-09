@@ -10,10 +10,16 @@
 
 typedef int64_t time64_t;
 
+struct timespec64 {
+	time64_t tv_sec;
+	uint32_t tv_nsec;
+};
+
 #define TIME64_MAX_VALUE 0x7FFFFFFFFFFFFFFFLL
 
 extern time64_t unix_time(void);
 extern time64_t unix_time_get_offset_from_native(void);
+extern void unit_time_get_timespec(struct timespec64 *tp);
 extern void unix_time_set(time64_t new_time);
 extern char *unix_time_to_str(time64_t time_v, char *buf);
 extern void unix_time_to_tm(time64_t time_v, struct tm *tm_v);

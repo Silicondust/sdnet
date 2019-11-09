@@ -701,6 +701,10 @@ static bool x509_certificate_import_extensions(struct x509_certificate_t *cert, 
 			if (!x509_certificate_import_extensions_octect_string_containing_der_verify_type(cert, &extension_payload_block, &cert->subject_key_identifier_block, DER_TYPE_OCTET_STRING)) {
 				return false;
 			}
+			if (cert->subject_key_identifier_block.payload + 20 != cert->subject_key_identifier_block.end) {
+				DEBUG_WARN("bad identifier length");
+				return false;
+			}
 			continue;
 		}
 

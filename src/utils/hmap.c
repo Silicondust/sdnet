@@ -161,7 +161,7 @@ struct hmap_prefix_t *hmap_replace_impl(struct hmap_t *map, struct hmap_prefix_t
 	return NULL;
 }
 
-void hmap_clear_impl(struct hmap_t *map, hmap_callback_func_t callback_func)
+void hmap_clear_impl(struct hmap_t *map, hmap_clear_callback_func_t callback_func)
 {
 	DEBUG_ASSERT(map->hash_array, "hmap not initialized");
 
@@ -177,7 +177,7 @@ void hmap_clear_impl(struct hmap_t *map, hmap_callback_func_t callback_func)
 	}
 }
 
-void hmap_clear_custom_impl(struct hmap_t *map, struct hmap_prefix_t *match_item, hmap_match_func_t match_func, hmap_callback_func_t callback_func)
+void hmap_clear_custom_impl(struct hmap_t *map, void *state, hmap_clear_custom_func_t custom_func, hmap_clear_callback_func_t callback_func)
 {
 	DEBUG_ASSERT(map->hash_array, "hmap not initialized");
 
@@ -185,7 +185,7 @@ void hmap_clear_custom_impl(struct hmap_t *map, struct hmap_prefix_t *match_item
 		struct hmap_prefix_t **pprev = &map->hash_array[index];
 		struct hmap_prefix_t *p = *pprev;
 		while (p) {
-			if (match_func(p, match_item)) {
+			if (custom_func(p, state)) {
 				*pprev = p->next;
 				p->next = NULL;
 				callback_func(p);
@@ -212,6 +212,7 @@ void hmap_dispose(struct hmap_t *map)
 bool hmap_init(struct hmap_t *map, uint32_t hash_size)
 {
 	switch (hash_size) {
+	case 8:
 	case 16:
 	case 32:
 	case 64:

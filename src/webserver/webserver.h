@@ -49,6 +49,7 @@ extern uint16_t webserver_get_port(struct webserver_t *webserver);
 extern ipv4_addr_t webserver_connection_get_local_ip(struct webserver_connection_t *connection);
 extern ipv4_addr_t webserver_connection_get_remote_ip(struct webserver_connection_t *connection);
 extern void *webserver_connection_get_page_callback_state(struct webserver_connection_t *connection);
+extern void webserver_connection_set_additional_response_header(struct webserver_connection_t *connection, const char *additional_response_header);
 extern void webserver_connection_send_error(struct webserver_connection_t *connection, const char *http_result);
 extern bool webserver_connection_send_header(struct webserver_connection_t *connection, const char *http_result, const char *content_type, uint64_t content_length, uint32_t cache_duration);
 extern bool webserver_connection_send_payload(struct webserver_connection_t *connection, struct netbuf *nb);
@@ -91,6 +92,7 @@ struct webserver_connection_t {
 	uint32_t page_active_state:1;
 	const struct webserver_page_t *page;
 	void *page_callback_state;
+	char *additional_response_header;
 };
 
 struct webserver_t {
@@ -115,7 +117,7 @@ extern void webserver_remove_connection(struct webserver_t *webserver, struct we
 extern struct webserver_page_t *webserver_find_page_handler(struct webserver_t *webserver, struct netbuf *uri_nb);
 extern void webserver_start_page_timer(struct webserver_t *webserver);
 
-extern bool webserver_connection_accept(struct webserver_t *webserver, struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri);
+extern http_server_probe_result_t webserver_connection_accept(struct webserver_t *webserver, struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri);
 extern void webserver_connection_free(struct webserver_connection_t *connection);
 
 extern const char *webserver_content_type_detect_from_ext(const char *uri);

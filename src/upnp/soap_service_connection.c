@@ -371,14 +371,14 @@ void *soap_service_connection_get_action_callback_arg(struct soap_service_connec
 	return service->callback_arg;
 }
 
-bool soap_service_connection_accept(struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri)
+http_server_probe_result_t soap_service_connection_accept(struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri)
 {
 	switch (method) {
 	case HTTP_SERVER_CONNECTION_METHOD_POST:
 		break;
 
 	default:
-		return false;
+		return HTTP_SERVER_PROBE_RESULT_NO_MATCH;
 	}
 
 	sha1_digest_t uri_hash;
@@ -386,7 +386,7 @@ bool soap_service_connection_accept(struct http_server_connection_t *http_connec
 
 	struct soap_service_t *service = soap_service_manager_find_service_by_uri_hash(&uri_hash);
 	if (!service) {
-		return false;
+		return HTTP_SERVER_PROBE_RESULT_NO_MATCH;
 	}
 
 	/*
@@ -395,14 +395,14 @@ bool soap_service_connection_accept(struct http_server_connection_t *http_connec
 	struct soap_service_connection_t *connection = (struct soap_service_connection_t *)heap_alloc_and_zero(sizeof(struct soap_service_connection_t), PKG_OS, MEM_TYPE_OS_SOAP_SERVICE_CONNECTION);
 	if (!connection) {
 		upnp_error_out_of_memory(__this_file, __LINE__);
-		return false;
+		return HTTP_SERVER_PROBE_RESULT_CLOSE;
 	}
 
 	connection->xml_parser = xml_parser_alloc(soap_service_connection_xml_parser_callback, connection);
 	if (!connection->xml_parser) {
 		upnp_error_out_of_memory(__this_file, __LINE__);
 		heap_free(connection);
-		return false;
+		return HTTP_SERVER_PROBE_RESULT_CLOSE;
 	}
 
 	connection->http_connection = http_connection;
@@ -416,5 +416,5 @@ bool soap_service_connection_accept(struct http_server_connection_t *http_connec
 	 */
 	http_server_connection_set_http_tag_list(http_connection, soap_service_connection_http_tag_list, connection);
 	http_server_connection_accept(http_connection, soap_service_connection_http_event, NULL, soap_service_connection_tcp_close_callback, connection);
-	return true;
+	return HTTP_SERVER_PROBE_RESULT_MATCH;
 }

@@ -38,6 +38,16 @@ time64_t unix_time_get_offset_from_native(void)
 	return unix_time() - (time64_t)time(NULL);
 }
 
+void unit_time_get_timespec(struct timespec64 *tp)
+{
+	struct thread_public_context_t *context = thread_get_public_context();
+
+	struct mach_timespec native_tp;
+	clock_get_time(context->system_clock_serv, &native_tp);
+	tp->tv_sec = (time64_t)native_tp.tv_sec + unix_time_ticks_sec_to_gmt_time;;
+	tp->tv_nsec = native_tp.tv_nsec;
+}
+
 void unix_time_set(time64_t new_time)
 {
 	struct thread_public_context_t *context = thread_get_public_context();

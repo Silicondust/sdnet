@@ -18,77 +18,77 @@
 
 THIS_FILE("json_parser");
 
-static json_parser_error_t json_parser_parse_estop(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_start(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_name_or_open(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_name_or_open_or_close(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_name_str(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_name_colon(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_value(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_value_str(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_value_unquoted(struct json_parser_t *xpi, struct netbuf *nb);
-static json_parser_error_t json_parser_parse_close_or_comma(struct json_parser_t *xpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_estop(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_start(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_name_or_open(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_name_or_open_or_close(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_name_str(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_name_colon(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_value(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_value_str(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_value_unquoted(struct json_parser_t *jpi, struct netbuf *nb);
+static json_parser_error_t json_parser_parse_close_or_comma(struct json_parser_t *jpi, struct netbuf *nb);
 
-struct json_parser_t *json_parser_ref(struct json_parser_t *xpi)
+struct json_parser_t *json_parser_ref(struct json_parser_t *jpi)
 {
-	xpi->refs++;
-	return xpi;
+	jpi->refs++;
+	return jpi;
 }
 
-ref_t json_parser_deref(struct json_parser_t *xpi)
+ref_t json_parser_deref(struct json_parser_t *jpi)
 {
-	xpi->refs--;
-	if (xpi->refs != 0) {
-		return xpi->refs;
+	jpi->refs--;
+	if (jpi->refs != 0) {
+		return jpi->refs;
 	}
 
-	if (xpi->partial_nb) {
-		netbuf_free(xpi->partial_nb);
+	if (jpi->partial_nb) {
+		netbuf_free(jpi->partial_nb);
 	}
 
-	netbuf_free(xpi->output_nb);
-	heap_free(xpi);
+	netbuf_free(jpi->output_nb);
+	heap_free(jpi);
 	return 0;
 }
 
-static void json_parser_output_clear(struct json_parser_t *xpi)
+static void json_parser_output_clear(struct json_parser_t *jpi)
 {
-	netbuf_reset(xpi->output_nb);
+	netbuf_reset(jpi->output_nb);
 }
 
-static bool json_parser_output_char(struct json_parser_t *xpi, uint16_t c)
+static bool json_parser_output_char(struct json_parser_t *jpi, uint16_t c)
 {
-	if (netbuf_get_extent(xpi->output_nb) >= NETBUF_MAX_LENGTH) {
+	if (netbuf_get_extent(jpi->output_nb) >= NETBUF_MAX_LENGTH) {
 		DEBUG_ERROR("overlength");
 		return false;
 	}
 
 	if (c <= 0x007F) {
-		if (!netbuf_fwd_make_space(xpi->output_nb, 1)) {
+		if (!netbuf_fwd_make_space(jpi->output_nb, 1)) {
 			return false;
 		}
 
-		netbuf_fwd_write_u8(xpi->output_nb, (uint8_t)c);
+		netbuf_fwd_write_u8(jpi->output_nb, (uint8_t)c);
 		return true;
 	}
 
 	if (c <= 0x07FF) {
-		if (!netbuf_fwd_make_space(xpi->output_nb, 2)) {
+		if (!netbuf_fwd_make_space(jpi->output_nb, 2)) {
 			return false;
 		}
 
-		netbuf_fwd_write_u8(xpi->output_nb, 0xC0 | (c >> 6));
-		netbuf_fwd_write_u8(xpi->output_nb, 0x80 | ((c >> 0) & 0x003F));
+		netbuf_fwd_write_u8(jpi->output_nb, 0xC0 | (c >> 6));
+		netbuf_fwd_write_u8(jpi->output_nb, 0x80 | ((c >> 0) & 0x003F));
 		return true;
 	}
 
-	if (!netbuf_fwd_make_space(xpi->output_nb, 3)) {
+	if (!netbuf_fwd_make_space(jpi->output_nb, 3)) {
 		return false;
 	}
 
-	netbuf_fwd_write_u8(xpi->output_nb, 0xE0 | (c >> 12));
-	netbuf_fwd_write_u8(xpi->output_nb, 0x80 | ((c >> 6) & 0x003F));
-	netbuf_fwd_write_u8(xpi->output_nb, 0x80 | ((c >> 0) & 0x003F));
+	netbuf_fwd_write_u8(jpi->output_nb, 0xE0 | (c >> 12));
+	netbuf_fwd_write_u8(jpi->output_nb, 0x80 | ((c >> 6) & 0x003F));
+	netbuf_fwd_write_u8(jpi->output_nb, 0x80 | ((c >> 0) & 0x003F));
 	return true;
 }
 
@@ -109,7 +109,7 @@ static uint16_t json_parser_read_char_result(uint16_t c)
 	return (uint16_t)JSON_PARSER_ESTOP;
 }
 
-static uint16_t json_parser_read_char(struct json_parser_t *xpi, struct netbuf *nb)
+static uint16_t json_parser_read_char(struct json_parser_t *jpi, struct netbuf *nb)
 {
 	/*
 	 * UTF-8
@@ -176,9 +176,9 @@ static uint16_t json_parser_read_char(struct json_parser_t *xpi, struct netbuf *
 	return (uint16_t)JSON_PARSER_ESTOP;
 }
 
-static uint16_t json_parser_read_escaped_char(struct json_parser_t *xpi, struct netbuf *nb)
+static uint16_t json_parser_read_escaped_char(struct json_parser_t *jpi, struct netbuf *nb)
 {
-	uint16_t c = json_parser_read_char(xpi, nb);
+	uint16_t c = json_parser_read_char(jpi, nb);
 	switch (c) {
 	case 't':
 		return '\t';
@@ -219,12 +219,12 @@ static bool json_parser_is_whitespace(uint16_t c)
 	return (c == ' ') || (c == '\t') || (c == '\r') || (c == '\n');
 }
 
-static void json_parser_skip_whitespace(struct json_parser_t *xpi, struct netbuf *nb)
+static void json_parser_skip_whitespace(struct json_parser_t *jpi, struct netbuf *nb)
 {
 	while (1) {
 		addr_t bookmark = netbuf_get_pos(nb);
 
-		uint16_t c = json_parser_read_char(xpi, nb);
+		uint16_t c = json_parser_read_char(jpi, nb);
 		if (!json_parser_is_whitespace(c)) {
 			netbuf_set_pos(nb, bookmark);
 			return;
@@ -232,82 +232,82 @@ static void json_parser_skip_whitespace(struct json_parser_t *xpi, struct netbuf
 	}
 }
 
-static json_parser_error_t json_parser_callback_internal_error(struct json_parser_t *xpi)
+static json_parser_error_t json_parser_callback_internal_error(struct json_parser_t *jpi)
 {
-	DEBUG_WARN("%p json_parser_callback_internal_error: state %p", xpi, xpi->parse_func);
-	json_parser_error_t ret = xpi->callback(xpi->callback_arg, JSON_PARSER_EVENT_INTERNAL_ERROR, NULL);
-	DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", xpi, xpi->parse_func);
+	DEBUG_WARN("%p json_parser_callback_internal_error: state %p", jpi, jpi->parse_func);
+	json_parser_error_t ret = jpi->callback(jpi->callback_arg, JSON_PARSER_EVENT_INTERNAL_ERROR, NULL);
+	DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", jpi, jpi->parse_func);
 
-	if (xpi->parse_func == json_parser_parse_start) { /* json_parser_reset called */
+	if (jpi->parse_func == json_parser_parse_start) { /* json_parser_reset called */
 		return JSON_PARSER_ESTOP;
 	}
 
-	json_parser_output_clear(xpi);
-	xpi->parse_func = json_parser_parse_estop;
+	json_parser_output_clear(jpi);
+	jpi->parse_func = json_parser_parse_estop;
 	return JSON_PARSER_ESTOP;
 }
 
-static json_parser_error_t json_parser_callback_parse_error(struct json_parser_t *xpi)
+static json_parser_error_t json_parser_callback_parse_error(struct json_parser_t *jpi)
 {
-	DEBUG_WARN("%p json_parser_callback_parse_error: state %p", xpi, xpi->parse_func);
-	json_parser_error_t ret = xpi->callback(xpi->callback_arg, JSON_PARSER_EVENT_PARSE_ERROR, NULL);
-	DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", xpi, xpi->parse_func);
+	DEBUG_WARN("%p json_parser_callback_parse_error: state %p", jpi, jpi->parse_func);
+	json_parser_error_t ret = jpi->callback(jpi->callback_arg, JSON_PARSER_EVENT_PARSE_ERROR, NULL);
+	DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", jpi, jpi->parse_func);
 
-	if (xpi->parse_func == json_parser_parse_start) {
+	if (jpi->parse_func == json_parser_parse_start) {
 		return JSON_PARSER_ESTOP;
 	}
 
-	json_parser_output_clear(xpi);
-	xpi->parse_func = json_parser_parse_estop;
+	json_parser_output_clear(jpi);
+	jpi->parse_func = json_parser_parse_estop;
 	return JSON_PARSER_ESTOP;
 }
 
-static json_parser_error_t json_parser_callback_null_nb(struct json_parser_t *xpi, json_parser_event_t json_event, json_parser_parse_func_t next_parse_func)
+static json_parser_error_t json_parser_callback_null_nb(struct json_parser_t *jpi, json_parser_event_t json_event, json_parser_parse_func_t next_parse_func)
 {
-	json_parser_error_t ret = xpi->callback(xpi->callback_arg, json_event, NULL);
+	json_parser_error_t ret = jpi->callback(jpi->callback_arg, json_event, NULL);
 
-	if (xpi->parse_func == json_parser_parse_start) { /* json_parser_reset called */
-		DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", xpi, xpi->parse_func);
+	if (jpi->parse_func == json_parser_parse_start) { /* json_parser_reset called */
+		DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", jpi, jpi->parse_func);
 		return JSON_PARSER_ESTOP;
 	}
 
-	json_parser_output_clear(xpi);
+	json_parser_output_clear(jpi);
 
 	if (ret != JSON_PARSER_OK) {
-		DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", xpi, xpi->parse_func);
-		xpi->parse_func = json_parser_parse_estop;
+		DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", jpi, jpi->parse_func);
+		jpi->parse_func = json_parser_parse_estop;
 		return JSON_PARSER_ESTOP;
 	}
 
-	xpi->parse_func = next_parse_func;
+	jpi->parse_func = next_parse_func;
 	return JSON_PARSER_OK;
 }
 
-static json_parser_error_t json_parser_callback_with_nb(struct json_parser_t *xpi, json_parser_event_t json_event, json_parser_parse_func_t next_parse_func)
+static json_parser_error_t json_parser_callback_with_nb(struct json_parser_t *jpi, json_parser_event_t json_event, json_parser_parse_func_t next_parse_func)
 {
 	/* Ensure netbuf always has memory allocated. */
-	if (!netbuf_fwd_make_space(xpi->output_nb, 0)) {
+	if (!netbuf_fwd_make_space(jpi->output_nb, 0)) {
 		DEBUG_ERROR("out of memory");
-		return json_parser_callback_internal_error(xpi);
+		return json_parser_callback_internal_error(jpi);
 	}
 
-	netbuf_set_pos_to_start(xpi->output_nb);
-	json_parser_error_t ret = xpi->callback(xpi->callback_arg, json_event, xpi->output_nb);
+	netbuf_set_pos_to_start(jpi->output_nb);
+	json_parser_error_t ret = jpi->callback(jpi->callback_arg, json_event, jpi->output_nb);
 
-	if (xpi->parse_func == json_parser_parse_start) { /* json_parser_reset called */
-		DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", xpi, xpi->parse_func);
+	if (jpi->parse_func == json_parser_parse_start) { /* json_parser_reset called */
+		DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", jpi, jpi->parse_func);
 		return JSON_PARSER_ESTOP;
 	}
 
-	json_parser_output_clear(xpi);
+	json_parser_output_clear(jpi);
 
 	if (ret != JSON_PARSER_OK) {
-		DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", xpi, xpi->parse_func);
-		xpi->parse_func = json_parser_parse_estop;
+		DEBUG_ASSERT(ret == JSON_PARSER_ESTOP, "%p unexpected return value from app: state %p", jpi, jpi->parse_func);
+		jpi->parse_func = json_parser_parse_estop;
 		return JSON_PARSER_ESTOP;
 	}
 
-	xpi->parse_func = next_parse_func;
+	jpi->parse_func = next_parse_func;
 	return JSON_PARSER_OK;
 }
 
@@ -317,104 +317,104 @@ static json_parser_error_t json_parser_emoredata(struct netbuf *nb, addr_t start
 	return JSON_PARSER_EMOREDATA;
 }
 
-static json_parser_error_t json_parser_parse_estop(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_estop(struct json_parser_t *jpi, struct netbuf *nb)
 {
-	DEBUG_WARN("%p recv called after estop", xpi);
+	DEBUG_WARN("%p recv called after estop", jpi);
 	return JSON_PARSER_ESTOP;
 }
 
-static json_parser_error_t json_parser_parse_start(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_start(struct json_parser_t *jpi, struct netbuf *nb)
 {
-	xpi->parse_func = json_parser_parse_value;
-	return json_parser_parse_value(xpi, nb);
+	jpi->parse_func = json_parser_parse_value;
+	return json_parser_parse_value(jpi, nb);
 }
 
-static json_parser_error_t json_parser_parse_name_or_open(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_name_or_open(struct json_parser_t *jpi, struct netbuf *nb)
 {
-	json_parser_skip_whitespace(xpi, nb);
+	json_parser_skip_whitespace(jpi, nb);
 	addr_t emoredata_start = netbuf_get_pos(nb);
 
-	uint16_t c = json_parser_read_char(xpi, nb);
+	uint16_t c = json_parser_read_char(jpi, nb);
 	switch (c) {
 	case JSON_PARSER_EMOREDATA:
 		return json_parser_emoredata(nb, emoredata_start);
 
 	case JSON_PARSER_ESTOP:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 
 	case '{':
-		return json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_OBJECT_START, json_parser_parse_name_or_open_or_close);
+		return json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_OBJECT_START, json_parser_parse_name_or_open_or_close);
 
 	case '[':
-		return json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_ARRAY_START, json_parser_parse_name_or_open_or_close);
+		return json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_ARRAY_START, json_parser_parse_name_or_open_or_close);
 
 	case '\"':
-		xpi->parse_func = json_parser_parse_name_str;
-		return json_parser_parse_name_str(xpi, nb);
+		jpi->parse_func = json_parser_parse_name_str;
+		return json_parser_parse_name_str(jpi, nb);
 
 	default:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 	}
 }
 
-static json_parser_error_t json_parser_parse_name_or_open_or_close(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_name_or_open_or_close(struct json_parser_t *jpi, struct netbuf *nb)
 {
-	json_parser_skip_whitespace(xpi, nb);
+	json_parser_skip_whitespace(jpi, nb);
 	addr_t emoredata_start = netbuf_get_pos(nb);
 
-	uint16_t c = json_parser_read_char(xpi, nb);
+	uint16_t c = json_parser_read_char(jpi, nb);
 	switch (c) {
 	case JSON_PARSER_EMOREDATA:
 		return json_parser_emoredata(nb, emoredata_start);
 
 	case JSON_PARSER_ESTOP:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 
 	case '{':
-		return json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_OBJECT_START, json_parser_parse_name_or_open_or_close);
+		return json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_OBJECT_START, json_parser_parse_name_or_open_or_close);
 
 	case '}':
-		return json_parser_callback_null_nb(xpi, JSON_PARSER_EVENT_OBJECT_END, json_parser_parse_close_or_comma);
+		return json_parser_callback_null_nb(jpi, JSON_PARSER_EVENT_OBJECT_END, json_parser_parse_close_or_comma);
 
 	case '[':
-		return json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_ARRAY_START, json_parser_parse_name_or_open_or_close);
+		return json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_ARRAY_START, json_parser_parse_name_or_open_or_close);
 
 	case ']':
-		return json_parser_callback_null_nb(xpi, JSON_PARSER_EVENT_ARRAY_END, json_parser_parse_close_or_comma);
+		return json_parser_callback_null_nb(jpi, JSON_PARSER_EVENT_ARRAY_END, json_parser_parse_close_or_comma);
 
 	case '\"':
-		xpi->parse_func = json_parser_parse_name_str;
-		return json_parser_parse_name_str(xpi, nb);
+		jpi->parse_func = json_parser_parse_name_str;
+		return json_parser_parse_name_str(jpi, nb);
 
 	default:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 	}
 }
 
-static json_parser_error_t json_parser_parse_name_str(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_name_str(struct json_parser_t *jpi, struct netbuf *nb)
 {
 	while (1) {
 		addr_t emoredata_start = netbuf_get_pos(nb);
 
-		uint16_t c = json_parser_read_char(xpi, nb);
+		uint16_t c = json_parser_read_char(jpi, nb);
 		switch (c) {
 		case JSON_PARSER_EMOREDATA:
 			return json_parser_emoredata(nb, emoredata_start);
 
 		case JSON_PARSER_ESTOP:
-			return json_parser_callback_parse_error(xpi);
+			return json_parser_callback_parse_error(jpi);
 
 		case '\"':
-			xpi->parse_func = json_parser_parse_name_colon;
-			return json_parser_parse_name_colon(xpi, nb);
+			jpi->parse_func = json_parser_parse_name_colon;
+			return json_parser_parse_name_colon(jpi, nb);
 
 		case '\\':
-			c = json_parser_read_escaped_char(xpi, nb);
+			c = json_parser_read_escaped_char(jpi, nb);
 			if (c == JSON_PARSER_EMOREDATA) {
 				return json_parser_emoredata(nb, emoredata_start);
 			}
 			if (c == JSON_PARSER_ESTOP) {
-				return json_parser_callback_parse_error(xpi);
+				return json_parser_callback_parse_error(jpi);
 			}
 			break;
 
@@ -422,82 +422,82 @@ static json_parser_error_t json_parser_parse_name_str(struct json_parser_t *xpi,
 			break;
 		}
 
-		if (!json_parser_output_char(xpi, c)) {
-			return json_parser_callback_internal_error(xpi);
+		if (!json_parser_output_char(jpi, c)) {
+			return json_parser_callback_internal_error(jpi);
 		}
 	}
 }
 
-static json_parser_error_t json_parser_parse_name_colon(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_name_colon(struct json_parser_t *jpi, struct netbuf *nb)
 {
-	json_parser_skip_whitespace(xpi, nb);
+	json_parser_skip_whitespace(jpi, nb);
 	addr_t emoredata_start = netbuf_get_pos(nb);
 
-	uint16_t c = json_parser_read_char(xpi, nb);
+	uint16_t c = json_parser_read_char(jpi, nb);
 	switch (c) {
 	case JSON_PARSER_EMOREDATA:
 		return json_parser_emoredata(nb, emoredata_start);
 
 	case JSON_PARSER_ESTOP:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 
 	case ':':
-		xpi->parse_func = json_parser_parse_value;
-		return json_parser_parse_value(xpi, nb);
+		jpi->parse_func = json_parser_parse_value;
+		return json_parser_parse_value(jpi, nb);
 
 	default:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 	}
 
 }
 
-static json_parser_error_t json_parser_parse_value(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_value(struct json_parser_t *jpi, struct netbuf *nb)
 {
-	json_parser_skip_whitespace(xpi, nb);
+	json_parser_skip_whitespace(jpi, nb);
 	addr_t emoredata_start = netbuf_get_pos(nb);
 
 	json_parser_error_t ret;
-	uint16_t c = json_parser_read_char(xpi, nb);
+	uint16_t c = json_parser_read_char(jpi, nb);
 	switch (c) {
 	case JSON_PARSER_EMOREDATA:
 		return json_parser_emoredata(nb, emoredata_start);
 
 	case JSON_PARSER_ESTOP:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 
 	case '{':
-		return json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_OBJECT_START, json_parser_parse_name_or_open_or_close);
+		return json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_OBJECT_START, json_parser_parse_name_or_open_or_close);
 
 	case '[':
-		return json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_ARRAY_START, json_parser_parse_name_or_open_or_close);
+		return json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_ARRAY_START, json_parser_parse_name_or_open_or_close);
 
 	case '\"':
-		return json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_ELEMENT_NAME, json_parser_parse_value_str);
+		return json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_ELEMENT_NAME, json_parser_parse_value_str);
 
 	default:
 		if (!json_parser_is_valid_unquoted_char(c)) {
-			return json_parser_callback_parse_error(xpi);
+			return json_parser_callback_parse_error(jpi);
 		}
 
-		ret = json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_ELEMENT_NAME, json_parser_parse_value_unquoted);
+		ret = json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_ELEMENT_NAME, json_parser_parse_value_unquoted);
 		if (ret != JSON_PARSER_OK) {
 			return ret;
 		}
 
-		if (!json_parser_output_char(xpi, c)) {
-			return json_parser_callback_internal_error(xpi);
+		if (!json_parser_output_char(jpi, c)) {
+			return json_parser_callback_internal_error(jpi);
 		}
 
 		return JSON_PARSER_OK;
 	}
 }
 
-static json_parser_error_t json_parser_parse_value_str(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_value_str(struct json_parser_t *jpi, struct netbuf *nb)
 {
 	while (1) {
 		addr_t emoredata_start = netbuf_get_pos(nb);
 
-		uint16_t c = json_parser_read_char(xpi, nb);
+		uint16_t c = json_parser_read_char(jpi, nb);
 		switch (c) {
 		case JSON_PARSER_EMOREDATA:
 			return json_parser_emoredata(nb, emoredata_start);
@@ -507,10 +507,10 @@ static json_parser_error_t json_parser_parse_value_str(struct json_parser_t *xpi
 			break;
 
 		case '\"':
-			return json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_ELEMENT_VALUE_STR, json_parser_parse_close_or_comma);
+			return json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_ELEMENT_VALUE_STR, json_parser_parse_close_or_comma);
 
 		case '\\':
-			c = json_parser_read_escaped_char(xpi, nb);
+			c = json_parser_read_escaped_char(jpi, nb);
 			if (c == JSON_PARSER_EMOREDATA) {
 				return json_parser_emoredata(nb, emoredata_start);
 			}
@@ -523,123 +523,123 @@ static json_parser_error_t json_parser_parse_value_str(struct json_parser_t *xpi
 			break;
 		}
 
-		if (!json_parser_output_char(xpi, c)) {
-			return json_parser_callback_internal_error(xpi);
+		if (!json_parser_output_char(jpi, c)) {
+			return json_parser_callback_internal_error(jpi);
 		}
 	}
 }
 
-static json_parser_error_t json_parser_parse_value_unquoted(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_value_unquoted(struct json_parser_t *jpi, struct netbuf *nb)
 {
 	while (1) {
 		addr_t emoredata_start = netbuf_get_pos(nb);
 
-		uint16_t c = json_parser_read_char(xpi, nb);
+		uint16_t c = json_parser_read_char(jpi, nb);
 		if (c == JSON_PARSER_EMOREDATA) {
 			return json_parser_emoredata(nb, emoredata_start);
 		}
 		if (c == JSON_PARSER_ESTOP) {
-			return json_parser_callback_parse_error(xpi);
+			return json_parser_callback_parse_error(jpi);
 		}
 
 		if (!json_parser_is_valid_unquoted_char(c)) {
-			json_parser_error_t ret = json_parser_callback_with_nb(xpi, JSON_PARSER_EVENT_ELEMENT_VALUE_UNQUOTED, json_parser_parse_close_or_comma);
+			json_parser_error_t ret = json_parser_callback_with_nb(jpi, JSON_PARSER_EVENT_ELEMENT_VALUE_UNQUOTED, json_parser_parse_close_or_comma);
 			if (ret != JSON_PARSER_OK) {
 				return ret;
 			}
 
 			switch (c) {
 			case '}':
-				return json_parser_callback_null_nb(xpi, JSON_PARSER_EVENT_OBJECT_END, json_parser_parse_close_or_comma);
+				return json_parser_callback_null_nb(jpi, JSON_PARSER_EVENT_OBJECT_END, json_parser_parse_close_or_comma);
 
 			case ']':
-				return json_parser_callback_null_nb(xpi, JSON_PARSER_EVENT_ARRAY_END, json_parser_parse_close_or_comma);
+				return json_parser_callback_null_nb(jpi, JSON_PARSER_EVENT_ARRAY_END, json_parser_parse_close_or_comma);
 
 			case ',':
-				xpi->parse_func = json_parser_parse_name_or_open;
+				jpi->parse_func = json_parser_parse_name_or_open;
 				return JSON_PARSER_OK;
 
 			default:
 				if (!json_parser_is_whitespace(c)) {
-					return json_parser_callback_parse_error(xpi);
+					return json_parser_callback_parse_error(jpi);
 				}
 
-				xpi->parse_func = json_parser_parse_close_or_comma;
+				jpi->parse_func = json_parser_parse_close_or_comma;
 				return JSON_PARSER_OK;
 			}
 		}
 
-		if (!json_parser_output_char(xpi, c)) {
-			return json_parser_callback_internal_error(xpi);
+		if (!json_parser_output_char(jpi, c)) {
+			return json_parser_callback_internal_error(jpi);
 		}
 	}
 }
 
-static json_parser_error_t json_parser_parse_close_or_comma(struct json_parser_t *xpi, struct netbuf *nb)
+static json_parser_error_t json_parser_parse_close_or_comma(struct json_parser_t *jpi, struct netbuf *nb)
 {
-	json_parser_skip_whitespace(xpi, nb);
+	json_parser_skip_whitespace(jpi, nb);
 	addr_t emoredata_start = netbuf_get_pos(nb);
 
-	uint16_t c = json_parser_read_char(xpi, nb);
+	uint16_t c = json_parser_read_char(jpi, nb);
 	switch (c) {
 	case JSON_PARSER_EMOREDATA:
 		return json_parser_emoredata(nb, emoredata_start);
 
 	case JSON_PARSER_ESTOP:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 
 	case '}':
-		return json_parser_callback_null_nb(xpi, JSON_PARSER_EVENT_OBJECT_END, json_parser_parse_close_or_comma);
+		return json_parser_callback_null_nb(jpi, JSON_PARSER_EVENT_OBJECT_END, json_parser_parse_close_or_comma);
 
 	case ']':
-		return json_parser_callback_null_nb(xpi, JSON_PARSER_EVENT_ARRAY_END, json_parser_parse_close_or_comma);
+		return json_parser_callback_null_nb(jpi, JSON_PARSER_EVENT_ARRAY_END, json_parser_parse_close_or_comma);
 
 	case ',':
-		xpi->parse_func = json_parser_parse_name_or_open;
-		return json_parser_parse_name_or_open(xpi, nb);
+		jpi->parse_func = json_parser_parse_name_or_open;
+		return json_parser_parse_name_or_open(jpi, nb);
 
 	default:
-		return json_parser_callback_parse_error(xpi);
+		return json_parser_callback_parse_error(jpi);
 	}
 }
 
-void json_parser_recv_netbuf(struct json_parser_t *xpi, struct netbuf *nb)
+bool json_parser_recv_netbuf(struct json_parser_t *jpi, struct netbuf *nb)
 {
 	/* Is this part of a partially received request or response? */
-	if (xpi->partial_nb) {
-		netbuf_set_pos_to_start(xpi->partial_nb);
-		size_t prev_size = netbuf_get_remaining(xpi->partial_nb);
+	if (jpi->partial_nb) {
+		netbuf_set_pos_to_start(jpi->partial_nb);
+		size_t prev_size = netbuf_get_remaining(jpi->partial_nb);
 
 		if (prev_size + netbuf_get_remaining(nb) > NETBUF_MAX_LENGTH) {
-			DEBUG_ERROR("%p too long", xpi);
-			json_parser_ref(xpi);
-			json_parser_callback_parse_error(xpi);
-			json_parser_deref(xpi);
-			return;
+			DEBUG_ERROR("%p too long", jpi);
+			json_parser_ref(jpi);
+			json_parser_callback_parse_error(jpi);
+			json_parser_deref(jpi);
+			return false;
 		}
 
 		if (!netbuf_rev_make_space(nb, prev_size)) {
 			DEBUG_ERROR("out of memory");
-			json_parser_ref(xpi);
-			json_parser_callback_internal_error(xpi);
-			json_parser_deref(xpi);
-			return;
+			json_parser_ref(jpi);
+			json_parser_callback_internal_error(jpi);
+			json_parser_deref(jpi);
+			return false;
 		}
 
-		netbuf_rev_copy(nb, xpi->partial_nb, prev_size);
+		netbuf_rev_copy(nb, jpi->partial_nb, prev_size);
 
-		netbuf_free(xpi->partial_nb);
-		xpi->partial_nb = NULL;
+		netbuf_free(jpi->partial_nb);
+		jpi->partial_nb = NULL;
 	}
 
 	json_parser_error_t ret;
 	while (1) {
-		DEBUG_TRACE("%p state = %p length = %u", xpi, xpi->parse_func, netbuf_get_remaining(nb));
+		DEBUG_TRACE("%p state = %p length = %u", jpi, jpi->parse_func, netbuf_get_remaining(nb));
 
-		json_parser_ref(xpi);
-		ret = xpi->parse_func(xpi, nb);
-		if (json_parser_deref(xpi) <= 0) {
-			return;
+		json_parser_ref(jpi);
+		ret = jpi->parse_func(jpi, nb);
+		if (json_parser_deref(jpi) <= 0) {
+			return false;
 		}
 
 		if (ret != JSON_PARSER_OK) {
@@ -653,67 +653,79 @@ void json_parser_recv_netbuf(struct json_parser_t *xpi, struct netbuf *nb)
 
 	if (ret == JSON_PARSER_EMOREDATA) {
 		if (netbuf_get_extent(nb) == 0) {
-			return;
+			return true;
 		}
 
-		xpi->partial_nb = netbuf_alloc_and_steal(nb);
-		if (!xpi->partial_nb) {
+		jpi->partial_nb = netbuf_alloc_and_steal(nb);
+		if (!jpi->partial_nb) {
 			DEBUG_ERROR("out of memory");
-			json_parser_ref(xpi);
-			json_parser_callback_internal_error(xpi);
-			json_parser_deref(xpi);
-			return;
+			json_parser_ref(jpi);
+			json_parser_callback_internal_error(jpi);
+			json_parser_deref(jpi);
+			return false;
 		}
 	}
+
+	return true;
 }
 
-void json_parser_recv_str(struct json_parser_t *xpi, const char *str, size_t length)
+static bool json_parser_recv_mem_internal(struct json_parser_t *jpi, const char *ptr, size_t length)
 {
-	if (length == 0) {
-		length = strlen(str);
-	}
-
 	struct netbuf *nb = netbuf_alloc_with_rev_space(length);
 	if (!nb) {
 		DEBUG_ERROR("out of memory");
-		json_parser_callback_internal_error(xpi);
-		return;
+		json_parser_callback_internal_error(jpi);
+		return false;
 	}
 
-	netbuf_rev_write(nb, str, length);
-	json_parser_recv_netbuf(xpi, nb);
+	netbuf_rev_write(nb, ptr, length);
+	bool result = json_parser_recv_netbuf(jpi, nb);
+
 	netbuf_free(nb);
+	return result;
 }
 
-void json_parser_reset(struct json_parser_t *xpi)
+bool json_parser_recv_mem(struct json_parser_t *jpi, uint8_t *ptr, uint8_t *end)
 {
-	if (xpi->partial_nb) {
-		netbuf_free(xpi->partial_nb);
-		xpi->partial_nb = NULL;
+	size_t length = end - ptr;
+	return json_parser_recv_mem_internal(jpi, (const char *)ptr, length);
+}
+
+bool json_parser_recv_str(struct json_parser_t *jpi, const char *str)
+{
+	size_t length = strlen(str);
+	return json_parser_recv_mem_internal(jpi, str, length);
+}
+
+void json_parser_reset(struct json_parser_t *jpi)
+{
+	if (jpi->partial_nb) {
+		netbuf_free(jpi->partial_nb);
+		jpi->partial_nb = NULL;
 	}
 
-	json_parser_output_clear(xpi);
-	xpi->parse_func = json_parser_parse_start;
+	json_parser_output_clear(jpi);
+	jpi->parse_func = json_parser_parse_start;
 }
 
 struct json_parser_t *json_parser_alloc(json_parser_callback_t callback, void *callback_arg)
 {
-	struct json_parser_t *xpi = (struct json_parser_t *)heap_alloc_and_zero(sizeof(struct json_parser_t), PKG_OS, MEM_TYPE_OS_JSON_PARSER);
-	if (!xpi) {
+	struct json_parser_t *jpi = (struct json_parser_t *)heap_alloc_and_zero(sizeof(struct json_parser_t), PKG_OS, MEM_TYPE_OS_JSON_PARSER);
+	if (!jpi) {
 		return NULL;
 	}
 
-	xpi->output_nb = netbuf_alloc();
-	if (!xpi->output_nb) {
+	jpi->output_nb = netbuf_alloc();
+	if (!jpi->output_nb) {
 		DEBUG_ERROR("out of memory");
-		heap_free(xpi);
+		heap_free(jpi);
 		return NULL;
 	}
 
-	xpi->refs = 1;
-	xpi->callback = callback;
-	xpi->callback_arg = callback_arg;
-	json_parser_reset(xpi);
+	jpi->refs = 1;
+	jpi->callback = callback;
+	jpi->callback_arg = callback_arg;
+	json_parser_reset(jpi);
 
-	return xpi;
+	return jpi;
 }

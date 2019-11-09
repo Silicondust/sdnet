@@ -156,6 +156,78 @@ size_t base64_decode_str_to_mem(const char *encoded_data, uint8_t *buffer, size_
 	}
 }
 
+bool base64_decode_str_to_netbuf(const char *encoded_data, struct netbuf *output_nb)
+{
+	size_t encoded_size = strlen(encoded_data);
+	size_t decoded_length = base64_decode_max_length(encoded_size);
+	if (!netbuf_fwd_make_space(output_nb, decoded_length)) {
+		DEBUG_ERROR("out of memory");
+		return false;
+	}
+
+	while (1) {
+		uint8_t v[4];
+		v[0] = base64_decode_str_get_next_symbol_val(&encoded_data);
+		v[1] = base64_decode_str_get_next_symbol_val(&encoded_data);
+		v[2] = base64_decode_str_get_next_symbol_val(&encoded_data);
+		v[3] = base64_decode_str_get_next_symbol_val(&encoded_data);
+
+		uint8_t test = v[0] | v[1] | v[2] | v[3];
+		if (test >= 64) {
+			if (v[0] == BASE64_DECODE_CHAR_END) {
+				netbuf_set_end_to_pos(output_nb);
+				return true;
+			}
+
+			if ((v[0] >= 64) || (v[1] >= 64) || (v[3] != BASE64_DECODE_CHAR_EQUALS)) {
+				return false;
+			}
+
+			if (v[2] < 64) {
+				if (base64_decode_str_get_next_symbol_val(&encoded_data) != BASE64_DECODE_CHAR_END) {
+					return false;
+				}
+
+				uint32_t val24;
+				val24 = (uint32_t)v[0] << 18;
+				val24 |= (uint32_t)v[1] << 12;
+				val24 |= (uint32_t)v[2] << 6;
+
+				netbuf_fwd_write_u8(output_nb, (uint8_t)(val24 >> 16));
+				netbuf_fwd_write_u8(output_nb, (uint8_t)(val24 >> 8));
+				netbuf_set_end_to_pos(output_nb);
+				return true;
+			}
+
+			if (v[2] == BASE64_DECODE_CHAR_EQUALS) {
+				if (base64_decode_str_get_next_symbol_val(&encoded_data) != BASE64_DECODE_CHAR_END) {
+					return false;
+				}
+
+				uint32_t val24;
+				val24 = (uint32_t)v[0] << 18;
+				val24 |= (uint32_t)v[1] << 12;
+
+				netbuf_fwd_write_u8(output_nb, (uint8_t)(val24 >> 16));
+				netbuf_set_end_to_pos(output_nb);
+				return true;
+			}
+
+			return false;
+		}
+
+		uint32_t val24;
+		val24 = (uint32_t)v[0] << 18;
+		val24 |= (uint32_t)v[1] << 12;
+		val24 |= (uint32_t)v[2] << 6;
+		val24 |= (uint32_t)v[3] << 0;
+
+		netbuf_fwd_write_u8(output_nb, (uint8_t)(val24 >> 16));
+		netbuf_fwd_write_u8(output_nb, (uint8_t)(val24 >> 8));
+		netbuf_fwd_write_u8(output_nb, (uint8_t)(val24 >> 0));
+	}
+}
+
 static uint8_t base64_decode_netbuf_get_next_symbol_val(struct netbuf *nb)
 {
 	while (netbuf_fwd_check_space(nb, 1)) {
@@ -251,8 +323,9 @@ size_t base64_decode_netbuf_to_mem(struct netbuf *nb, uint8_t *buffer, size_t bu
 	}
 }
 
-bool base64_decode_netbuf_to_netbuf2(struct netbuf *encoded_nb, size_t encoded_size, struct netbuf *output_nb)
+bool base64_decode_netbuf_to_netbuf2(struct netbuf *encoded_nb, struct netbuf *output_nb)
 {
+	size_t encoded_size = netbuf_get_remaining(encoded_nb);
 	size_t decoded_length = base64_decode_max_length(encoded_size);
 	if (!netbuf_fwd_make_space(output_nb, decoded_length)) {
 		DEBUG_ERROR("out of memory");

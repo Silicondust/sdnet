@@ -82,7 +82,7 @@ void webserver_add_connection(struct webserver_t *webserver, struct webserver_co
 	slist_attach_tail(struct webserver_connection_t, &webserver->connection_list, connection);
 }
 
-static bool webserver_http_service_probe(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri)
+static http_server_probe_result_t webserver_http_service_probe(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri)
 {
 	struct webserver_t *webserver = (struct webserver_t *)arg;
 	return webserver_connection_accept(webserver, connection, method, uri);

@@ -20,8 +20,8 @@ struct hmap_t
 	uint32_t hash_mask;
 };
 
-typedef void (*hmap_callback_func_t)(struct hmap_prefix_t *item);
-typedef bool (*hmap_match_func_t)(struct hmap_prefix_t *list_item, struct hmap_prefix_t *item);
+typedef bool (*hmap_clear_custom_func_t)(struct hmap_prefix_t *item, void *state);
+typedef void (*hmap_clear_callback_func_t)(struct hmap_prefix_t *item);
 
 extern bool hmap_init(struct hmap_t *map, uint32_t hash_size);
 extern void hmap_dispose(struct hmap_t *map);
@@ -39,8 +39,8 @@ extern uint32_t hamp_get_count(struct hmap_t *map);
 #define hmap_remove(type, map, hash) (type *)(void *)hmap_remove_impl(map, hash)
 #define hmap_remove_top(type, map) (type *)(void *)hmap_remove_top_impl(map)
 #define hmap_replace(type, map, item, hash) (type *)(void *)hmap_replace_impl(map, (struct hmap_prefix_t *)(void *)item, hash)
-#define hmap_clear(type, map, callback_func) hmap_clear_impl(map, (hmap_callback_func_t)callback_func)
-#define hmap_clear_custom(type, map, match_item, match_func, callback_func) hmap_clear_custom_impl(map, (struct hmap_prefix_t *)(void *)match_item, (hmap_match_func_t)match_func, (hmap_callback_func_t)callback_func)
+#define hmap_clear(type, map, callback_func) hmap_clear_impl(map, (hmap_clear_callback_func_t)callback_func)
+#define hmap_clear_custom(type, map, state, custom_func, callback_func) hmap_clear_custom_impl(map, state, (hmap_clear_custom_func_t)custom_func, (hmap_clear_callback_func_t)callback_func)
 
 /* Implementation. */
 extern struct hmap_prefix_t *hmap_find_impl(struct hmap_t *map, uint32_t hash);
@@ -49,8 +49,8 @@ extern bool hmap_add_impl(struct hmap_t *map, struct hmap_prefix_t *item, uint32
 extern struct hmap_prefix_t *hmap_remove_impl(struct hmap_t *map, uint32_t hash);
 extern struct hmap_prefix_t *hmap_remove_top_impl(struct hmap_t *map);
 extern struct hmap_prefix_t *hmap_replace_impl(struct hmap_t *map, struct hmap_prefix_t *item, uint32_t hash);
-extern void hmap_clear_impl(struct hmap_t *map, hmap_callback_func_t callback_func);
-extern void hmap_clear_custom_impl(struct hmap_t *map, struct hmap_prefix_t *match_item, hmap_match_func_t match_func, hmap_callback_func_t callback_func);
+extern void hmap_clear_impl(struct hmap_t *map, hmap_clear_callback_func_t callback_func);
+extern void hmap_clear_custom_impl(struct hmap_t *map, void *state, hmap_clear_custom_func_t custom_func, hmap_clear_callback_func_t callback_func);
 
 extern inline uint32_t hmap_hash_create(const void *ptr, size_t length) { return hash32_create(ptr, length); }
 extern inline uint32_t hmap_hash_create_str(const char *ptr) { return hash32_create_str(ptr); }

@@ -745,6 +745,7 @@ static xml_parser_error_t xml_parser_parse_attribute_start(struct xml_parser_t *
 static xml_parser_error_t xml_parser_parse_attribute_namespace_or_name(struct xml_parser_t *xpi, struct netbuf *nb)
 {
 	bool first_char = (netbuf_get_extent(xpi->output_nb) == 0);
+	xml_parser_skip_whitespace(xpi, nb);
 
 	while (1) {
 		addr_t emoredata_start = netbuf_get_pos(nb);
@@ -752,6 +753,21 @@ static xml_parser_error_t xml_parser_parse_attribute_namespace_or_name(struct xm
 		uint16_t c = xml_parser_read_char(xpi, nb);
 		if (c == XML_PARSER_EMOREDATA) {
 			return xml_parser_emoredata(nb, emoredata_start);
+		}
+
+		if (xml_parser_is_whitespace(c)) {
+			xml_parser_skip_whitespace(xpi, nb);
+
+			c = xml_parser_read_char(xpi, nb);
+			if (c == XML_PARSER_EMOREDATA) {
+				return xml_parser_emoredata(nb, emoredata_start);
+			}
+
+			if ((c != ':') && (c != '=')) {
+				return xml_parser_callback_parse_error(xpi);
+			}
+
+			/* fallthrough */
 		}
 
 		if (c == ':') {
@@ -770,6 +786,8 @@ static xml_parser_error_t xml_parser_parse_attribute_namespace_or_name(struct xm
 			if (first_char) {
 				return xml_parser_callback_parse_error(xpi);
 			}
+
+			xml_parser_skip_whitespace(xpi, nb);
 
 			c = xml_parser_read_char(xpi, nb);
 			if (c == XML_PARSER_EMOREDATA) {
@@ -967,7 +985,7 @@ static xml_parser_error_t xml_parser_parse_element_end_name(struct xml_parser_t 
 	return xml_parser_parse_element_end_namespace_or_name(xpi, nb);
 }
 
-void xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb)
+bool xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb)
 {
 	/* Is this part of a partially received request or response? */
 	if (xpi->partial_nb) {
@@ -979,7 +997,7 @@ void xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb)
 			xml_parser_ref(xpi);
 			xml_parser_callback_parse_error(xpi);
 			xml_parser_deref(xpi);
-			return;
+			return false;
 		}
 
 		if (!netbuf_rev_make_space(nb, prev_size)) {
@@ -987,7 +1005,7 @@ void xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb)
 			xml_parser_ref(xpi);
 			xml_parser_callback_internal_error(xpi);
 			xml_parser_deref(xpi);
-			return;
+			return false;
 		}
 
 		netbuf_rev_copy(nb, xpi->partial_nb, prev_size);
@@ -1003,7 +1021,7 @@ void xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb)
 		xml_parser_ref(xpi);
 		ret = xpi->parse_func(xpi, nb);
 		if (xml_parser_deref(xpi) <= 0) {
-			return;
+			return false;
 		}
 
 		if (ret != XML_PARSER_OK) {
@@ -1017,7 +1035,7 @@ void xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb)
 
 	if (ret == XML_PARSER_EMOREDATA) {
 		if (netbuf_get_extent(nb) == 0) {
-			return;
+			return true;
 		}
 
 		xpi->partial_nb = netbuf_alloc_and_steal(nb);
@@ -1026,25 +1044,39 @@ void xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb)
 			xml_parser_ref(xpi);
 			xml_parser_callback_internal_error(xpi);
 			xml_parser_deref(xpi);
-			return;
+			return false;
 		}
 	}
+
+	return true;
 }
 
-void xml_parser_recv_str(struct xml_parser_t *xpi, const char *str)
+static bool xml_parser_recv_mem_internal(struct xml_parser_t *xpi, const char *ptr, size_t length)
 {
-	size_t length = strlen(str);
-
 	struct netbuf *nb = netbuf_alloc_with_rev_space(length);
 	if (!nb) {
 		DEBUG_ERROR("out of memory");
 		xml_parser_callback_internal_error(xpi);
-		return;
+		return false;
 	}
 
-	netbuf_rev_write(nb, str, length);
-	xml_parser_recv_netbuf(xpi, nb);
+	netbuf_rev_write(nb, ptr, length);
+	bool result = xml_parser_recv_netbuf(xpi, nb);
+
 	netbuf_free(nb);
+	return result;
+}
+
+bool xml_parser_recv_mem(struct xml_parser_t *xpi, uint8_t *ptr, uint8_t *end)
+{
+	size_t length = end - ptr;
+	return xml_parser_recv_mem_internal(xpi, (const char *)ptr, length);
+}
+
+bool xml_parser_recv_str(struct xml_parser_t *xpi, const char *str)
+{
+	size_t length = strlen(str);
+	return xml_parser_recv_mem_internal(xpi,str, length);
 }
 
 void xml_parser_reset(struct xml_parser_t *xpi)

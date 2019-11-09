@@ -32,6 +32,7 @@
 #include <utils/slist.h>
 #include <utils/dlist.h>
 #include <utils/hmap.h>
+#include <utils/nvlist.h>
 #include <thread/mqueue.h>
 #include <netbuf.h>
 #include <text/netbuf_sprintf.h>
@@ -64,12 +65,15 @@
 #include <thread/long_task.h>
 #include <io/gpio.h>
 #include <exe_args.h>
+#include <web/gunzip.h>
 #include <web/json_parser.h>
+#include <web/json_process.h>
 #include <web/http_parser.h>
 #include <web/http_result.h>
 #include <web/url.h>
 #include <web/url_params.h>
 #include <web/xml_parser.h>
+#include <web/xml_process.h>
 #include <web/http_server.h>
 #include <webclient/webclient.h>
 #include <webserver/webserver.h>

@@ -184,7 +184,7 @@ extern struct soap_service_t *soap_service_alloc(const char *uri, const char *ur
 extern const struct soap_action_descriptor_t *soap_service_find_action(struct soap_service_t *service, const char *action_name);
 extern const struct soap_var_descriptor_t *soap_service_find_var(struct soap_service_t *service, const char *var_name);
 
-extern bool soap_service_connection_accept(struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri);
+extern http_server_probe_result_t soap_service_connection_accept(struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri);
 extern void soap_service_connection_close_and_deref(struct soap_service_connection_t *connection);
 extern bool soap_service_connection_send_http_header(struct soap_service_connection_t *connection, const char *http_result_str, const char *content_type, size_t content_length);
 extern bool soap_service_connection_send_payload(struct soap_service_connection_t *connection, struct netbuf *txnb);

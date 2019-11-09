@@ -21,7 +21,13 @@ typedef enum {
 	HTTP_SERVER_CONNECTION_METHOD_UNSUBSCRIBE,
 } http_server_connection_method_t;
 
-typedef bool (*http_server_service_probe_func_t)(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri);
+typedef enum {
+	HTTP_SERVER_PROBE_RESULT_NO_MATCH = 0,
+	HTTP_SERVER_PROBE_RESULT_MATCH,
+	HTTP_SERVER_PROBE_RESULT_CLOSE,
+} http_server_probe_result_t;
+
+typedef http_server_probe_result_t (*http_server_service_probe_func_t)(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri);
 typedef http_parser_error_t (*http_server_connection_http_event_func_t)(void *arg, http_parser_event_t event, struct netbuf *nb);
 typedef void (*http_server_connection_send_resume_func_t)(void *arg);
 typedef void (*http_server_connection_close_func_t)(void *arg);

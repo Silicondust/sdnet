@@ -34,6 +34,15 @@ time64_t unix_time_get_offset_from_native(void)
 	return unix_time() - _time64(NULL);
 }
 
+/* WARNING: unit_time_get_timespec does not use correction value */
+void unit_time_get_timespec(struct timespec64 *tp)
+{
+	struct _timespec64 native_tp;
+	_timespec64_get(&native_tp, TIME_UTC);
+	tp->tv_sec = native_tp.tv_sec;
+	tp->tv_nsec = native_tp.tv_nsec;
+}
+
 void unix_time_set(time64_t new_time)
 {
 	unix_time_ticks_sec_to_gmt_time = new_time - (GetTickCount64() / 1000);

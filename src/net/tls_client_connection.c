@@ -1470,12 +1470,13 @@ struct tls_client_connection_t *tls_client_connection_alloc(void)
 static void tls_client_load_certs_from_appfs_file(const char *filename, struct slist_t *certs)
 {
 	size_t file_length;
-	uint8_t *ptr = appfs_file_mmap(filename, "", &file_length);
-	if (!ptr) {
+	uint8_t *file_start = appfs_file_mmap(filename, "", &file_length);
+	if (!file_start) {
 		return;
 	}
 
-	uint8_t *end = ptr + file_length;
+	uint8_t *ptr = file_start;
+	uint8_t *end = file_start + file_length;
 	while (ptr < end) {
 		size_t cert_length = x509_certificate_import_length(ptr, end - ptr);
 		if (cert_length == 0) {
@@ -1484,7 +1485,7 @@ static void tls_client_load_certs_from_appfs_file(const char *filename, struct s
 
 		struct x509_certificate_t *cert = x509_certificate_import_no_copy(ptr, cert_length);
 		if (!cert) {
-			DEBUG_WARN("bad cert data");
+			DEBUG_WARN("bad cert data in cert at 0x%08x", (unsigned int)(ptr - file_start));
 			ptr += cert_length;
 			continue;
 		}

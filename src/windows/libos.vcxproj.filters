@@ -141,9 +141,6 @@
     <ClCompile Include="..\web\json_parser.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\web\json_parser_utils.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\web\url.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -276,7 +273,16 @@
     <ClCompile Include="..\net\tls_server_socket.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\web\xml_parser_utils.c">
+    <ClCompile Include="..\web\gunzip.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\nvlist.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\web\xml_process.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\web\json_process.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

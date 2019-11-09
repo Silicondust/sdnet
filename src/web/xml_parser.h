@@ -37,12 +37,10 @@ typedef xml_parser_error_t (*xml_parser_callback_t)(void *app_data, xml_parser_e
 extern struct xml_parser_t *xml_parser_alloc(xml_parser_callback_t callback, void *callback_arg);
 extern struct xml_parser_t *xml_parser_ref(struct xml_parser_t *xpi);
 extern ref_t xml_parser_deref(struct xml_parser_t *xpi);
-extern void xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb);
-extern void xml_parser_recv_str(struct xml_parser_t *xpi, const char *str);
+extern bool xml_parser_recv_netbuf(struct xml_parser_t *xpi, struct netbuf *nb);
+extern bool xml_parser_recv_mem(struct xml_parser_t *xpi, uint8_t *ptr, uint8_t *end);
+extern bool xml_parser_recv_str(struct xml_parser_t *xpi, const char *str);
 extern void xml_parser_reset(struct xml_parser_t *xpi);
-
-extern bool xml_parser_nb_to_str(char *str, char *end, struct netbuf *nb);
-extern bool xml_parser_path_apply(xml_parser_event_t xml_event, char *path, char *end, struct netbuf *nb);
 
 /* Internal */
 typedef enum {

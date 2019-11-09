@@ -33,17 +33,15 @@ struct json_parser_t;
 typedef json_parser_error_t (*json_parser_callback_t)(void *app_data, json_parser_event_t json_event, struct netbuf *nb);
 
 extern struct json_parser_t *json_parser_alloc(json_parser_callback_t callback, void *callback_arg);
-extern struct json_parser_t *json_parser_ref(struct json_parser_t *xpi);
-extern ref_t json_parser_deref(struct json_parser_t *xpi);
-extern void json_parser_recv_netbuf(struct json_parser_t *xpi, struct netbuf *nb);
-extern void json_parser_recv_str(struct json_parser_t *xpi, const char *str, size_t length);
-extern void json_parser_reset(struct json_parser_t *xpi);
-
-extern bool json_parser_nb_to_str(char *str, char *end, struct netbuf *nb);
-extern bool json_parser_path_apply(json_parser_event_t json_event, char *path, char *end, struct netbuf *nb);
+extern struct json_parser_t *json_parser_ref(struct json_parser_t *jpi);
+extern ref_t json_parser_deref(struct json_parser_t *jpi);
+extern bool json_parser_recv_netbuf(struct json_parser_t *jpi, struct netbuf *nb);
+extern bool json_parser_recv_mem(struct json_parser_t *jpi, uint8_t *ptr, uint8_t *end);
+extern bool json_parser_recv_str(struct json_parser_t *jpi, const char *str);
+extern void json_parser_reset(struct json_parser_t *jpi);
 
 /* Internal */
-typedef json_parser_error_t (*json_parser_parse_func_t)(struct json_parser_t *xpi, struct netbuf *nb);
+typedef json_parser_error_t (*json_parser_parse_func_t)(struct json_parser_t *jpi, struct netbuf *nb);
 
 struct json_parser_t {
 	json_parser_parse_func_t parse_func;
