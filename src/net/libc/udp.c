@@ -156,11 +156,10 @@ static void udp_socket_thread_recv(struct udp_socket *us)
 	netbuf_free(nb);
 }
 
-udp_error_t udp_socket_listen(struct udp_socket *us, struct ip_datalink_instance *link, ipv4_addr_t addr, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
+udp_error_t udp_socket_listen(struct udp_socket *us, ipv4_addr_t addr, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
 {
 	DEBUG_ASSERT(recv, "no recv callback specified");
 
-	us->link = link;
 	us->recv_callback = recv;
 	us->recv_icmp_callback = recv_icmp;
 	us->callback_inst = inst;

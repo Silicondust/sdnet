@@ -77,7 +77,7 @@ static void tcp_socket_thread_accept(struct tcp_socket *ts)
 	DEBUG_ASSERT(ts->accept_connection_sock == -1, "tcp accept/reject not called");
 }
 
-tcp_error_t tcp_socket_listen(struct tcp_socket *ts, struct ip_datalink_instance *link, ipv4_addr_t addr, uint16_t port, tcp_connect_callback_t connect, void *inst)
+tcp_error_t tcp_socket_listen(struct tcp_socket *ts, ipv4_addr_t addr, uint16_t port, tcp_connect_callback_t connect, void *inst)
 {
 	DEBUG_ASSERT(connect, "no connect callback specified");
 

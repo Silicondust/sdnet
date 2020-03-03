@@ -8,11 +8,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+extern char base64_encode_table[];
+extern char base64url_encode_table[];
+
 extern size_t base64_encode_length(size_t raw_size);
-extern void base64_encode_mem_to_str(uint8_t *raw, size_t raw_size, char *output);
-extern void base64_encode_netbuf_to_str(struct netbuf *raw_nb, size_t raw_size, char *output);
-extern bool base64_encode_mem_to_netbuf(uint8_t *raw, size_t raw_size, struct netbuf *output_nb);
-extern bool base64_encode_netbuf_to_netbuf2(struct netbuf *raw_nb, size_t raw_size, struct netbuf *output_nb);
+extern void base64_encode_mem_to_str(uint8_t *raw, size_t raw_size, char *output, char *encode_table);
+extern void base64_encode_netbuf_to_str(struct netbuf *raw_nb, size_t raw_size, char *output, char *encode_table);
+extern bool base64_encode_mem_to_netbuf(uint8_t *raw, size_t raw_size, struct netbuf *output_nb, char *encode_table);
+extern bool base64_encode_netbuf_to_netbuf2(struct netbuf *raw_nb, size_t raw_size, struct netbuf *output_nb, char *encode_table);
 
 extern size_t base64_decode_max_length(size_t encoded_size);
 extern size_t base64_decode_str_max_length(const char *encoded_data);

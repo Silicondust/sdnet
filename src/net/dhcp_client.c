@@ -146,7 +146,7 @@ static void dhcp_client_send(struct dhcp_client_t *dc, uint8_t message_type, ipv
 	netbuf_fwd_fill_u8(txnb, netbuf_get_remaining(txnb), 0);
 
 	netbuf_set_pos_to_start(txnb);
-	udp_dhcp_socket_send_netbuf(dc->sock, 0xFFFFFFFF, DHCP_SERVER_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+	udp_dhcp_socket_send_netbuf(dc->sock, dc->idi, 0xFFFFFFFF, DHCP_SERVER_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 

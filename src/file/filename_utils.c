@@ -138,31 +138,40 @@ void filename_inplace_fix_filename_str_without_path(char *str)
 	}
 }
 
-char *filename_strdup_without_path(const char *str, uint8_t pkg, uint8_t type)
+const char *filename_without_path(const char *input)
 {
-	const char *ptr = strrchr(str, FILENAME_DIR_SEPARATOR_CHAR);
-	if (ptr) {
-		ptr++;
-	} else {
-		ptr = str;
+	const char *ptr = strrchr(input, FILENAME_DIR_SEPARATOR_CHAR);
+	if (!ptr) {
+		return input;
 	}
+	return ptr + 1;
+}
 
+bool filename_strcpy_without_path(char *output, char *end, const char *input)
+{
+	const char *ptr = filename_without_path(input);
+	return sprintf_custom(output, end, "%s", ptr);
+}
+
+char *filename_strdup_without_path(const char *input, uint8_t pkg, uint8_t type)
+{
+	const char *ptr = filename_without_path(input);
 	return heap_strdup(ptr, pkg, type);
 }
 
-char *filename_strdup_append_slash(const char *str, uint8_t pkg, uint8_t type)
+char *filename_strdup_append_slash(const char *input, uint8_t pkg, uint8_t type)
 {
-	size_t length = strlen(str);
+	size_t length = strlen(input);
 	if (length == 0) {
 		return NULL;
 	}
 
-	if (str[length - 1] == FILENAME_DIR_SEPARATOR_CHAR) {
+	if (input[length - 1] == FILENAME_DIR_SEPARATOR_CHAR) {
 		length--;
 	}
 
 	char *result = (char *)heap_alloc(length + 2, pkg, type);
-	memcpy(result, str, length);
+	memcpy(result, input, length);
 	result[length] = FILENAME_DIR_SEPARATOR_CHAR;
 	result[length + 1] = 0;
 	return result;

@@ -32,7 +32,7 @@ typedef http_parser_error_t (*http_server_connection_http_event_func_t)(void *ar
 typedef void (*http_server_connection_send_resume_func_t)(void *arg);
 typedef void (*http_server_connection_close_func_t)(void *arg);
 
-extern struct http_server_t *http_server_instance_alloc(struct ip_datalink_instance *idi, uint16_t port);
+extern struct http_server_t *http_server_instance_alloc(uint16_t port);
 extern struct http_server_service_t *http_server_register_service(struct http_server_t *http_server, http_server_service_probe_func_t probe, void *callback_arg);
 extern void http_server_network_reset(struct http_server_t *http_server);
 extern uint16_t http_server_get_port(struct http_server_t *http_server);

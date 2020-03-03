@@ -348,7 +348,7 @@ static bool tls_client_connection_record_recv_decrypt(struct tls_client_connecti
 	netbuf_set_pos_to_end(nb);
 	netbuf_retreat_pos(nb, 1);
 	uint8_t padding_value = netbuf_fwd_read_u8(nb);
-	size_t padding_length = padding_value + 1;
+	size_t padding_length = (size_t)padding_value + 1;
 
 	if (padding_length >= netbuf_get_preceding(nb)) {
 		DEBUG_WARN("bad padding");
@@ -1241,7 +1241,7 @@ static size_t tls_client_connection_recv_required_length(struct netbuf *nb)
 	}
 
 	netbuf_advance_pos(nb, 3);
-	size_t length = netbuf_fwd_read_u16(nb) + 5;
+	size_t length = (size_t)netbuf_fwd_read_u16(nb) + 5;
 	netbuf_retreat_pos(nb, 5);
 	return length;
 }

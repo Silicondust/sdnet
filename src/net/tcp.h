@@ -20,6 +20,11 @@ struct tcp_socket;
 struct tcp_connection;
 struct file_t;
 
+struct tcp_addr_port_t {
+	ipv4_addr_t addr;
+	uint16_t port;
+};
+
 typedef int8_t tcp_error_t;
 typedef uint8_t tcp_close_reason_t;
 typedef void (*tcp_connect_callback_t)(void *inst);
@@ -27,6 +32,11 @@ typedef void (*tcp_establish_callback_t)(void *inst);
 typedef void (*tcp_recv_callback_t)(void *inst, struct netbuf *nb);
 typedef void (*tcp_send_resume_callback_t)(void *inst);
 typedef void (*tcp_close_callback_t)(void *inst, tcp_close_reason_t reason);
+
+static inline bool tcp_addr_port_compare(struct tcp_addr_port_t *a, struct tcp_addr_port_t *b)
+{
+	return (a->addr == b->addr) && (a->port == b->port);
+}
 
 extern struct tcp_connection *tcp_connection_alloc(void);
 extern struct tcp_connection *tcp_connection_ref(struct tcp_connection *tc);
@@ -47,7 +57,7 @@ extern ipv4_addr_t tcp_connection_get_remote_addr(struct tcp_connection *tc);
 extern uint16_t tcp_connection_get_remote_port(struct tcp_connection *tc);
 
 extern struct tcp_socket *tcp_socket_alloc(void);
-extern tcp_error_t tcp_socket_listen(struct tcp_socket *ts, struct ip_datalink_instance *link, ipv4_addr_t addr, uint16_t port, tcp_connect_callback_t connect, void *inst);
+extern tcp_error_t tcp_socket_listen(struct tcp_socket *ts, ipv4_addr_t addr, uint16_t port, tcp_connect_callback_t connect, void *inst);
 extern void tcp_socket_accept(struct tcp_socket *ts, struct tcp_connection *tc, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_send_resume_callback_t send_resume, tcp_close_callback_t close, void *inst);
 extern void tcp_socket_reject(struct tcp_socket *ts);
 extern uint16_t tcp_socket_get_port(struct tcp_socket *ts);

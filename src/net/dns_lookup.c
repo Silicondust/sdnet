@@ -504,5 +504,5 @@ void dns_manager_init(void)
 	}
 
 	oneshot_init(&dns_manager.timer);
-	udp_socket_listen(dns_manager.sock, NULL, 0, 0, dns_manager_recv, NULL, NULL);
+	udp_socket_listen(dns_manager.sock, 0, 0, dns_manager_recv, NULL, NULL);
 }

@@ -60,7 +60,7 @@ struct file_t *file_open_existing(const char *path)
 size_t file_read(struct file_t *file, void *buffer, size_t length)
 {
 	DWORD actual = 0;
-	ReadFile(file->fp, buffer, (DWORD)length, &actual, NULL);
+	(void)ReadFile(file->fp, buffer, (DWORD)length, &actual, NULL);
 	return actual;
 }
 

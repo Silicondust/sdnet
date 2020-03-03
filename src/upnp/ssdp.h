@@ -12,7 +12,7 @@
 #define SSDP_SERVICE_PORT 1900
 #define SSDP_MULTICAST_IP 0xEFFFFFFA
 
-extern void ssdp_manager_init(struct ip_datalink_instance *idi, uint16_t webserver_port);
+extern void ssdp_manager_init(uint16_t webserver_port);
 extern void ssdp_manager_start(ipv4_addr_t local_ip);
 extern void ssdp_manager_stop(void);
 
@@ -91,7 +91,6 @@ struct ssdp_client_manager_t {
 };
 
 struct ssdp_manager_t {
-	struct ip_datalink_instance *idi;
 	struct udp_socket *sock;
 	struct http_parser_t *http_parser;
 	ipv4_addr_t local_ip;

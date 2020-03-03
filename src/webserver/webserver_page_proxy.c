@@ -143,7 +143,7 @@ static void webserver_page_server_dns_callback(void *arg, ipv4_addr_t ip)
 		return;
 	}
 
-	if (tcp_connection_connect(page_state->server_conn, stack_idi, ip, page_state->server_port, 0, 0, webserver_page_proxy_server_recv, NULL, NULL, webserver_page_proxy_server_est, webserver_page_proxy_server_close, page_state) != TCP_OK) {
+	if (tcp_connection_connect(page_state->server_conn, ip, page_state->server_port, 0, 0, webserver_page_proxy_server_recv, NULL, NULL, webserver_page_proxy_server_est, webserver_page_proxy_server_close, page_state) != TCP_OK) {
 		DEBUG_ERROR("connect failed");
 		tcp_connection_deref(page_state->server_conn);
 		page_state->server_conn = NULL;

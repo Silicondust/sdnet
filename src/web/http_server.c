@@ -298,7 +298,7 @@ struct http_server_service_t *http_server_register_service(struct http_server_t 
 	return service;
 }
 
-struct http_server_t *http_server_instance_alloc(struct ip_datalink_instance *idi, uint16_t port)
+struct http_server_t *http_server_instance_alloc(uint16_t port)
 {
 	struct http_server_t *http_server = (struct http_server_t *)heap_alloc_and_zero(sizeof(struct http_server_t), PKG_OS, MEM_TYPE_OS_HTTP_SERVER);
 	if (!http_server) {
@@ -315,7 +315,7 @@ struct http_server_t *http_server_instance_alloc(struct ip_datalink_instance *id
 		return NULL;
 	}
 
-	if (tcp_socket_listen(http_server->listen_sock, idi, 0, port, http_server_sock_accept, http_server) != TCP_OK) {
+	if (tcp_socket_listen(http_server->listen_sock, 0, port, http_server_sock_accept, http_server) != TCP_OK) {
 		DEBUG_ERROR("sock failed");
 		heap_free(http_server);
 		return NULL;

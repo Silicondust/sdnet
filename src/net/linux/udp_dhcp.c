@@ -42,13 +42,12 @@ static uint16_t udp_dhcp_socket_checksum(void *addr, int count)
 	return ~sum;
 }
 
-udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
+udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_datalink_instance *link, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
 {
-	struct ip_datalink_instance *link = us->link;
+	DEBUG_ASSERT(link, "no datalink instance");
+
 	ipv4_addr_t src_addr = 0;
 	uint16_t src_port = us->port;
-
-	DEBUG_ASSERT(us->link, "no datalink instance");
 
 	if (ip_datalink_get_ipaddr(link) != 0) {
 		return udp_socket_send_netbuf(us, dest_addr, dest_port, ttl, tos, nb);
@@ -134,7 +133,7 @@ udp_error_t udp_dhcp_socket_listen(struct udp_socket *us, struct ip_datalink_ins
 		DEBUG_WARN("setsockopt SO_BINDTODEVICE error %d", errno);
 	}
 
-	return udp_socket_listen(us, link, addr, port, recv, recv_icmp, inst);
+	return udp_socket_listen(us, addr, port, recv, recv_icmp, inst);
 }
 
 struct udp_socket *udp_dhcp_socket_alloc(void)

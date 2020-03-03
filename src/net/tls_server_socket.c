@@ -46,12 +46,12 @@ uint16_t tls_server_socket_get_port(struct tls_server_socket_t *tls_sock)
 	return tcp_socket_get_port(tls_sock->sock);
 }
 
-bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, struct ip_datalink_instance *link, ipv4_addr_t addr, uint16_t port, tls_server_connect_callback_t connect, void *callback_arg)
+bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, ipv4_addr_t addr, uint16_t port, tls_server_connect_callback_t connect, void *callback_arg)
 {
 	tls_sock->connect_callback = connect;
 	tls_sock->callback_arg = callback_arg;
 
-	if (tcp_socket_listen(tls_sock->sock, link, addr, port, tls_server_socket_tcp_connect_callback, tls_sock) != TCP_OK) {
+	if (tcp_socket_listen(tls_sock->sock, addr, port, tls_server_socket_tcp_connect_callback, tls_sock) != TCP_OK) {
 		return false;
 	}
 

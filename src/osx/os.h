@@ -50,6 +50,7 @@
 #include <net/igmp.h>
 #include <net/dhcp_client.h>
 #include <net/dns_lookup.h>
+#include <net/mdns_responder.h>
 #include <net/udp.h>
 #include <net/tcp.h>
 #include <net/tls_prf.h>
@@ -77,6 +78,7 @@
 #include <web/http_server.h>
 #include <webclient/webclient.h>
 #include <webserver/webserver.h>
+#include <websocket/websocket_service.h>
 #include <upnp/upnp.h>
 #include <upnp/ssdp.h>
 #include <upnp/soap.h>

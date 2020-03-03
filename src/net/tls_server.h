@@ -29,7 +29,7 @@ extern ipv4_addr_t tls_server_connection_get_local_addr(struct tls_server_connec
 extern ipv4_addr_t tls_server_connection_get_remote_addr(struct tls_server_connection_t *tls_conn);
 
 extern struct tls_server_socket_t *tls_server_socket_alloc(void);
-extern bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, struct ip_datalink_instance *link, ipv4_addr_t addr, uint16_t port, tls_server_connect_callback_t connect, void *callback_arg);
+extern bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, ipv4_addr_t addr, uint16_t port, tls_server_connect_callback_t connect, void *callback_arg);
 extern void tls_server_socket_accept(struct tls_server_socket_t *tls_sock, struct tls_server_connection_t *tls_conn, tls_server_establish_callback_t est, tls_server_recv_callback_t recv, tls_server_send_resume_callback_t send_resume, tls_server_close_callback_t close, void *callback_arg);
 extern void tls_server_socket_reject(struct tls_server_socket_t *tls_sock);
 extern uint16_t tls_server_socket_get_port(struct tls_server_socket_t *tls_sock);

@@ -285,5 +285,8 @@
     <ClCompile Include="..\web\json_process.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\websocket\websocket_service.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -65,7 +65,7 @@ bool gena_message_add_property_nb_encode_base64(struct netbuf *notify_nb, const 
 
 	bool success = true;
 	success &= netbuf_sprintf(notify_nb, "<e:property><%s>", name);
-	success &= base64_encode_netbuf_to_netbuf2(val_nb, netbuf_get_remaining(val_nb), notify_nb);
+	success &= base64_encode_netbuf_to_netbuf2(val_nb, netbuf_get_remaining(val_nb), notify_nb, base64_encode_table);
 	success &= netbuf_sprintf(notify_nb, "</%s></e:property>", name);
 	return success;
 }

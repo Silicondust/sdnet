@@ -18,6 +18,7 @@
 THIS_FILE("http_result");
 
 const char http_result_continue[] = "100 Continue";
+const char http_result_web_socket_protocol_handshake[] = "101 Web Socket Protocol Handshake";
 const char http_result_ok[] = "200 OK";
 const char http_result_partial_content[] = "206 Partial Content";
 const char http_result_bad_request[] = "400 Bad Request";

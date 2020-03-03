@@ -15,7 +15,6 @@ struct netbuf {
 	uint8_t *start;
 	uint8_t *end;
 	uint8_t *pos;
-	uint32_t flags;
 	uint32_t ext;
 };
 

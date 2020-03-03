@@ -85,7 +85,7 @@ udp_error_t udp_socket_send_netbuf(struct udp_socket *us, ipv4_addr_t dest_addr,
 	return UDP_OK;
 }
 
-static struct udp_multipath_t *udp_socket_multipath_find_create(struct udp_socket *us, struct ip_datalink_instance *idi, ipv4_addr_t addr)
+static struct udp_multipath_t *udp_socket_multipath_find_create(struct udp_socket *us, ipv4_addr_t addr)
 {
 	struct udp_multipath_t *ump = slist_get_head(struct udp_multipath_t, &us->multipath_list);
 	while (ump) {
@@ -108,23 +108,31 @@ static struct udp_multipath_t *udp_socket_multipath_find_create(struct udp_socke
 	}
 
 	ump->addr = addr;
-	ump->bind_ok = (udp_socket_listen(ump->us, idi, addr, us->port, us->recv_callback, us->recv_icmp_callback, us->callback_inst) == UDP_OK);
+	ump->bind_ok = (udp_socket_listen(ump->us, addr, us->port, us->recv_callback, us->recv_icmp_callback, us->callback_inst) == UDP_OK);
 
 	slist_attach_head(struct udp_multipath_t, &us->multipath_list, ump);
 	return ump;
 }
 
-udp_error_t udp_socket_send_multipath(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
+udp_error_t udp_socket_send_multipath(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint8_t ttl, uint8_t tos, struct netbuf *nb)
 {
+	if (src_addr != 0) {
+		struct udp_multipath_t *ump = udp_socket_multipath_find_create(us, src_addr);
+		if (!ump || !ump->bind_ok) {
+			return UDP_ERROR_FAILED;
+		}
+
+		return udp_socket_send_netbuf(ump->us, dest_addr, dest_port, ttl, tos, nb);
+	}
+
 	bool global_broadcast = (dest_addr == 0xFFFFFFFF);
 	bool filter = !global_broadcast && !ip_addr_is_multicast(dest_addr);
-
 	udp_error_t result = UDP_ERROR_FAILED;
 
 	struct ip_datalink_instance *idi = ip_datalink_manager_get_head();
 	while (idi) {
-		ipv4_addr_t addr = ip_datalink_get_ipaddr(idi);
-		if (addr == 0) {
+		src_addr = ip_datalink_get_ipaddr(idi);
+		if (src_addr == 0) {
 			idi = slist_get_next(struct ip_datalink_instance, idi);
 			continue;
 		}
@@ -135,13 +143,13 @@ udp_error_t udp_socket_send_multipath(struct udp_socket *us, ipv4_addr_t dest_ad
 				idi = slist_get_next(struct ip_datalink_instance, idi);
 				continue;
 			}
-			if ((dest_addr & subnet_mask) != (addr & subnet_mask)) {
+			if ((dest_addr & subnet_mask) != (src_addr & subnet_mask)) {
 				idi = slist_get_next(struct ip_datalink_instance, idi);
 				continue;
 			}
 		}
 
-		struct udp_multipath_t *ump = udp_socket_multipath_find_create(us, idi, addr);
+		struct udp_multipath_t *ump = udp_socket_multipath_find_create(us, src_addr);
 		if (!ump || !ump->bind_ok) {
 			idi = slist_get_next(struct ip_datalink_instance, idi);
 			continue;
@@ -197,7 +205,7 @@ static void udp_socket_thread_recv(struct udp_socket *us)
 	netbuf_free(nb);
 }
 
-udp_error_t udp_socket_listen(struct udp_socket *us, struct ip_datalink_instance *link, ipv4_addr_t addr, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
+udp_error_t udp_socket_listen(struct udp_socket *us, ipv4_addr_t addr, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
 {
 	DEBUG_ASSERT(recv, "no recv callback specified");
 

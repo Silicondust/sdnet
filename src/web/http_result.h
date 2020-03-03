@@ -9,6 +9,7 @@
  */
 
 extern const char http_result_continue[];
+extern const char http_result_web_socket_protocol_handshake[];
 extern const char http_result_ok[];
 extern const char http_result_partial_content[];
 extern const char http_result_bad_request[];

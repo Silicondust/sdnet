@@ -87,9 +87,8 @@ void ssdp_manager_start(ipv4_addr_t local_ip)
 	ssdp_client_manager_start();
 }
 
-void ssdp_manager_init(struct ip_datalink_instance *idi, uint16_t webserver_port)
+void ssdp_manager_init(uint16_t webserver_port)
 {
-	ssdp_manager.idi = idi;
 	ssdp_manager.webserver_port = webserver_port;
 
 	ssdp_service_manager_init();
@@ -107,7 +106,7 @@ void ssdp_manager_init(struct ip_datalink_instance *idi, uint16_t webserver_port
 		return;
 	}
 
-	if (udp_socket_listen(ssdp_manager.sock, idi, 0, SSDP_SERVICE_PORT, ssdp_manager_sock_recv, NULL, NULL) != UDP_OK) {
+	if (udp_socket_listen(ssdp_manager.sock, 0, SSDP_SERVICE_PORT, ssdp_manager_sock_recv, NULL, NULL) != UDP_OK) {
 		DEBUG_ERROR("failed to listen on socket");
 		return;
 	}
