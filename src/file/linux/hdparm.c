@@ -39,8 +39,16 @@ THIS_FILE("hdparm");
 #define ATA_USING_LBA (1 << 6)
 
 #define ATA_OP_SMART_READ_DATA 0xb0
-#define ATA_OP_SETIDLE 0xe3
+#define ATA_OP_STANDBY 0xe2
+#define ATA_OP_IDLE 0xe3
 #define ATA_OP_IDENTIFY 0xec
+#define ATA_OP_SET_FEATURES 0xef
+
+#define ATA_SET_FEATURES_SUBOP_APM 0x05
+
+#define ATA_SMART_READ_DATA_FEATURE_READ_VALUES 0xD0
+#define ATA_SMART_READ_DATA_FEATURE_READ_THRESHOLDS 0xD1
+#define ATA_SMART_READ_DATA_FEATURE_STATUS 0xDA
 
 typedef bool (*hdparm_smart_id_get_value_str_func_t)(char *ptr, char *end, uint8_t raw[6]);
 
@@ -64,6 +72,7 @@ static struct hdparm_smart_id_decode_t hdparm_smart_id_decode_table[] =
 	{7, "Seek_Error_Rate", hdparm_smart_id_get_value_str_raw48},
 	{9, "Power_On_Hours", hdparm_smart_id_get_value_str_raw24},
 	{10, "Spin_Retry_Count", hdparm_smart_id_get_value_str_raw48},
+	{11, "Calibration_Retry_Count", hdparm_smart_id_get_value_str_raw48},
 	{12, "Power_Cycle_Count", hdparm_smart_id_get_value_str_raw48},
 	{184, "End-to-End_Error", hdparm_smart_id_get_value_str_raw48},
 	{187, "Reported_Uncorrect", hdparm_smart_id_get_value_str_raw48},
@@ -74,9 +83,12 @@ static struct hdparm_smart_id_decode_t hdparm_smart_id_decode_table[] =
 	{192, "Power-Off_Retract_Count", hdparm_smart_id_get_value_str_raw48},
 	{193, "Load_Cycle_Count", hdparm_smart_id_get_value_str_raw48},
 	{194, "Temperature_Celsius", hdparm_smart_id_get_value_str_temp_min_max},
+	{196, "Reallocated_Event_Count", hdparm_smart_id_get_value_str_raw16},
 	{197, "Current_Pending_Sector", hdparm_smart_id_get_value_str_raw48},
 	{198, "Offline_Uncorrectable", hdparm_smart_id_get_value_str_raw48},
 	{199, "UDMA_CRC_Error_Count", hdparm_smart_id_get_value_str_raw48},
+	{200, "Multi_Zone_Error_Rate", hdparm_smart_id_get_value_str_raw48},
+	{206, "Flying_Height", hdparm_smart_id_get_value_str_raw48},
 	{240, "Head_Flying_Hours", hdparm_smart_id_get_value_str_raw24},
 	{241, "Total_LBAs_Written", hdparm_smart_id_get_value_str_raw48},
 	{242, "Total_LBAs_Read", hdparm_smart_id_get_value_str_raw48},
@@ -135,7 +147,7 @@ bool hdparm_smart_id_get_value_str(struct hdparm_smart_id_decode_t *decode, char
 	return decode->get_value_str_func(ptr, end, raw);
 }
 
-static bool hdparm_ata_cmd_non_data(const char *dev_name, uint8_t ata_op, uint8_t ata_val)
+static bool hdparm_ata_cmd_non_data(const char *dev_name, uint8_t cmd[16])
 {
 	struct file_t *dev_file = file_open_existing(dev_name);
 	if (!dev_file) {
@@ -146,21 +158,12 @@ static bool hdparm_ata_cmd_non_data(const char *dev_name, uint8_t ata_op, uint8_
 	struct sg_io_hdr hdr;
 	memset(&hdr, 0, sizeof(hdr));
 
-	uint8_t cmd[16];
-	memset(cmd, 0, sizeof(cmd));
-	cmd[0] = SG_ATA_16;
-	cmd[1] = SG_ATA_PROTO_NON_DATA;
-	cmd[2] = SG_CDB2_CHECK_COND;
-	cmd[6] = ata_val;
-	cmd[13] = ATA_USING_LBA;
-	cmd[14] = ata_op;
-
 	uint8_t sb[32];
 	memset(sb, 0, sizeof(sb));
 
 	hdr.interface_id = 'S';
 	hdr.dxfer_direction = SG_DXFER_NONE;
-	hdr.cmd_len = sizeof(cmd);
+	hdr.cmd_len = 16;
 	hdr.mx_sb_len = sizeof(sb);
 	hdr.cmdp = cmd;
 	hdr.sbp = sb;
@@ -301,7 +304,7 @@ bool hdparm_get_identify(const char *dev_name, struct hdparm_identify_t *identif
 bool hdparm_get_smart(const char *dev_name, struct hdparm_smart_t *smart)
 {
 	uint8_t data[512];
-	if (!hdparm_ata_cmd_pio_in(dev_name, ATA_OP_SMART_READ_DATA, 0xD0, 0x00C24F00, data)) {
+	if (!hdparm_ata_cmd_pio_in(dev_name, ATA_OP_SMART_READ_DATA, ATA_SMART_READ_DATA_FEATURE_READ_VALUES, 0x00C24F00, data)) {
 		DEBUG_ERROR("ATA_OP_SMART_READ_DATA failed for %s", dev_name);
 		return false;
 	}
@@ -333,7 +336,7 @@ bool hdparm_get_smart(const char *dev_name, struct hdparm_smart_t *smart)
 		ptr += 12;
 	}
 
-	if (!hdparm_ata_cmd_pio_in(dev_name, ATA_OP_SMART_READ_DATA, 0xD1, 0x00C24F00, data)) {
+	if (!hdparm_ata_cmd_pio_in(dev_name, ATA_OP_SMART_READ_DATA, ATA_SMART_READ_DATA_FEATURE_READ_THRESHOLDS, 0x00C24F00, data)) {
 		DEBUG_ERROR("ATA_OP_SMART_READ_DATA failed for %s", dev_name);
 		return false;
 	}
@@ -387,10 +390,53 @@ bool hdparm_set_standby_time(const char *dev_name, uint32_t seconds)
 		value = 240;
 	}
 
-	if (!hdparm_ata_cmd_non_data(dev_name, ATA_OP_SETIDLE, (uint8_t)value)) {
-		DEBUG_ERROR("failed to set standby time of %s", dev_name);
+	uint8_t cmd[16];
+	memset(cmd, 0, sizeof(cmd));
+	cmd[0] = SG_ATA_16;
+	cmd[1] = SG_ATA_PROTO_NON_DATA;
+	cmd[2] = SG_CDB2_CHECK_COND;
+	cmd[6] = value;
+	cmd[13] = ATA_USING_LBA;
+	cmd[14] = ATA_OP_IDLE;
+
+	bool ret1 = hdparm_ata_cmd_non_data(dev_name, cmd);
+	if (!ret1) {
+		DEBUG_WARN("failed to set idle time of %s", dev_name);
+	}
+
+	memset(cmd, 0, sizeof(cmd));
+	cmd[0] = SG_ATA_16;
+	cmd[1] = SG_ATA_PROTO_NON_DATA;
+	cmd[2] = SG_CDB2_CHECK_COND;
+	cmd[6] = value;
+	cmd[13] = ATA_USING_LBA;
+	cmd[14] = ATA_OP_STANDBY;
+
+	bool ret2 = hdparm_ata_cmd_non_data(dev_name, cmd);
+	if (!ret2) {
+		DEBUG_WARN("failed to set standby time of %s", dev_name);
+	}
+
+	return ret1 || ret2;
+}
+
+bool hdparm_set_advanced_power_management(const char *dev_name, uint8_t level)
+{
+	uint8_t cmd[16];
+	memset(cmd, 0, sizeof(cmd));
+	cmd[0] = SG_ATA_16;
+	cmd[1] = SG_ATA_PROTO_NON_DATA;
+	cmd[2] = SG_CDB2_CHECK_COND;
+	cmd[4] = ATA_SET_FEATURES_SUBOP_APM;
+	cmd[6] = level;
+	cmd[13] = ATA_USING_LBA;
+	cmd[14] = ATA_OP_SET_FEATURES;
+
+	if (!hdparm_ata_cmd_non_data(dev_name, cmd)) {
+		DEBUG_ERROR("failed to set advanced power management level of %s", dev_name);
 		return false;
 	}
 
 	return true;
 }
+

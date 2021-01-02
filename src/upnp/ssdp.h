@@ -13,8 +13,8 @@
 #define SSDP_MULTICAST_IP 0xEFFFFFFA
 
 extern void ssdp_manager_init(uint16_t webserver_port);
-extern void ssdp_manager_start(ipv4_addr_t local_ip);
-extern void ssdp_manager_stop(void);
+extern void ssdp_manager_network_start(void);
+extern void ssdp_manager_network_stop(void);
 
 struct ssdp_service_t;
 extern const char ssdp_service_root_device_urn[];
@@ -93,22 +93,22 @@ struct ssdp_client_manager_t {
 struct ssdp_manager_t {
 	struct udp_socket *sock;
 	struct http_parser_t *http_parser;
-	ipv4_addr_t local_ip;
 	uint16_t webserver_port;
+	bool running;
 	ssdp_manager_recv_complete_func_t recv_complete;
 };
 
 extern struct ssdp_manager_t ssdp_manager;
 
 extern void ssdp_service_manager_init(void);
-extern void ssdp_service_manager_start(void);
-extern void ssdp_service_manager_stop(void);
+extern void ssdp_service_manager_network_start(void);
+extern void ssdp_service_manager_network_stop(void);
 extern void ssdp_service_manager_msearch_recv_complete(ipv4_addr_t remote_ip, uint16_t remote_port);
 extern const struct http_parser_tag_lookup_t ssdp_service_manager_msearch_http_tag_list[];
 
 extern void ssdp_client_manager_init(void);
-extern void ssdp_client_manager_start(void);
-extern void ssdp_client_manager_stop(void);
+extern void ssdp_client_manager_network_start(void);
+extern void ssdp_client_manager_network_stop(void);
 extern void ssdp_client_manager_notify_recv_complete(ipv4_addr_t remote_ip, uint16_t remote_port);
 extern void ssdp_client_manager_response_recv_complete(ipv4_addr_t remote_ip, uint16_t remote_port);
 extern const struct http_parser_tag_lookup_t ssdp_client_manager_notify_http_tag_list[];

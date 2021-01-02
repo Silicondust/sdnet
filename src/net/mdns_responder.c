@@ -307,5 +307,5 @@ void mdns_responder_init(void)
 	mdns_responder.sock = udp_socket_alloc();
 	udp_socket_listen(mdns_responder.sock, 0, MDNS_PORT, mdns_responder_recv, NULL, NULL);
 
-	igmp_manager_join_group(MDNS_MULTICAST_IP);
+	igmp_manager_join_group(mdns_responder.sock, MDNS_MULTICAST_IP);
 }

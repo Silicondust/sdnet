@@ -33,11 +33,11 @@ void ssdp_client_manager_response_recv_complete(ipv4_addr_t remote_ip, uint16_t 
 {
 }
 
-void ssdp_client_manager_stop(void)
+void ssdp_client_manager_network_stop(void)
 {
 }
 
-void ssdp_client_manager_start(void)
+void ssdp_client_manager_network_start(void)
 {
 }
 

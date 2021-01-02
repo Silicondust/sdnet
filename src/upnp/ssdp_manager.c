@@ -68,23 +68,27 @@ static void ssdp_manager_sock_recv(void *inst, ipv4_addr_t src_addr, uint16_t sr
 	}
 }
 
-void ssdp_manager_stop(void)
+void ssdp_manager_network_stop(void)
 {
-	ssdp_manager.local_ip = 0;
-	ssdp_service_manager_stop();
-	ssdp_client_manager_stop();
-}
-
-void ssdp_manager_start(ipv4_addr_t local_ip)
-{
-	if (ssdp_manager.local_ip != 0) {
-		ssdp_service_manager_stop();
-		ssdp_client_manager_stop();
+	if (!ssdp_manager.running) {
+		return;
 	}
 
-	ssdp_manager.local_ip = local_ip;
-	ssdp_service_manager_start();
-	ssdp_client_manager_start();
+	ssdp_manager.running = false;
+	ssdp_service_manager_network_stop();
+	ssdp_client_manager_network_stop();
+}
+
+void ssdp_manager_network_start(void)
+{
+	if (ssdp_manager.running) {
+		DEBUG_ASSERT(1, "already running");
+		return;
+	}
+
+	ssdp_manager.running = true;
+	ssdp_service_manager_network_start();
+	ssdp_client_manager_network_start();
 }
 
 void ssdp_manager_init(uint16_t webserver_port)
@@ -111,5 +115,5 @@ void ssdp_manager_init(uint16_t webserver_port)
 		return;
 	}
 
-	igmp_manager_join_group(SSDP_MULTICAST_IP);
+	igmp_manager_join_group(ssdp_manager.sock, SSDP_MULTICAST_IP);
 }

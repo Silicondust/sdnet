@@ -77,6 +77,24 @@ bool str_nb_to_str(char *out, char *end, struct netbuf *nb)
 	return success;
 }
 
+void str_to_upper(char *str)
+{
+	char *ptr = str;
+
+	while (1) {
+		char c = *ptr;
+		if (c == 0) {
+			return;
+		}
+
+		if ((c >= 'a') && (c <= 'z')) {
+			*ptr = c - 'a' + 'A';
+		}
+
+		ptr++;
+	}
+}
+
 char *str_trim_whitespace(char *str)
 {
 	while (1) {
@@ -117,6 +135,25 @@ int strprefixcmp(const char *str, const char *prefix)
 		int ret = a - b;
 		if (ret != 0) {
 			return ret;
+		}
+	}
+}
+
+int strprefixcasecmp(const char *str, const char *prefix)
+{
+	while (1) {
+		char b = *prefix++;
+		if (b == 0) {
+			return 0;
+		}
+
+		char a = *str++;
+		int ret = a - b;
+		if (ret != 0) {
+			ret = tolower(a) - tolower(b);
+			if (ret != 0) {
+				return ret;
+			}
 		}
 	}
 }

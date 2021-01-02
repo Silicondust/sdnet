@@ -18,32 +18,32 @@
 
 THIS_FILE("igmp");
 
-#define IGMP_MANAGER_MAX_ADDR_COUNT 4
+struct igmp_entry_t {
+	struct slist_prefix_t slist_prefix;
+	int sock;
+	ipv4_addr_t addr;
+};
 
 struct igmp_manager_t {
-	ipv4_addr_t addr_list[IGMP_MANAGER_MAX_ADDR_COUNT];
-	uint8_t addr_count;
+	struct slist_t list;
 	bool active;
-	int igmp_sock;
 };
 
 static struct igmp_manager_t igmp_manager;
 
-void igmp_manager_join_group(ipv4_addr_t addr)
+void igmp_manager_join_group(struct udp_socket *us, ipv4_addr_t addr)
 {
 	DEBUG_ASSERT(!igmp_manager.active, "igmp join when igmp active");
 
-	ipv4_addr_t *p = igmp_manager.addr_list;
-	for (uint8_t index = 0; index < igmp_manager.addr_count; index++) {
-		if (*p++ == addr) {
-			return;
-		}
+	struct igmp_entry_t *entry = (struct igmp_entry_t *)heap_alloc_and_zero(sizeof(struct igmp_entry_t), PKG_OS, MEM_TYPE_OS_IGMP_ENTRY);
+	if (!entry) {
+		return;
 	}
 
-	DEBUG_ASSERT(igmp_manager.addr_count < IGMP_MANAGER_MAX_ADDR_COUNT, "too many igmp addrs");
+	entry->sock = us->sock;
+	entry->addr = addr;
 
-	*p = addr;
-	igmp_manager.addr_count++;
+	slist_attach_head(struct igmp_entry_t, &igmp_manager.list, entry);
 }
 
 void igmp_manager_network_stop(void)
@@ -54,14 +54,17 @@ void igmp_manager_network_stop(void)
 
 	igmp_manager.active = false;
 
-	ipv4_addr_t *p = igmp_manager.addr_list;
-	for (uint8_t index = 0; index < igmp_manager.addr_count; index++) {
+	struct igmp_entry_t *entry = slist_get_head(struct igmp_entry_t, &igmp_manager.list);
+	while (entry) {
 		struct ip_mreq mreq;
 		memset(&mreq, 0, sizeof(mreq));
-		mreq.imr_multiaddr.s_addr = htonl(*p++);
-		if (setsockopt(igmp_manager.igmp_sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char *)&mreq, sizeof(mreq)) < 0) {
+		mreq.imr_multiaddr.s_addr = htonl(entry->addr);
+
+		if (setsockopt(entry->sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char *)&mreq, sizeof(mreq)) < 0) {
 			DEBUG_ERROR("failed to leave multicast group (error %d %s)", errno, strerror(errno));
 		}
+
+		entry = slist_get_next(struct igmp_entry_t, entry);
 	}
 }
 
@@ -70,19 +73,20 @@ void igmp_manager_network_start(void)
 	DEBUG_ASSERT(!igmp_manager.active, "igmp_manager_network_start called when already active");
 	igmp_manager.active = true;
 
-	ipv4_addr_t *p = igmp_manager.addr_list;
-	for (uint8_t index = 0; index < igmp_manager.addr_count; index++) {
+	struct igmp_entry_t *entry = slist_get_head(struct igmp_entry_t, &igmp_manager.list);
+	while (entry) {
 		struct ip_mreq mreq;
 		memset(&mreq, 0, sizeof(mreq));
-		mreq.imr_multiaddr.s_addr = htonl(*p++);
-		if (setsockopt(igmp_manager.igmp_sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&mreq, sizeof(mreq)) < 0) {
+		mreq.imr_multiaddr.s_addr = htonl(entry->addr);
+
+		if (setsockopt(entry->sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&mreq, sizeof(mreq)) < 0) {
 			DEBUG_ERROR("failed to join multicast group (error %d %s)", errno, strerror(errno));
 		}
+
+		entry = slist_get_next(struct igmp_entry_t, entry);
 	}
 }
 
 void igmp_manager_init(void)
 {
-	igmp_manager.igmp_sock = socket(AF_INET, SOCK_DGRAM, 0);
-	DEBUG_ASSERT(igmp_manager.igmp_sock != -1, "failed to allocate socket");
 }

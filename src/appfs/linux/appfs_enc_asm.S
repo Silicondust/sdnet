@@ -11,3 +11,6 @@ appfs_tar_start:
 	.global appfs_tar_end
 
 appfs_tar_end:
+
+	.section .note.GNU-stack,"",%progbits
+

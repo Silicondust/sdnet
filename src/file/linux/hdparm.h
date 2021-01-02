@@ -40,3 +40,4 @@ extern bool hdparm_smart_id_get_value_str(struct hdparm_smart_id_decode_t *decod
 extern bool hdparm_get_identify(const char *dev_name, struct hdparm_identify_t *identify);
 extern bool hdparm_get_smart(const char *dev_name, struct hdparm_smart_t *smart);
 extern bool hdparm_set_standby_time(const char *dev_name, uint32_t seconds);
+extern bool hdparm_set_advanced_power_management(const char *dev_name, uint8_t level);

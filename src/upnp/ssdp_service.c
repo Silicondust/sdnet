@@ -37,7 +37,7 @@ const struct http_parser_tag_lookup_t ssdp_service_manager_msearch_http_tag_list
 	{NULL, NULL}
 };
 
-static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye)
+static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, ipv4_addr_t local_ip, bool byebye)
 {
 	struct netbuf *txnb = netbuf_alloc();
 	if (!txnb) {
@@ -63,7 +63,7 @@ static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye
 	} else {
 		success &= netbuf_sprintf(txnb, "NTS: ssdp:alive\r\n");
 		success &= netbuf_sprintf(txnb, "Server: %s\r\n", SSDP_SERVER_NAME);
-		success &= netbuf_sprintf(txnb, "Location: http://%v:%u%s\r\n", ssdp_manager.local_ip, ssdp_manager.webserver_port, service->device_xml_uri);
+		success &= netbuf_sprintf(txnb, "Location: http://%v:%u%s\r\n", local_ip, ssdp_manager.webserver_port, service->device_xml_uri);
 		success &= http_header_write_cache_control(txnb, 1800);
 	}
 
@@ -82,8 +82,22 @@ static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye
 	}
 
 	netbuf_set_pos_to_start(txnb);
-	udp_socket_send_netbuf(ssdp_manager.sock, SSDP_MULTICAST_IP, SSDP_SERVICE_PORT, 4, UDP_TOS_DEFAULT, txnb);
+	udp_socket_send_multipath(ssdp_manager.sock, SSDP_MULTICAST_IP, SSDP_SERVICE_PORT, local_ip, 4, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
+}
+
+static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye)
+{
+	struct ip_datalink_instance *idi = ip_datalink_manager_get_head();
+	while (idi) {
+		ipv4_addr_t local_ip = ip_datalink_get_ipaddr(idi);
+		idi = slist_get_next(struct ip_datalink_instance, idi);
+		if (local_ip == 0) {
+			continue;
+		}
+
+		ssdp_service_send_notify_internal(service, local_ip, byebye);
+	}
 }
 
 static void ssdp_service_send_discover_response(struct ssdp_service_t *service, ipv4_addr_t remote_ip, uint16_t remote_port)
@@ -396,7 +410,7 @@ void ssdp_service_manager_resend_notify_now(void)
 	oneshot_attach(&ssdp_service_manager.notify_timer, SSDP_NOTIFY_RATE_DELAY, ssdp_service_manager_notify_timer_callback, NULL);
 }
 
-void ssdp_service_manager_stop(void)
+void ssdp_service_manager_network_stop(void)
 {
 	oneshot_detach(&ssdp_service_manager.notify_timer);
 	oneshot_detach(&ssdp_service_manager.discover_reply_timer);
@@ -408,7 +422,7 @@ void ssdp_service_manager_stop(void)
 	}
 }
 
-void ssdp_service_manager_start(void)
+void ssdp_service_manager_network_start(void)
 {
 	if (!slist_get_head(struct ssdp_service_t, &ssdp_service_manager.service_list)) {
 		return;

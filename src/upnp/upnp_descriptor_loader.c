@@ -350,10 +350,9 @@ static xml_parser_error_t upnp_descriptor_loader_xml_element_name_end(struct upn
 	return XML_PARSER_OK;
 }
 
-static xml_parser_error_t upnp_descriptor_loader_xml_element_self_close(struct upnp_descriptor_loader_t *loader, struct netbuf *nb)
+static xml_parser_error_t upnp_descriptor_loader_xml_element_self_close(struct upnp_descriptor_loader_t *loader)
 {
 	DEBUG_INFO("element self close (level %u)", loader->parser_element_level);
-	DEBUG_PRINT_NETBUF_TEXT(nb, 0);
 	return XML_PARSER_OK;
 }
 
@@ -396,7 +395,7 @@ static xml_parser_error_t upnp_descriptor_loader_xml_callback(void *arg, xml_par
 		return XML_PARSER_OK;
 
 	case XML_PARSER_EVENT_ELEMENT_SELF_CLOSE:
-		ret = upnp_descriptor_loader_xml_element_self_close(loader, nb);
+		ret = upnp_descriptor_loader_xml_element_self_close(loader);
 		if (ret != XML_PARSER_OK) {
 			return ret;
 		}

@@ -147,6 +147,36 @@ const char *filename_without_path(const char *input)
 	return ptr + 1;
 }
 
+const char *filename_ext(const char *input)
+{
+	const char *ptr = strrchr(input, '.');
+	if (!ptr) {
+		return NULL;
+	}
+	if (strchr(ptr + 1, FILENAME_DIR_SEPARATOR_CHAR)) {
+		return NULL;
+	}
+	return ptr + 1;
+}
+
+bool filename_ext_cmp(const char *input, const char *match)
+{
+	const char *ext = filename_ext(input);
+	if (!ext) {
+		return false;
+	}
+	return (strcmp(ext, match) == 0);
+}
+
+bool filename_ext_casecmp(const char *input, const char *match)
+{
+	const char *ext = filename_ext(input);
+	if (!ext) {
+		return false;
+	}
+	return (strcasecmp(ext, match) == 0);
+}
+
 bool filename_strcpy_without_path(char *output, char *end, const char *input)
 {
 	const char *ptr = filename_without_path(input);

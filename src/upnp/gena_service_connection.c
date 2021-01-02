@@ -272,6 +272,12 @@ static http_parser_error_t gena_service_connection_http_tag_callback(void *arg, 
 		return HTTP_PARSER_OK; /* Need to check bad-request error before reporting this error. */
 	}
 
+	if (callback_url.ip_addr != http_server_connection_get_remote_addr(connection->http_connection)) {
+		DEBUG_WARN("callback ip doesn't match requestor");
+		connection->precondition_failed = true;
+		return HTTP_PARSER_OK; /* Need to check bad-request error before reporting this error. */
+	}
+
 	connection->callback_ip = callback_url.ip_addr;
 	connection->callback_port = callback_url.ip_port;
 	connection->callback_uri = heap_strdup(callback_url.uri, PKG_OS, MEM_TYPE_OS_GENA_CONNECTION_CALLBACK_URI);

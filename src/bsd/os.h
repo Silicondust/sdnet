@@ -18,6 +18,7 @@
 #include <utils/mem_int.h>
 #include <text/char.h>
 #include <utils/bcd.h>
+#include <utils/base36.h>
 #include <utils/base64.h>
 #include <utils/guid.h>
 #include <text/doprint_custom.h>

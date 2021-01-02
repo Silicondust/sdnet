@@ -41,6 +41,7 @@ extern void http_server_connection_accept(struct http_server_connection_t *conne
 extern void http_server_connection_close(struct http_server_connection_t *connection);
 extern void http_server_connection_set_http_tag_list(struct http_server_connection_t *connection, const struct http_parser_tag_lookup_t *webserver_connection_http_tag_list, void *callback_arg);
 extern void http_server_connection_disable_timeout(struct http_server_connection_t *connection);
+extern ipv4_addr_t http_server_connection_get_remote_addr(struct http_server_connection_t *connection);
 extern struct tcp_connection *http_server_connection_get_tcp_connection(struct http_server_connection_t *connection);
 
 struct http_server_connection_t {

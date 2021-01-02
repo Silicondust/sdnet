@@ -8,7 +8,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+struct udp_socket;
+
 extern void igmp_manager_init(void);
 extern void igmp_manager_network_start(void);
 extern void igmp_manager_network_stop(void);
-extern void igmp_manager_join_group(ipv4_addr_t addr);
+extern void igmp_manager_join_group(struct udp_socket *us, ipv4_addr_t addr);

@@ -192,9 +192,6 @@
     <ClCompile Include="..\upnp\upnp.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\upnp\ssdp_client_dummy.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\upnp\ssdp_manager.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -286,6 +283,27 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\websocket\websocket_service.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\windows\udp_multipath.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\upnp\ssdp_client.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\upnp\upnp_descriptor_device.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\upnp\upnp_descriptor_loader.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\upnp\upnp_descriptor.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\upnp\soap_client.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\base36.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -63,7 +63,7 @@ static void ssdp_client_send_msearch(struct ssdp_client_t *client)
 	}
 
 	netbuf_set_pos_to_start(txnb);
-	udp_socket_send_netbuf(ssdp_manager.sock, SSDP_MULTICAST_IP, SSDP_SERVICE_PORT, 4, UDP_TOS_DEFAULT, txnb);
+	udp_socket_send_multipath(ssdp_manager.sock, SSDP_MULTICAST_IP, SSDP_SERVICE_PORT, 0, 4, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 
@@ -284,12 +284,12 @@ void ssdp_client_manager_response_recv_complete(ipv4_addr_t remote_ip, uint16_t 
 	ssdp_client_manager_recv_complete_reset();
 }
 
-void ssdp_client_manager_stop(void)
+void ssdp_client_manager_network_stop(void)
 {
 	oneshot_detach(&ssdp_client_manager.msearch_timer);
 }
 
-void ssdp_client_manager_start(void)
+void ssdp_client_manager_network_start(void)
 {
 	ticks_t current_time = timer_get_ticks();
 
@@ -344,7 +344,7 @@ struct ssdp_client_t *ssdp_client_manager_add_client(const char *st, ssdp_client
 
 	slist_attach_tail(struct ssdp_client_t, &ssdp_client_manager.client_list, client);
 
-	if (ssdp_manager.local_ip) {
+	if (ssdp_manager.running) {
 		oneshot_detach(&ssdp_client_manager.msearch_timer);
 		ssdp_client_manager_msearch_timer_callback(NULL);
 	}

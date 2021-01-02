@@ -20,6 +20,7 @@
 #include <utils/mem_int.h>
 #include <text/char.h>
 #include <utils/bcd.h>
+#include <utils/base36.h>
 #include <utils/base64.h>
 #include <utils/guid.h>
 #include <text/doprint_custom.h>
@@ -50,6 +51,7 @@
 #include <net/ip_datalink.h>
 #include <net/igmp.h>
 #include <net/dhcp_client.h>
+#include <net/dhcp_usbd.h>
 #include <net/dns_lookup.h>
 #include <net/mdns_responder.h>
 #include <net/udp.h>

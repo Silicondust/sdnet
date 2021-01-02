@@ -54,45 +54,21 @@ void xml_process_debug_print(const char *this_file, int line, const char *prefix
 
 static void xml_process_autodetect_set_value(struct xml_process_t *xpi, const char *name, struct netbuf *nb)
 {
-	size_t length = netbuf_get_remaining(nb);
-	if (length == 0) {
+	if (netbuf_get_remaining(nb) == 0) {
 		nvlist_set_str(&xpi->contents, name, "");
 		return;
 	}
 
-	uint8_t c = netbuf_fwd_read_u8(nb);
-	if (c == '0') {
-		if (length > 1) {
-			netbuf_set_pos_to_start(nb);
-			nvlist_set_str_nb(&xpi->contents, name, nb);
-		}
+	addr_t end;
+	int64_t value_int64 = netbuf_fwd_strtoll(nb, &end, 10);
+	if (end == netbuf_get_end(nb)) {
+		char buffer[32];
+		sprintf_custom(buffer, buffer + sizeof(buffer), "%lld", value_int64);
 
-		nvlist_set_int64(&xpi->contents, name, 0);
-		return;
-	}
-
-	if (c == '-') {
-		if (length == 1) {
-			netbuf_set_pos_to_start(nb);
-			nvlist_set_str_nb(&xpi->contents, name, nb);
+		if (netbuf_fwd_strcmp(nb, buffer) == 0) {
+			nvlist_set_int64(&xpi->contents, name, value_int64);
 			return;
 		}
-
-		c = netbuf_fwd_read_u8(nb);
-	}
-
-	netbuf_set_pos_to_start(nb);
-
-	if ((c >= '1') && (c <= '9')) {
-		addr_t end;
-		int64_t value = netbuf_fwd_strtoll(nb, &end, 10);
-		if (end != netbuf_get_end(nb)) {
-			nvlist_set_str_nb(&xpi->contents, name, nb);
-			return;
-		}
-
-		nvlist_set_int64(&xpi->contents, name, value);
-		return;
 	}
 
 	nvlist_set_str_nb(&xpi->contents, name, nb);

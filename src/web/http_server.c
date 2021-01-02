@@ -105,6 +105,11 @@ void http_server_connection_disable_timeout(struct http_server_connection_t *con
 	http_server_add_connection(connection->http_server, connection);
 }
 
+ipv4_addr_t http_server_connection_get_remote_addr(struct http_server_connection_t *connection)
+{
+	return tcp_connection_get_remote_addr(connection->conn);
+}
+
 struct tcp_connection *http_server_connection_get_tcp_connection(struct http_server_connection_t *connection)
 {
 	return connection->conn;

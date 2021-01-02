@@ -132,7 +132,7 @@ static xml_parser_error_t soap_client_request_xml_parser_callback_fault_message(
 
 	case XML_PARSER_EVENT_ELEMENT_TEXT:
 		if (client->upnp_result_parser_state == 1) {
-			client->upnp_result = netbuf_fwd_strtoul(nb, NULL, 10);
+			client->upnp_result = (uint16_t)netbuf_fwd_strtoul(nb, NULL, 10);
 			client->upnp_result_parser_state = 0;
 			return XML_PARSER_OK;
 		}
@@ -166,7 +166,7 @@ static http_parser_error_t soap_client_request_conn_http_event(void *arg, http_p
 
 	switch (event) {
 	case HTTP_PARSER_EVENT_STATUS_CODE:
-		client->upnp_result = netbuf_fwd_strtoul(nb, NULL, 10);
+		client->upnp_result = (uint16_t)netbuf_fwd_strtoul(nb, NULL, 10);
 		DEBUG_TRACE("soap_client_request_conn_http_event: %u http status code", client->upnp_result);
 		return HTTP_PARSER_OK;
 

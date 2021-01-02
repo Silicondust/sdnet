@@ -16,6 +16,7 @@
 #include <utils/mem_int.h>
 #include <text/char.h>
 #include <utils/bcd.h>
+#include <utils/base36.h>
 #include <utils/base64.h>
 #include <utils/guid.h>
 #include <text/doprint_custom.h>
@@ -86,5 +87,6 @@
 #include <windows/system.h>
 #include <timer/windows/timer.h>
 #include <net/windows/tcp.h>
+#include <net/windows/udp.h>
 
 #define OS_NAME "Windows"
