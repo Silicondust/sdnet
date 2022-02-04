@@ -306,5 +306,17 @@
     <ClCompile Include="..\utils\base36.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\file\file_wasync.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\thread\mqueue2.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\file\file_sendfile.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\web\url_unescape.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

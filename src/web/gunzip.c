@@ -55,6 +55,10 @@ static bool gunzip_invoke_callback(struct gunzip_t *gunzip, uint8_t status, uint
 		return false;
 	}
 
+	if (ptr == end) {
+		return true;
+	}
+
 	return gunzip->output_callback(gunzip->callback_arg, status, ptr, end);
 }
 

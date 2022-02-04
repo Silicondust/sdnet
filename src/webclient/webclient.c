@@ -683,7 +683,7 @@ static void webclient_execute_connect(struct webclient_t *webclient)
 			tcp_connection_set_max_recv_nb_size(webclient->tcp_conn, webclient->max_recv_nb_size);
 		}
 
-		if (tcp_connection_connect(webclient->tcp_conn, operation->url.ip_addr, operation->url.ip_port, 0, 0, webclient_conn_established, webclient_conn_recv, NULL, webclient_conn_close, webclient) != TCP_OK) {
+		if (tcp_connection_connect(webclient->tcp_conn, operation->url.ip_addr, operation->url.ip_port, 0, 0, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient) != TCP_OK) {
 			DEBUG_WARN("connect failed");
 			tcp_connection_deref(webclient->tcp_conn);
 			webclient->tcp_conn = NULL;
@@ -702,7 +702,7 @@ static void webclient_execute_connect(struct webclient_t *webclient)
 			return;
 		}
 
-		if (!tls_client_connection_connect(webclient->tls_conn, operation->url.ip_addr, operation->url.ip_port, 0, 0, operation->url.dns_name, webclient_conn_established, webclient_conn_recv, NULL, webclient_conn_close, webclient)) {
+		if (!tls_client_connection_connect(webclient->tls_conn, operation->url.ip_addr, operation->url.ip_port, 0, 0, operation->url.dns_name, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient)) {
 			DEBUG_WARN("connect failed");
 			tls_client_connection_deref(webclient->tls_conn);
 			webclient->tls_conn = NULL;

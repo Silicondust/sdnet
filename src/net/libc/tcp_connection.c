@@ -45,12 +45,16 @@ int tcp_connection_deref(struct tcp_connection *tc)
 		return tc->refs;
 	}
 
+	close(tc->sock);
+
 	struct netbuf *send_nb = (struct netbuf *)tc->send_nb;
 	if (send_nb) {
 		netbuf_free(send_nb);
 	}
 
-	close(tc->sock);
+	if (tc->sendfile_buffer) {
+		heap_free(tc->sendfile_buffer);
+	}
 
 	heap_free(tc);
 	return 0;
@@ -70,6 +74,17 @@ void tcp_connection_reset(struct tcp_connection *tc)
 {
 	tc->app_closed = true;
 	tc->dead = true;
+}
+
+void tcp_connection_set_send_buffer_size(struct tcp_connection *tc, size_t send_buffer_size)
+{
+	tc->send_buffer_size = send_buffer_size;
+
+	if (tc->sock == -1) {
+		return;
+	}
+
+	tcp_set_sock_send_buffer_size(tc->sock, send_buffer_size);
 }
 
 void tcp_connection_set_max_recv_nb_size(struct tcp_connection *tc, size_t max_recv_nb_size)
@@ -169,14 +184,9 @@ tcp_error_t tcp_connection_send_netbuf(struct tcp_connection *tc, struct netbuf 
 
 	uint8_t *buffer = netbuf_get_ptr(nb);
 	size_t length = netbuf_get_remaining(nb);
-	if (length >= tc->send_buffer_size) {
-		tc->send_buffer_size = TCP_TX_BUFFER_SIZE + length;
-		DEBUG_INFO("tcp send buffer size set %u", tc->send_buffer_size);
-		tcp_set_sock_send_buffer_size(tc->sock, tc->send_buffer_size);
-	}
 
 	errno = EAGAIN; /* workaround Abilis bug */
-	ssize_t actual = send(tc->sock, (char *)buffer, (int)length, MSG_NOSIGNAL);
+	ssize_t actual = send(tc->sock, (char *)buffer, length, MSG_NOSIGNAL);
 	if (actual < (ssize_t)length) {
 		if (actual <= 0) {
 			if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINPROGRESS)) {
@@ -202,13 +212,59 @@ tcp_error_t tcp_connection_send_netbuf(struct tcp_connection *tc, struct netbuf 
 	return TCP_OK;
 }
 
-static void tcp_connection_notify_send_resume(struct tcp_connection *tc)
+tcp_error_t tcp_connection_send_file_fallback(struct tcp_connection *tc, struct file_t *file, size_t length, size_t *pactual)
 {
 	if (tc->app_closed) {
-		return;
+		return TCP_ERROR_FAILED;
+	}
+	if (tc->send_nb) {
+		return TCP_ERROR_SOCKET_BUSY;
 	}
 
-	tc->send_resume_callback(tc->callback_inst);
+	if (length > tc->sendfile_buffer_size) {
+		if (tc->sendfile_buffer) {
+			heap_free(tc->sendfile_buffer);
+		}
+
+		tc->sendfile_buffer_size = length;
+		tc->sendfile_buffer = heap_alloc(length, PKG_OS, MEM_TYPE_OS_TCP_SENDFILE);
+		if (!tc->sendfile_buffer) {
+			DEBUG_ERROR("out of memory");
+			tc->sendfile_buffer_size = 0;
+			return TCP_ERROR_FAILED;
+		}
+	}
+
+	size_t read_actual = file_read(file, tc->sendfile_buffer, length);
+	if (read_actual == 0) {
+		return TCP_ERROR_FILE;
+	}
+
+	errno = EAGAIN; /* workaround Abilis bug */
+	ssize_t send_actual = send(tc->sock, (char *)tc->sendfile_buffer, read_actual, MSG_NOSIGNAL);
+	if (send_actual <= 0) {
+		if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINPROGRESS)) {
+			DEBUG_INFO("tcp send failed (%d %d)", (int)send_actual, errno);
+			return TCP_ERROR_FAILED;
+		}
+
+		if (!file_seek_retreat(file, read_actual)) {
+			DEBUG_ERROR("file_seek_retreat failed");
+			return TCP_ERROR_FAILED;
+		}
+
+		return TCP_ERROR_SOCKET_BUSY;
+	}
+
+	if (send_actual < (ssize_t)read_actual) {
+		if (!file_seek_retreat(file, read_actual - (size_t)send_actual)) {
+			DEBUG_ERROR("file_seek_retreat failed");
+			return TCP_ERROR_FAILED;
+		}
+	}
+
+	*pactual = (size_t)send_actual;
+	return TCP_OK;
 }
 
 static void tcp_connection_thread_send(struct tcp_connection *tc)
@@ -217,7 +273,7 @@ static void tcp_connection_thread_send(struct tcp_connection *tc)
 	DEBUG_ASSERT(send_nb, "tcp_connection_thread_send called without packet to send");
 
 	uint8_t *buffer = netbuf_get_ptr(send_nb);
-	int length = (int)netbuf_get_remaining(send_nb);
+	size_t length = netbuf_get_remaining(send_nb);
 
 	errno = EAGAIN; /* workaround Abilis bug */
 	ssize_t actual = send(tc->sock, (char *)buffer, length, MSG_NOSIGNAL);
@@ -241,12 +297,6 @@ static void tcp_connection_thread_send(struct tcp_connection *tc)
 		tc->dead = true;
 		return;
 	}
-
-	if (tc->send_resume_callback && !tc->app_closed) {
-		thread_main_enter();
-		tcp_connection_notify_send_resume(tc);
-		thread_main_exit();
-	}
 }
 
 static void tcp_connection_notify_recv(struct tcp_connection *tc, struct netbuf *nb)
@@ -260,14 +310,27 @@ static void tcp_connection_notify_recv(struct tcp_connection *tc, struct netbuf 
 
 static void tcp_connection_thread_recv(struct tcp_connection *tc)
 {
-	struct netbuf *nb = netbuf_alloc_with_fwd_space(tc->max_recv_nb_size);
+	int available = 0;
+	if (ioctl(tc->sock, FIONREAD, &available) < 0) {
+		tc->dead = true;
+		return;
+	}
+
+	if (available <= 0) {
+		tc->dead = true;
+		return;
+	}
+
+	size_t recv_nb_size = min((size_t)available, tc->max_recv_nb_size);
+
+	struct netbuf *nb = netbuf_alloc_with_fwd_space(recv_nb_size);
 	while (!nb) {
-		timer_sleep_fast(FAST_TICK_RATE_MS * 10);
-		nb = netbuf_alloc_with_fwd_space(tc->max_recv_nb_size);
+		timer_sleep_fast(FAST_TICK_RATE_MS * 16);
+		nb = netbuf_alloc_with_fwd_space(recv_nb_size);
 	}
 
 	uint8_t *buffer = netbuf_get_ptr(nb);
-	ssize_t length = recv(tc->sock, (char *)buffer, tc->max_recv_nb_size, 0);
+	ssize_t length = recv(tc->sock, (char *)buffer, recv_nb_size, 0);
 	if (length <= 0) {
 		netbuf_free(nb);
 		tc->dead = true;
@@ -294,14 +357,13 @@ static void tcp_connection_notify_established(struct tcp_connection *tc)
 	tc->est_callback(tc->callback_inst);
 }
 
-tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_send_resume_callback_t send_resume, tcp_close_callback_t close_callback, void *inst)
+tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, tcp_establish_callback_t est_callback, tcp_recv_callback_t recv_callback, tcp_close_callback_t close_callback, void *inst)
 {
 	DEBUG_ASSERT(tc->sock == -1, "already connected");
-	DEBUG_ASSERT(recv, "no recv callback specified");
+	DEBUG_ASSERT(recv_callback, "no recv callback specified");
 
-	tc->est_callback = est;
-	tc->recv_callback = recv;
-	tc->send_resume_callback = send_resume;
+	tc->est_callback = est_callback;
+	tc->recv_callback = recv_callback;
 	tc->close_callback = close_callback;
 	tc->callback_inst = inst;
 
@@ -366,12 +428,12 @@ tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_a
 	spinlock_lock(&tcp_manager.connection_new_lock);
 	slist_attach_head(struct tcp_connection, &tcp_manager.connection_new_list, tc);
 	spinlock_unlock(&tcp_manager.connection_new_lock);
-
 	tcp_connection_trigger_poll();
+
 	return TCP_OK;
 }
 
-void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_send_resume_callback_t send_resume, tcp_close_callback_t close, void *inst)
+void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst)
 {
 	/* Set send buffer size. */
 	tcp_set_sock_send_buffer_size(sock, tc->send_buffer_size);
@@ -391,7 +453,6 @@ void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_ca
 	tc->sock = sock;
 	tc->est_callback = est;
 	tc->recv_callback = recv;
-	tc->send_resume_callback = send_resume;
 	tc->close_callback = close;
 	tc->callback_inst = inst;
 
@@ -402,7 +463,6 @@ void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_ca
 	spinlock_lock(&tcp_manager.connection_new_lock);
 	slist_attach_head(struct tcp_connection, &tcp_manager.connection_new_list, tc);
 	spinlock_unlock(&tcp_manager.connection_new_lock);
-
 	tcp_connection_trigger_poll();
 }
 
@@ -416,8 +476,8 @@ struct tcp_connection *tcp_connection_alloc(void)
 	tc->refs = 1;
 	tc->sock = -1;
 	tc->ttl = 64;
-	tc->max_recv_nb_size = TCP_RX_NETBUF_SIZE;
-	tc->send_buffer_size = TCP_TX_BUFFER_SIZE;
+	tc->max_recv_nb_size = TCP_MAX_RECV_NB_SIZE_DEFAULT;
+	tc->send_buffer_size = TCP_SEND_BUFFER_SIZE_DEFAULT;
 
 	return tc;
 }

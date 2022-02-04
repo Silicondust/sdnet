@@ -12,14 +12,13 @@ struct tls_client_connection_t;
 
 typedef void (*tls_client_establish_callback_t)(void *arg);
 typedef void (*tls_client_recv_callback_t)(void *arg, struct netbuf *nb);
-typedef void (*tls_client_send_resume_callback_t)(void *arg);
 typedef void (*tls_client_close_callback_t)(void *arg, tcp_close_reason_t reason);
 
 extern struct tls_client_connection_t *tls_client_connection_alloc(void);
 extern struct tls_client_connection_t *tls_client_connection_ref(struct tls_client_connection_t *tls_conn);
 extern int tls_client_connection_deref(struct tls_client_connection_t *tls_conn);
 extern void tls_client_connection_close(struct tls_client_connection_t *tls_conn);
-extern bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, const char *host_name, tls_client_establish_callback_t est, tls_client_recv_callback_t recv, tls_client_send_resume_callback_t send_resume, tls_client_close_callback_t close, void *callback_arg);
+extern bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, const char *host_name, tls_client_establish_callback_t est, tls_client_recv_callback_t recv, tls_client_close_callback_t close, void *callback_arg);
 extern bool tls_client_connection_send_netbuf(struct tls_client_connection_t *tls_conn, struct netbuf *nb);
 extern void tls_client_connection_pause_recv(struct tls_client_connection_t *tls_conn);
 extern void tls_client_connection_resume_recv(struct tls_client_connection_t *tls_conn);

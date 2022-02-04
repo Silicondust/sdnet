@@ -517,7 +517,7 @@ static void upnp_descriptor_loader_start(void *arg)
 		return;
 	}
 
-	if (tcp_connection_connect(loader->conn, loader->descriptor_url.ip_addr, loader->descriptor_url.ip_port, 0, 0, upnp_descriptor_loader_conn_established, upnp_descriptor_loader_conn_recv, NULL, upnp_descriptor_loader_conn_close, loader) != TCP_OK) {
+	if (tcp_connection_connect(loader->conn, loader->descriptor_url.ip_addr, loader->descriptor_url.ip_port, 0, 0, upnp_descriptor_loader_conn_established, upnp_descriptor_loader_conn_recv, upnp_descriptor_loader_conn_close, loader) != TCP_OK) {
 		DEBUG_WARN("connect failed");
 		tcp_connection_deref(loader->conn);
 		loader->conn = NULL;

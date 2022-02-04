@@ -1,7 +1,7 @@
 /*
  * flash_file.c
  *
- * Copyright © 2012-2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2012-2022 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -55,22 +55,25 @@ static FILE *flash_file_get_fp_create(void)
 
 void flash_read(addr_t addr, void *dst, size_t length)
 {
-	memset(dst, 0xFF, length);
-
 	FILE *fp = flash_file_get_fp_if_exists();
 	if (!fp) {
+		memset(dst, 0xFF, length);
+		return;
+	}
+
+	fseek(fp, 0, SEEK_END);
+
+	long file_length = ftell(fp);
+	if ((long)addr >= file_length) {
+		memset(dst, 0xFF, length);
 		return;
 	}
 
 	fseek(fp, (long)addr, SEEK_SET);
 
-	addr_t position = (addr_t)ftell(fp);
-	if (position != addr) {
-		return;
-	}
-
-	if (fread(dst, 1, length, fp) != length) {
-		return;
+	size_t actual = fread(dst, 1, length, fp);
+	if (actual < length) {
+		memset((uint8_t *)dst + actual, 0xFF, length - actual);
 	}
 }
 
@@ -81,12 +84,20 @@ void flash_write(addr_t addr, const void *src, size_t length)
 		return;
 	}
 
-	fseek(fp, (long)addr, SEEK_SET);
+	fseek(fp, 0, SEEK_END);
 
-	addr_t position = (addr_t)ftell(fp);
-	while (position < addr) {
+	long file_length = ftell(fp);
+	if (file_length < 0) {
+		return;
+	}
+
+	while ((addr_t)file_length < addr) {
 		fputc(0xFF, fp);
-		position++;
+		file_length++;
+	}
+
+	if ((addr_t)file_length > addr) {
+		fseek(fp, (long)addr, SEEK_SET);
 	}
 
 	fwrite(src, 1, length, fp);
@@ -95,20 +106,33 @@ void flash_write(addr_t addr, const void *src, size_t length)
 
 void flash_erase(addr_t addr, size_t length)
 {
+	addr_t end = (addr + length + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1);
+	addr &= ~(FLASH_PAGE_SIZE - 1);
+
 	FILE *fp = flash_file_get_fp_create();
 	if (!fp) {
 		return;
 	}
 
-	addr_t start = addr & ~(FLASH_PAGE_SIZE - 1);
-	addr_t end = (addr + length + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1);
+	fseek(fp, 0, SEEK_END);
 
-	fseek(fp, (long)start, SEEK_SET);
+	long file_length = ftell(fp);
+	if (file_length < 0) {
+		return;
+	}
 
-	addr_t position = (addr_t)ftell(fp);
-	while (position < end) {
+	while ((addr_t)file_length < addr) {
 		fputc(0xFF, fp);
-		position++;
+		file_length++;
+	}
+
+	if ((addr_t)file_length > addr) {
+		fseek(fp, (long)addr, SEEK_SET);
+	}
+
+	while (addr < end) {
+		fputc(0xFF, fp);
+		addr++;
 	}
 
 	fflush(fp);

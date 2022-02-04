@@ -12,6 +12,8 @@ extern const char http_result_continue[];
 extern const char http_result_web_socket_protocol_handshake[];
 extern const char http_result_ok[];
 extern const char http_result_partial_content[];
+extern const char http_result_temporary_redirect[];
+extern const char http_result_permanent_redirect[];
 extern const char http_result_bad_request[];
 extern const char http_result_forbidden[];
 extern const char http_result_not_found[];

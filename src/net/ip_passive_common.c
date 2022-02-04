@@ -93,6 +93,8 @@ static void ip_datalink_manager_detect(void)
 
 	ip_datalink_manager_detect_execute();
 	ip_datalink_manager.last_detect_time = timer_get_ticks();
+
+	igmp_manager_local_ip_changed();
 }
 
 struct ip_datalink_instance *ip_datalink_manager_get_head(void)

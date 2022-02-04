@@ -35,6 +35,8 @@
     <ClCompile Include="..\default\log.c" />
     <ClCompile Include="..\default\netbuf.c" />
     <ClCompile Include="..\file\filename_utils.c" />
+    <ClCompile Include="..\file\file_sendfile.c" />
+    <ClCompile Include="..\file\file_wasync.c" />
     <ClCompile Include="..\file\windows\dir_change_notification.c" />
     <ClCompile Include="..\file\windows\dir_utils.c" />
     <ClCompile Include="..\file\windows\file_utils.c" />
@@ -62,6 +64,7 @@
     <ClCompile Include="..\text\sscanf_custom.c" />
     <ClCompile Include="..\thread\long_task.c" />
     <ClCompile Include="..\thread\mqueue.c" />
+    <ClCompile Include="..\thread\mqueue2.c" />
     <ClCompile Include="..\thread\windows\signal.c" />
     <ClCompile Include="..\thread\windows\thread.c" />
     <ClCompile Include="..\timer\oneshot.c" />
@@ -111,6 +114,7 @@
     <ClCompile Include="..\web\json_process.c" />
     <ClCompile Include="..\web\url.c" />
     <ClCompile Include="..\web\url_params.c" />
+    <ClCompile Include="..\web\url_unescape.c" />
     <ClCompile Include="..\web\xml_parser.c" />
     <ClCompile Include="..\web\xml_process.c" />
     <ClCompile Include="os.c">
@@ -132,26 +136,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>

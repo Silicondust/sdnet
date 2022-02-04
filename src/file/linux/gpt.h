@@ -8,5 +8,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-extern int gpt_create_if_mbr_blank(const char *dev_name);
-extern bool gpt_wipe_mbr(const char *dev_name);
+extern bool gpt_create_with_one_partition(struct file_t *dev_file);
+
+extern int gpt_mbr_is_blank(struct file_t *dev_file);
+extern bool gpt_mbr_wipe(struct file_t *dev_file);

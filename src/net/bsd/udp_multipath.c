@@ -19,7 +19,7 @@
 THIS_FILE("udp");
 
 #if !defined(IP_ONESBCAST)
-#error use net/libc/udp_multipath.c for bsd platforms that don't require IP_ONESBCAST
+#error use net/libc/udp_multipath.c for bsd platforms that dont require IP_ONESBCAST
 #endif
 
 struct udp_multipath_t {

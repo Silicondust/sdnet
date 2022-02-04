@@ -26,6 +26,7 @@ extern void *mqueue_read_handle(struct mqueue_t *mqueue);
 extern void mqueue_read_complete(struct mqueue_t *mqueue);
 
 extern bool mqueue_write_request(struct mqueue_t *mqueue, mqueue_read_handler_func_t read_handler, size_t length);
+extern void mqueue_write_request_blocking(struct mqueue_t *mqueue, mqueue_read_handler_func_t read_handler, size_t length);
 extern void mqueue_write_u8(struct mqueue_t *mqueue, uint8_t value);
 extern void mqueue_write_u16(struct mqueue_t *mqueue, uint16_t value);
 extern void mqueue_write_u32(struct mqueue_t *mqueue, uint32_t value);
@@ -33,3 +34,4 @@ extern void mqueue_write_u64(struct mqueue_t *mqueue, uint64_t value);
 extern void mqueue_write_int(struct mqueue_t *mqueue, int value);
 extern void mqueue_write_handle(struct mqueue_t *mqueue, void *value);
 extern void mqueue_write_complete(struct mqueue_t *mqueue);
+extern void mqueue_write_cancel(struct mqueue_t *mqueue);

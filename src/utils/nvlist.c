@@ -48,6 +48,20 @@ const char *nvlist_lookup_str(struct slist_t *list, const char *name)
 	return entry->value_str;
 }
 
+const char *nvlist_lookup_str_with_fallback(struct slist_t *list, const char *name, const char *value_on_error)
+{
+	struct nvlist_entry_t *entry = nvlist_lookup(list, name);
+	if (!entry) {
+		return value_on_error;
+	}
+
+	if (!entry->value_str) {
+		return value_on_error;
+	}
+
+	return entry->value_str;
+}
+
 int64_t nvlist_lookup_int64(struct slist_t *list, const char *name, int64_t value_on_error)
 {
 	struct nvlist_entry_t *entry = nvlist_lookup(list, name);
@@ -83,7 +97,7 @@ static void nvlist_replace_internal(struct slist_t *list, struct nvlist_entry_t 
 	slist_insert_pprev(struct nvlist_entry_t, pprev, entry);
 }
 
-void nvlist_set_str(struct slist_t *list, const char *name, const char *str)
+const char *nvlist_set_str(struct slist_t *list, const char *name, const char *str)
 {
 	size_t name_len = strlen(name);
 	size_t name_space = (name_len + 1 + 3) & ~3;
@@ -92,7 +106,7 @@ void nvlist_set_str(struct slist_t *list, const char *name, const char *str)
 
 	struct nvlist_entry_t *entry = (struct nvlist_entry_t *)heap_alloc_and_zero(sizeof(struct nvlist_entry_t) + name_space + value_space, PKG_OS, MEM_TYPE_OS_NVLIST_ENTRY);
 	if (!entry) {
-		return;
+		return NULL;
 	}
 
 	entry->name = (char *)(entry + 1);
@@ -101,9 +115,10 @@ void nvlist_set_str(struct slist_t *list, const char *name, const char *str)
 	memcpy(entry->value_str, str, value_len + 1);
 
 	nvlist_replace_internal(list, entry);
+	return entry->value_str;
 }
 
-void nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, uint8_t *end)
+const char *nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, uint8_t *end)
 {
 	size_t name_len = strlen(name);
 	size_t name_space = (name_len + 1 + 3) & ~3;
@@ -112,7 +127,7 @@ void nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, ui
 
 	struct nvlist_entry_t *entry = (struct nvlist_entry_t *)heap_alloc_and_zero(sizeof(struct nvlist_entry_t) + name_space + value_space, PKG_OS, MEM_TYPE_OS_NVLIST_ENTRY);
 	if (!entry) {
-		return;
+		return NULL;
 	}
 
 	entry->name = (char *)(entry + 1);
@@ -122,9 +137,10 @@ void nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, ui
 	entry->value_str[value_len] = 0;
 
 	nvlist_replace_internal(list, entry);
+	return entry->value_str;
 }
 
-void nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb)
+const char *nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb)
 {
 	size_t name_len = strlen(name);
 	size_t name_space = (name_len + 1 + 3) & ~3;
@@ -133,7 +149,7 @@ void nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb
 
 	struct nvlist_entry_t *entry = (struct nvlist_entry_t *)heap_alloc_and_zero(sizeof(struct nvlist_entry_t) + name_space + value_space, PKG_OS, MEM_TYPE_OS_NVLIST_ENTRY);
 	if (!entry) {
-		return;
+		return NULL;
 	}
 
 	entry->name = (char *)(entry + 1);
@@ -145,6 +161,7 @@ void nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb
 	entry->value_str[value_len] = 0;
 
 	nvlist_replace_internal(list, entry);
+	return entry->value_str;
 }
 
 void nvlist_set_int64(struct slist_t *list, const char *name, int64_t value)
@@ -164,7 +181,7 @@ void nvlist_set_int64(struct slist_t *list, const char *name, int64_t value)
 	nvlist_replace_internal(list, entry);
 }
 
-void nvlist_unset(struct slist_t *list, const char *name)
+bool nvlist_unset(struct slist_t *list, const char *name)
 {
 	struct nvlist_entry_t **pprev = slist_get_phead(struct nvlist_entry_t, list);
 	struct nvlist_entry_t *p = slist_get_head(struct nvlist_entry_t, list);
@@ -174,6 +191,7 @@ void nvlist_unset(struct slist_t *list, const char *name)
 			if (cmp == 0) {
 				(void)slist_detach_pprev(struct nvlist_entry_t, pprev, p);
 				heap_free(p);
+				return true;
 			}
 			break;
 		}
@@ -181,6 +199,8 @@ void nvlist_unset(struct slist_t *list, const char *name)
 		pprev = slist_get_pnext(struct nvlist_entry_t, p);
 		p = slist_get_next(struct nvlist_entry_t, p);
 	}
+
+	return false;
 }
 
 void nvlist_copy(struct slist_t *dst_list, struct slist_t *src_list, const char *name)

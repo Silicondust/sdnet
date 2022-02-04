@@ -70,7 +70,7 @@ static uint32_t gpt_crc32_complete(uint32_t crc)
 	return crc ^ 0xFFFFFFFF;
 }
 
-static bool gpt_write_protective_mbr(const char *dev_name, struct file_t *dev_file, struct gpt_state_t *gpt_state)
+static bool gpt_write_protective_mbr(struct file_t *dev_file, struct gpt_state_t *gpt_state)
 {
 	uint8_t buffer[512];
 	memset(buffer, 0, 512);
@@ -94,19 +94,19 @@ static bool gpt_write_protective_mbr(const char *dev_name, struct file_t *dev_fi
 
 	/* write mbr to disk */
 	if (!file_seek_set(dev_file, 0)) {
-		DEBUG_ERROR("failed to seek %s (%d)", dev_name, errno);
+		DEBUG_ERROR("seek failed (%d)", errno);
 		return false;
 	}
 
 	if (file_write(dev_file, buffer, 512) != 512) {
-		DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+		DEBUG_ERROR("write failed (%d)", errno);
 		return false;
 	}
 
 	return true;
 }
 
-static bool gpt_write_partition_header(const char *dev_name, struct file_t *dev_file, struct gpt_state_t *gpt_state, uint32_t partition_array_crc)
+static bool gpt_write_partition_header(struct file_t *dev_file, struct gpt_state_t *gpt_state, uint32_t partition_array_crc)
 {
 	/* primary gpt header */
 	uint8_t buffer[512];
@@ -134,12 +134,12 @@ static bool gpt_write_partition_header(const char *dev_name, struct file_t *dev_
 	mem_int_write_le_u32(buffer + 16, crc);
 
 	if (!file_seek_set(dev_file, gpt_state->primary_header_location * 512)) {
-		DEBUG_ERROR("failed to seek %s (%d)", dev_name, errno);
+		DEBUG_ERROR("seek failed (%d)", errno);
 		return false;
 	}
 
 	if (file_write(dev_file, buffer, 512) != 512) {
-		DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+		DEBUG_ERROR("write failed (%d)", errno);
 		return false;
 	}
 
@@ -155,19 +155,19 @@ static bool gpt_write_partition_header(const char *dev_name, struct file_t *dev_
 	mem_int_write_le_u32(buffer + 16, crc);
 
 	if (!file_seek_set(dev_file, gpt_state->secondary_header_location * 512)) {
-		DEBUG_ERROR("failed to seek %s (%d)", dev_name, errno);
+		DEBUG_ERROR("seek failed (%d)", errno);
 		return false;
 	}
 
 	if (file_write(dev_file, buffer, 512) != 512) {
-		DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+		DEBUG_ERROR("write failed (%d)", errno);
 		return false;
 	}
 
 	return true;
 }
 
-static bool gpt_write_partition_array(const char *dev_name, struct file_t *dev_file, struct gpt_state_t *gpt_state, uint32_t *partition_array_crc)
+static bool gpt_write_partition_array(struct file_t *dev_file, struct gpt_state_t *gpt_state, uint32_t *partition_array_crc)
 {
 	uint8_t zero[512];
 	memset(zero, 0, 512);
@@ -193,36 +193,36 @@ static bool gpt_write_partition_array(const char *dev_name, struct file_t *dev_f
 
 	/* Write primary partition array */
 	if (!file_seek_set(dev_file, gpt_state->primary_array_location * 512)) {
-		DEBUG_ERROR("failed to seek %s (%d)", dev_name, errno);
+		DEBUG_ERROR("seek failed (%d)", errno);
 		return false;
 	}
 
 	if (file_write(dev_file, buffer, 512) != 512) {
-		DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+		DEBUG_ERROR("write failed (%d)", errno);
 		return false;
 	}
 
 	for (int i = 1; i < 32; i++) {
 		if (file_write(dev_file, zero, 512) != 512) {
-			DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+			DEBUG_ERROR("write failed (%d)", errno);
 			return false;
 		}
 	}
 
 	/* Write secondary partition array */
 	if (!file_seek_set(dev_file, gpt_state->secondary_array_location * 512)) {
-		DEBUG_ERROR("failed to seek %s (%d)", dev_name, errno);
+		DEBUG_ERROR("seek failed (%d)", errno);
 		return false;
 	}
 
 	if (file_write(dev_file, buffer, 512) != 512) {
-		DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+		DEBUG_ERROR("write failed (%d)", errno);
 		return false;
 	}
 
 	for (int i = 1; i < 32; i++) {
 		if (file_write(dev_file, zero, 512) != 512) {
-			DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+			DEBUG_ERROR("write failed (%d)", errno);
 			return false;
 		}
 	}
@@ -239,33 +239,33 @@ static bool gpt_write_partition_array(const char *dev_name, struct file_t *dev_f
 	return true;
 }
 
-static bool gpt_write_partition_cleanup(const char *dev_name, struct file_t *dev_file, struct gpt_state_t *gpt_state)
+static bool gpt_write_partition_cleanup(struct file_t *dev_file, struct gpt_state_t *gpt_state)
 {
 	uint8_t zero[512];
 	memset(zero, 0, 512);
 
 	/* wipe area between usable start and partition 1, plus the fist 16k of the partition */
 	if (!file_seek_set(dev_file, gpt_state->usable_begin * 512)) {
-		DEBUG_ERROR("failed to seek %s (%d)", dev_name, errno);
+		DEBUG_ERROR("seek failed (%d)", errno);
 		return false;
 	}
 
 	for (uint64_t i = gpt_state->usable_begin; i < gpt_state->partition_begin + 32; i++) {
 		if (file_write(dev_file, zero, 512) != 512) {
-			DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+			DEBUG_ERROR("write failed (%d)", errno);
 			return false;
 		}
 	}
 
 	/* wipe area between partition 1 end and usable end, plus the last 16k of the partition */
 	if (!file_seek_set(dev_file, (gpt_state->partition_end - 32) * 512)) {
-		DEBUG_ERROR("failed to seek %s (%d)", dev_name, errno);
+		DEBUG_ERROR("seek failed (%d)", errno);
 		return false;
 	}
 
 	for (uint64_t i = gpt_state->partition_end - 32; i < gpt_state->usable_end; i++) {
 		if (file_write(dev_file, zero, 512) != 512) {
-			DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
+			DEBUG_ERROR("write failed (%d)", errno);
 			return false;
 		}
 	}
@@ -273,49 +273,21 @@ static bool gpt_write_partition_cleanup(const char *dev_name, struct file_t *dev
 	return true;
 }
 
-int gpt_create_if_mbr_blank(const char *dev_name)
+bool gpt_create_with_one_partition(struct file_t *dev_file)
 {
-	struct file_t *dev_file = file_open_existing(dev_name);
-	if (!dev_file) {
-		DEBUG_ERROR("failed to open %s (%d)", dev_name, errno);
-		return -1;
-	}
-
-	/* Check if MBR is blank */
-	uint32_t buffer32[512 / 4];
-	if (file_read(dev_file, buffer32, 512) != 512) {
-		DEBUG_ERROR("failed to read %s (%d)", dev_name, errno);
-		file_close(dev_file);
-		return -1;
-	}
-
-	uint32_t *ptr32 = buffer32;
-	uint32_t *end32 = buffer32 + (512 / 4);
-	while (ptr32 < end32) {
-		if (*ptr32++ != 0x00000000) {
-			DEBUG_INFO("mbr contains data");
-			file_close(dev_file);
-			return 0;
-		}
-	}
-
-	DEBUG_INFO("mbr is blank - creating new partition table");
-
 	struct gpt_state_t gpt_state;
 	memset(&gpt_state, 0, sizeof(struct gpt_state_t));
 
 	/* Check size of dev */
 	if (!file_seek_end(dev_file)) {
-		DEBUG_ERROR("failed to seek %s (%d)", dev_name, errno);
-		file_close(dev_file);
-		return -1;
+		DEBUG_ERROR("seek failed (%d)", errno);
+		return false;
 	}
 
 	uint64_t dev_size = file_get_pos(dev_file, 0);
 	if (dev_size <= 0) {
-		DEBUG_ERROR("failed to determine size of %s (%d)", dev_name, errno);
-		file_close(dev_file);
-		return -1;
+		DEBUG_ERROR("failed to determine size (%d)", errno);
+		return false;
 	}
 
 	gpt_state.total_sectors = dev_size / 512;
@@ -333,52 +305,68 @@ int gpt_create_if_mbr_blank(const char *dev_name)
 
 	/* Write GPT partition array */
 	uint32_t partition_array_crc;
-	if (!gpt_write_partition_array(dev_name, dev_file, &gpt_state, &partition_array_crc)) {
-		file_close(dev_file);
-		return -1;
+	if (!gpt_write_partition_array(dev_file, &gpt_state, &partition_array_crc)) {
+		return false;
 	}
 
 	/* Write GPT partition header */
-	if (!gpt_write_partition_header(dev_name, dev_file, &gpt_state, partition_array_crc)) {
-		file_close(dev_file);
-		return -1;
+	if (!gpt_write_partition_header(dev_file, &gpt_state, partition_array_crc)) {
+		return false;
 	}
 
 	/* Wipe gaps and old filesystem headers */
-	if (!gpt_write_partition_cleanup(dev_name, dev_file, &gpt_state)) {
-		file_close(dev_file);
-		return -1;
+	if (!gpt_write_partition_cleanup(dev_file, &gpt_state)) {
+		return false;
 	}
 
 	/* Write protective MBR */
-	if (!gpt_write_protective_mbr(dev_name, dev_file, &gpt_state)) {
-		file_close(dev_file);
-		return -1;
+	if (!gpt_write_protective_mbr(dev_file, &gpt_state)) {
+		return false;
 	}
 
 	/* Sync to disk */
 	if (fsync(dev_file->fp) < 0) {
-		DEBUG_ERROR("failed to sync %s (%d)", dev_name, errno);
-		file_close(dev_file);
-		return -1;
+		DEBUG_ERROR("sync failed (%d)", errno);
+		return false;
 	}
 
 	/* Trigger linux kernel to reload the partition table */
 	if (ioctl(dev_file->fp, BLKRRPART) < 0) {
-		DEBUG_ERROR("kernel failed to reload the parition table of %s (%d)", dev_name, errno);
-		file_close(dev_file);
+		DEBUG_ERROR("kernel failed to reload the parition table (%d)", errno);
+		return false;
+	}
+
+	return true;
+}
+
+int gpt_mbr_is_blank(struct file_t *dev_file)
+{
+	if (!file_seek_set(dev_file, 0ULL)) {
+		DEBUG_ERROR("file_seek_set failed");
 		return -1;
 	}
 
-	file_close(dev_file);
+	uint32_t buffer32[512 / 4];
+	if (file_read(dev_file, buffer32, 512) != 512) {
+		DEBUG_ERROR("file_read failed (%d)", errno);
+		return -1;
+	}
+
+	uint32_t *ptr32 = buffer32;
+	uint32_t *end32 = buffer32 + (512 / 4);
+	while (ptr32 < end32) {
+		if (*ptr32++ != 0x00000000) {
+			return 0;
+		}
+	}
+
 	return 1;
 }
 
-bool gpt_wipe_mbr(const char *dev_name)
+bool gpt_mbr_wipe(struct file_t *dev_file)
 {
-	struct file_t *dev_file = file_open_existing(dev_name);
-	if (!dev_file) {
-		DEBUG_ERROR("failed to open %s (%d)", dev_name, errno);
+	if (!file_seek_set(dev_file, 0ULL)) {
+		DEBUG_ERROR("failed to seek to start (%d)", errno);
 		return false;
 	}
 
@@ -386,17 +374,14 @@ bool gpt_wipe_mbr(const char *dev_name)
 	memset(buffer, 0, 512);
 
 	if (file_write(dev_file, buffer, 512) != 512) {
-		DEBUG_ERROR("failed to write %s (%d)", dev_name, errno);
-		file_close(dev_file);
+		DEBUG_ERROR("failed to write (%d)", errno);
 		return false;
 	}
 
 	if (fsync(dev_file->fp) < 0) {
-		DEBUG_WARN("failed to sync %s (%d)", dev_name, errno);
-		file_close(dev_file);
+		DEBUG_WARN("failed to sync (%d)", errno);
 		return false;
 	}
 
-	file_close(dev_file);
 	return true;
 }

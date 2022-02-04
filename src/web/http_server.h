@@ -29,7 +29,6 @@ typedef enum {
 
 typedef http_server_probe_result_t (*http_server_service_probe_func_t)(void *arg, struct http_server_connection_t *connection, http_server_connection_method_t method, const char *uri);
 typedef http_parser_error_t (*http_server_connection_http_event_func_t)(void *arg, http_parser_event_t event, struct netbuf *nb);
-typedef void (*http_server_connection_send_resume_func_t)(void *arg);
 typedef void (*http_server_connection_close_func_t)(void *arg);
 
 extern struct http_server_t *http_server_instance_alloc(uint16_t port);
@@ -37,7 +36,7 @@ extern struct http_server_service_t *http_server_register_service(struct http_se
 extern void http_server_network_reset(struct http_server_t *http_server);
 extern uint16_t http_server_get_port(struct http_server_t *http_server);
 
-extern void http_server_connection_accept(struct http_server_connection_t *connection, http_server_connection_http_event_func_t http_event, http_server_connection_send_resume_func_t send_resume, http_server_connection_close_func_t close, void *callback_arg);
+extern void http_server_connection_accept(struct http_server_connection_t *connection, http_server_connection_http_event_func_t http_event, http_server_connection_close_func_t close, void *callback_arg);
 extern void http_server_connection_close(struct http_server_connection_t *connection);
 extern void http_server_connection_set_http_tag_list(struct http_server_connection_t *connection, const struct http_parser_tag_lookup_t *webserver_connection_http_tag_list, void *callback_arg);
 extern void http_server_connection_disable_timeout(struct http_server_connection_t *connection);
@@ -53,7 +52,6 @@ struct http_server_connection_t {
 	ticks_t connection_timeout;
 
 	http_server_connection_http_event_func_t http_event;
-	http_server_connection_send_resume_func_t send_resume;
 	http_server_connection_close_func_t close;
 	void *callback_arg;
 };

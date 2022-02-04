@@ -14,7 +14,6 @@ struct tls_server_connection_t;
 typedef void (*tls_server_connect_callback_t)(void *arg);
 typedef void (*tls_server_establish_callback_t)(void *arg);
 typedef void (*tls_server_recv_callback_t)(void *arg, struct netbuf *nb);
-typedef void (*tls_server_send_resume_callback_t)(void *arg);
 typedef void (*tls_server_close_callback_t)(void *arg, tcp_close_reason_t reason);
 
 extern struct tls_server_connection_t *tls_server_connection_alloc(void);
@@ -30,9 +29,9 @@ extern ipv4_addr_t tls_server_connection_get_remote_addr(struct tls_server_conne
 
 extern struct tls_server_socket_t *tls_server_socket_alloc(void);
 extern bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, ipv4_addr_t addr, uint16_t port, tls_server_connect_callback_t connect, void *callback_arg);
-extern void tls_server_socket_accept(struct tls_server_socket_t *tls_sock, struct tls_server_connection_t *tls_conn, tls_server_establish_callback_t est, tls_server_recv_callback_t recv, tls_server_send_resume_callback_t send_resume, tls_server_close_callback_t close, void *callback_arg);
+extern void tls_server_socket_accept(struct tls_server_socket_t *tls_sock, struct tls_server_connection_t *tls_conn, tls_server_establish_callback_t est, tls_server_recv_callback_t recv, tls_server_close_callback_t close, void *callback_arg);
 extern void tls_server_socket_reject(struct tls_server_socket_t *tls_sock);
 extern uint16_t tls_server_socket_get_port(struct tls_server_socket_t *tls_sock);
 
 /* Internal */
-extern void tls_server_connection_accept(struct tls_server_connection_t *tls_conn, struct tcp_socket *sock, tls_server_establish_callback_t est, tls_server_recv_callback_t recv, tls_server_send_resume_callback_t send_resume, tls_server_close_callback_t close, void *callback_arg);
+extern void tls_server_connection_accept(struct tls_server_connection_t *tls_conn, struct tcp_socket *sock, tls_server_establish_callback_t est, tls_server_recv_callback_t recv, tls_server_close_callback_t close, void *callback_arg);

@@ -18,12 +18,12 @@
 
 THIS_FILE("file_utils");
 
+#if !defined(FILE_MAX_WRITEV)
+#define FILE_MAX_WRITEV 8U
+#endif
+
 #define FILE_CREATE_MODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH)
 #define FILE_MOVE_BLOCK_SIZE (1024 * 1024)
-
-struct file_t {
-	int fp;
-};
 
 static struct file_t *file_open_internal(const char *path, int flags)
 {
@@ -75,6 +75,65 @@ size_t file_write(struct file_t *file, void *buffer, size_t length)
 	}
 
 	return actual;
+}
+
+size_t file_write_nb(struct file_t *file, struct netbuf *nb)
+{
+	uint8_t *ptr = netbuf_get_ptr(nb);
+	size_t length = netbuf_get_remaining(nb);
+
+	ssize_t actual = write(file->fp, ptr, length);
+	if (actual < 0) {
+		return 0;
+	}
+
+	return actual;
+}
+
+size_t file_write_nb_queue(struct file_t *file, struct netbuf_queue *nb_queue)
+{
+	size_t result = 0;
+
+	struct iovec iov[FILE_MAX_WRITEV];
+	struct iovec *iov_ptr = iov;
+	int iov_count = 0;
+	size_t length = 0;
+
+	struct netbuf *nb = netbuf_queue_get_head(nb_queue);
+	while (1) {
+		iov_ptr->iov_base = netbuf_get_ptr(nb);
+		iov_ptr->iov_len = netbuf_get_remaining(nb);
+		length += iov_ptr->iov_len;
+
+		iov_ptr++;
+		iov_count++;
+		nb = nb->next;
+
+		if (nb && (iov_count < FILE_MAX_WRITEV)) {
+			continue;
+		}
+
+		ssize_t actual = writev(file->fp, iov, iov_count);
+		if (actual <= 0) {
+			break;
+		}
+
+		result += actual;
+
+		if (actual != length) {
+			break;
+		}
+
+		if (!nb) {
+			break;
+		}
+
+		iov_ptr = iov;
+		iov_count = 0;
+		length = 0;
+	}
+
+	return result;
 }
 
 bool file_seek_set(struct file_t *file, uint64_t offset)
@@ -196,4 +255,9 @@ bool file_move(const char *new_path, const char *old_path)
 	free(buffer);
 	unlink(old_path);
 	return true;
+}
+
+void file_sync_all(void)
+{
+	sync();
 }

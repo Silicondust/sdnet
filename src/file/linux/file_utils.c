@@ -18,6 +18,10 @@
 
 THIS_FILE("file_utils");
 
+#if !defined(FILE_MAX_WRITEV)
+#define FILE_MAX_WRITEV 8
+#endif
+
 #define FILE_CREATE_MODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH)
 #define FILE_MOVE_BLOCK_SIZE (1024 * 1024)
 
@@ -53,6 +57,36 @@ struct file_t *file_open_existing(const char *path)
 	return file_open_internal(path, O_RDWR);
 }
 
+uint8_t *file_mmap(struct file_t *file, size_t *psize)
+{
+	DEBUG_ASSERT(!file->mmap_addr, "already mmap'd");
+
+	size_t file_size = (size_t)file_get_size(file, 0);
+	if (file_size == 0) {
+		return NULL;
+	}
+
+	file->mmap_addr = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, file->fp, 0);
+	if (!file->mmap_addr) {
+		return NULL;
+	}
+
+	*psize = file_size;
+	file->mmap_length = file_size;
+	return (uint8_t *)file->mmap_addr;
+}
+
+void file_munmap(struct file_t *file)
+{
+	if (!file->mmap_addr) {
+		return;
+	}
+
+	munmap(file->mmap_addr, file->mmap_length);
+	file->mmap_addr = NULL;
+	file->mmap_length = 0;
+}
+
 size_t file_read(struct file_t *file, void *buffer, size_t length)
 {
 	ssize_t actual = read(file->fp, buffer, length);
@@ -71,6 +105,65 @@ size_t file_write(struct file_t *file, void *buffer, size_t length)
 	}
 
 	return actual;
+}
+
+size_t file_write_nb(struct file_t *file, struct netbuf *nb)
+{
+	uint8_t *ptr = netbuf_get_ptr(nb);
+	size_t length = netbuf_get_remaining(nb);
+
+	ssize_t actual = write(file->fp, ptr, length);
+	if (actual < 0) {
+		return 0;
+	}
+
+	return actual;
+}
+
+size_t file_write_nb_queue(struct file_t *file, struct netbuf_queue *nb_queue)
+{
+	size_t result = 0;
+
+	struct iovec iov[FILE_MAX_WRITEV];
+	struct iovec *iov_ptr = iov;
+	int iov_count = 0;
+	size_t length = 0;
+
+	struct netbuf *nb = netbuf_queue_get_head(nb_queue);
+	while (1) {
+		iov_ptr->iov_base = netbuf_get_ptr(nb);
+		iov_ptr->iov_len = netbuf_get_remaining(nb);
+		length += iov_ptr->iov_len;
+
+		iov_ptr++;
+		iov_count++;
+		nb = nb->next;
+
+		if (nb && (iov_count < (int)FILE_MAX_WRITEV)) {
+			continue;
+		}
+
+		ssize_t actual = writev(file->fp, iov, iov_count);
+		if (actual <= 0) {
+			break;
+		}
+
+		result += actual;
+
+		if ((size_t)actual != length) {
+			break;
+		}
+
+		if (!nb) {
+			break;
+		}
+
+		iov_ptr = iov;
+		iov_count = 0;
+		length = 0;
+	}
+
+	return result;
 }
 
 bool file_seek_set(struct file_t *file, uint64_t offset)
@@ -103,8 +196,28 @@ uint64_t file_get_pos(struct file_t *file, uint64_t result_on_error)
 	return (uint64_t)result;
 }
 
+uint64_t file_get_size(struct file_t *file, uint64_t result_on_error)
+{
+	off64_t bookmark = lseek64(file->fp, 0, SEEK_CUR);
+	if (bookmark < 0) {
+		return result_on_error;
+	}
+
+	off64_t result = lseek64(file->fp, 0, SEEK_END);
+	lseek64(file->fp, bookmark, SEEK_SET);
+	if (result < 0) {
+		return result_on_error;
+	}
+
+	return (uint64_t)result;
+}
+
 void file_close(struct file_t *file)
 {
+	if (file->mmap_addr) {
+		munmap(file->mmap_addr, file->mmap_length);
+	}
+
 	close(file->fp);
 	heap_free(file);
 }
@@ -166,7 +279,7 @@ bool file_move(const char *new_path, const char *old_path)
 	}
 
 	/* open for RW as a test to know we can delete the file */
-	int old_fp = open(old_path, O_RDWR | O_LARGEFILE | O_NOCTTY | O_NOFOLLOW, FILE_CREATE_MODE);
+	int old_fp = open(old_path, O_RDWR | O_LARGEFILE | O_NOCTTY | O_NOFOLLOW, 0);
 	if (old_fp < 0) {
 		free(buffer);
 		return false;
@@ -192,4 +305,9 @@ bool file_move(const char *new_path, const char *old_path)
 	free(buffer);
 	unlink(old_path);
 	return true;
+}
+
+void file_sync_all(void)
+{
+	sync();
 }

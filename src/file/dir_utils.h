@@ -17,6 +17,11 @@ extern uint64_t dir_get_totalspace(const char *path);
 extern uint64_t dir_get_freespace(const char *path);
 extern bool dir_get_fs_type(char *str, char *end, const char *path);
 
+static inline uint64_t convert_bytes_to_mb(uint64_t bytes)
+{
+	return (bytes + 500000ULL) / 1000000ULL;
+}
+
 static inline uint64_t convert_bytes_to_gb(uint64_t bytes)
 {
 	return (bytes + 500000000ULL) / 1000000000ULL;

@@ -167,6 +167,41 @@ bool mqueue_write_request(struct mqueue_t *mqueue, mqueue_read_handler_func_t re
 	return true;
 }
 
+void mqueue_write_request_blocking(struct mqueue_t *mqueue, mqueue_read_handler_func_t read_handler, size_t length)
+{
+	struct mqueue_item_t *item;
+	while (1) {
+		item = (struct mqueue_item_t *)heap_alloc_and_zero(sizeof(struct mqueue_item_t) + length, PKG_OS, MEM_TYPE_OS_MQUEUE_ITEM);
+		if (!item) {
+			thread_yield();
+			continue;
+		}
+		break;
+	}
+
+	item->read_handler = read_handler;
+	item->length = length;
+
+	while (1) {
+		spinlock_lock(&mqueue->queue_lock);
+		if (mqueue->current_queue_depth >= mqueue->max_queue_depth) {
+			spinlock_unlock(&mqueue->queue_lock);
+			thread_yield();
+			continue;
+		}
+		mqueue->current_queue_depth++;
+		spinlock_unlock(&mqueue->queue_lock);
+		break;
+	}
+
+	spinlock_lock(&mqueue->current_write_lock);
+	DEBUG_ASSERT(!mqueue->current_write_item, "internal error");
+
+	mqueue->current_write_item = item;
+	mqueue->current_write_ptr = (uint8_t *)(item + 1);
+	mqueue->current_write_end = mqueue->current_write_ptr + length;
+}
+
 static void mqueue_write(struct mqueue_t *mqueue, void *ptr, size_t length)
 {
 	DEBUG_ASSERT(mqueue->current_write_item, "mqueue_write called without active request");
@@ -223,6 +258,24 @@ void mqueue_write_complete(struct mqueue_t *mqueue)
 	spinlock_unlock(&mqueue->queue_lock);
 
 	thread_signal_set(mqueue->signal);
+}
+
+void mqueue_write_cancel(struct mqueue_t *mqueue)
+{
+	DEBUG_ASSERT(mqueue->current_write_item, "mqueue_write_cancel called without active request");
+
+	struct mqueue_item_t *item = mqueue->current_write_item;
+	mqueue->current_write_item = NULL;
+	mqueue->current_write_ptr = NULL;
+	mqueue->current_write_end = NULL;
+
+	spinlock_unlock(&mqueue->current_write_lock);
+
+	spinlock_lock(&mqueue->queue_lock);
+	mqueue->current_queue_depth--;
+	spinlock_unlock(&mqueue->queue_lock);
+
+	heap_free(item);
 }
 
 struct mqueue_t *mqueue_alloc(size_t max_queue_depth, struct thread_signal_t *signal)

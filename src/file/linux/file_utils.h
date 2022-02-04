@@ -10,4 +10,6 @@
 
 struct file_t {
 	int fp;
+	void *mmap_addr;
+	size_t mmap_length;
 };

@@ -34,9 +34,7 @@ static void webserver_page_timer_callback(void *arg)
 		DEBUG_ASSERT(page->continue_callback, "no continue callback");
 
 		if (tcp_connection_can_send(connection->conn) != TCP_OK) {
-			#if defined(IP3K)
-			delay = min(delay, 10); /* ipOS does not support send_resume callback */
-			#endif
+			delay = min(delay, 16);
 			connection = slist_get_next(struct webserver_connection_t, connection);
 			continue;
 		}

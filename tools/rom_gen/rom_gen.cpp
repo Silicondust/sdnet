@@ -50,7 +50,7 @@ int Help()
 
 int main_blank(int argc, char *argv[])
 {
-	while (argc < 2) {
+	if (argc < 2) {
 		return Help();
 	}
 
@@ -69,7 +69,7 @@ int main_blank(int argc, char *argv[])
 
 int main_add_raw(int argc, char *argv[])
 {
-	while (argc < 4) {
+	if (argc < 4) {
 		return Help();
 	}
 
@@ -108,7 +108,7 @@ int main_add_raw(int argc, char *argv[])
 
 int main_checksum(int argc, char *argv[])
 {
-	while (argc < 2) {
+	if (argc < 2) {
 		return Help();
 	}
 
@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
 	argv++;
 	argc--;
 
-	while (argc < 1) {
+	if (argc < 1) {
 		return Help();
 	}
 

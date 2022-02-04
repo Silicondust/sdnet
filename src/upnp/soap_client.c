@@ -297,7 +297,7 @@ static void soap_client_request_start(void *arg)
 		return;
 	}
 
-	if (tcp_connection_connect(client->conn, client->url.ip_addr, client->url.ip_port, 0, 0, soap_client_request_conn_established, soap_client_request_conn_recv, NULL, soap_client_request_conn_close, client) != TCP_OK) {
+	if (tcp_connection_connect(client->conn, client->url.ip_addr, client->url.ip_port, 0, 0, soap_client_request_conn_established, soap_client_request_conn_recv, soap_client_request_conn_close, client) != TCP_OK) {
 		DEBUG_WARN("connect failed");
 		tcp_connection_deref(client->conn);
 		client->conn = NULL;

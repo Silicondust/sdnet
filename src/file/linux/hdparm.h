@@ -37,7 +37,8 @@ extern struct hdparm_smart_id_decode_t *hdparm_smart_id_decode_lookup(uint8_t id
 extern const char *hdparm_smart_id_get_name(struct hdparm_smart_id_decode_t *decode);
 extern bool hdparm_smart_id_get_value_str(struct hdparm_smart_id_decode_t *decode, char *ptr, char *end, uint8_t raw[6]);
 
-extern bool hdparm_get_identify(const char *dev_name, struct hdparm_identify_t *identify);
-extern bool hdparm_get_smart(const char *dev_name, struct hdparm_smart_t *smart);
-extern bool hdparm_set_standby_time(const char *dev_name, uint32_t seconds);
-extern bool hdparm_set_advanced_power_management(const char *dev_name, uint8_t level);
+extern bool hdparm_get_identify(struct file_t *dev_file, struct hdparm_identify_t *identify);
+extern bool hdparm_get_smart(struct file_t *dev_file, struct hdparm_smart_t *smart);
+extern int8_t hdparm_get_smart_temperature(struct file_t *dev_file, int8_t value_on_error);
+extern bool hdparm_set_standby_time(struct file_t *dev_file, uint32_t seconds);
+extern bool hdparm_set_advanced_power_management(struct file_t *dev_file, uint8_t level);

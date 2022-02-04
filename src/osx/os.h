@@ -35,6 +35,7 @@
 #include <utils/hmap.h>
 #include <utils/nvlist.h>
 #include <thread/mqueue.h>
+#include <thread/mqueue2.h>
 #include <netbuf.h>
 #include <text/netbuf_sprintf.h>
 #include <text/netbuf_sscanf.h>
@@ -61,7 +62,10 @@
 #include <file/dir_change_notification.h>
 #include <file/dir_utils.h>
 #include <file/file_utils.h>
+#include <file/file_wasync.h>
+#include <file/file_sendfile.h>
 #include <file/filename_utils.h>
+#include <file/bsd/file_utils.h>
 #include <debug.h>
 #include <log.h>
 #include <thread/long_task.h>
@@ -74,6 +78,7 @@
 #include <web/http_result.h>
 #include <web/url.h>
 #include <web/url_params.h>
+#include <web/url_unescape.h>
 #include <web/xml_parser.h>
 #include <web/xml_process.h>
 #include <web/http_server.h>

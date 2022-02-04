@@ -61,6 +61,7 @@ int os_main(int argc, char *argv[])
 	app_start();
 
 	long_task_manager_start();
+	igmp_manager_start();
 	udp_manager_start();
 	tcp_manager_start();
 	oneshot_manager_start();

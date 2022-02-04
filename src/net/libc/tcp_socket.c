@@ -43,11 +43,11 @@ uint16_t tcp_socket_get_port(struct tcp_socket *ts)
 	return ntohs(local_addr.sin_port);
 }
 
-void tcp_socket_accept(struct tcp_socket *ts, struct tcp_connection *tc, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_send_resume_callback_t send_resume, tcp_close_callback_t close, void *inst)
+void tcp_socket_accept(struct tcp_socket *ts, struct tcp_connection *tc, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst)
 {
 	DEBUG_ASSERT(ts->accept_connection_sock != -1, "tcp accept called without connection pending");
 
-	tcp_connection_accept(tc, ts->accept_connection_sock, est, recv, send_resume, close, inst);
+	tcp_connection_accept(tc, ts->accept_connection_sock, est, recv, close, inst);
 	ts->accept_connection_sock = -1;
 }
 

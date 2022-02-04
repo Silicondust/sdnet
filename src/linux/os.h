@@ -37,6 +37,7 @@
 #include <utils/hmap.h>
 #include <utils/nvlist.h>
 #include <thread/mqueue.h>
+#include <thread/mqueue2.h>
 #include <netbuf.h>
 #include <text/netbuf_sprintf.h>
 #include <text/netbuf_sscanf.h>
@@ -51,8 +52,10 @@
 #include <net/ip_datalink.h>
 #include <net/igmp.h>
 #include <net/dhcp_client.h>
+#include <net/dhcp_server.h>
 #include <net/dhcp_usbd.h>
 #include <net/dns_lookup.h>
+#include <net/dns_responder.h>
 #include <net/mdns_responder.h>
 #include <net/udp.h>
 #include <net/udp_dhcp.h>
@@ -64,6 +67,8 @@
 #include <file/dir_change_notification.h>
 #include <file/dir_utils.h>
 #include <file/file_utils.h>
+#include <file/file_wasync.h>
+#include <file/file_sendfile.h>
 #include <file/linux/dir_utils.h>
 #include <file/linux/file_utils.h>
 #include <file/linux/hdparm.h>
@@ -83,6 +88,7 @@
 #include <web/http_result.h>
 #include <web/url.h>
 #include <web/url_params.h>
+#include <web/url_unescape.h>
 #include <web/xml_parser.h>
 #include <web/xml_process.h>
 #include <web/http_server.h>

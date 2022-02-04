@@ -91,7 +91,7 @@ bool filename_is_cross_platform_valid_middle_char(uint16_t c)
 
 void filename_inplace_fix_filename_str_without_path(char *str)
 {
-	char *rptr = str;
+	const char *rptr = str;
 	char *wptr = str;
 	char *wend = str + strlen(str) + 1;
 	char *trailing = wptr;

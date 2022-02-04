@@ -1,7 +1,7 @@
 /*
  * mdns_responder.c
  *
- * Copyright © 2012-2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2012-2021 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -146,15 +146,15 @@ struct mdns_responder_output_state {
 static bool mdns_responder_output_answer(struct mdns_responder_output_state *state, ipv4_addr_t src_addr, char *name)
 {
 	if (!state->txnb) {
-		state->txnb = netbuf_alloc();
-		if (!state->txnb) {
-			DEBUG_ERROR("out of memory");
-			return false;
-		}
-
 		state->local_ip = ip_get_local_ip_for_remote_ip(src_addr);
 		if (!state->local_ip) {
 			DEBUG_ERROR("no local ip");
+			return false;
+		}
+
+		state->txnb = netbuf_alloc();
+		if (!state->txnb) {
+			DEBUG_ERROR("out of memory");
 			return false;
 		}
 	}
@@ -191,7 +191,7 @@ static bool mdns_responder_output_answer(struct mdns_responder_output_state *sta
 	netbuf_fwd_write_u8(state->txnb, 0);
 	netbuf_fwd_write_u16(state->txnb, DNS_RECORD_TYPE_A);
 	netbuf_fwd_write_u16(state->txnb, DNS_RECORD_CLASS_IN);
-	netbuf_fwd_write_u32(state->txnb, 120); /* time to live */
+	netbuf_fwd_write_u32(state->txnb, 600); /* time to live */
 	netbuf_fwd_write_u16(state->txnb, 4); /* data length */
 	netbuf_fwd_write_u32(state->txnb, state->local_ip);
 
@@ -276,11 +276,10 @@ static void mdns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_p
 	netbuf_rev_write_u16(state.txnb, 0x8400); /* flags */
 	netbuf_rev_write_u16(state.txnb, transaction_id);
 
-	uint8_t ttl = 1;
 	if (src_port == MDNS_PORT) {
-		udp_socket_send_multipath(mdns_responder.sock, MDNS_MULTICAST_IP, MDNS_PORT, state.local_ip, ttl, UDP_TOS_DEFAULT, state.txnb);
+		udp_socket_send_multipath(mdns_responder.sock, MDNS_MULTICAST_IP, MDNS_PORT, state.local_ip, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, state.txnb);
 	} else {
-		udp_socket_send_multipath(mdns_responder.sock, src_addr, src_port, state.local_ip, ttl, UDP_TOS_DEFAULT, state.txnb);
+		udp_socket_send_multipath(mdns_responder.sock, src_addr, src_port, state.local_ip, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, state.txnb);
 	}
 
 	netbuf_free(state.txnb);

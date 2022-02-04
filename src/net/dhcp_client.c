@@ -24,6 +24,9 @@ THIS_FILE("dhcp_client");
 #define DHCP_BOOTP_REQUEST 0x01
 #define DHCP_BOOTP_REPLY 0x02
 
+#define DHCP_BOOTP_FLAGS_NONE 0x0000
+#define DHCP_BOOTP_FLAGS_BROADCAST 0x8000
+
 #define DHCP_MAGIC_COOKIE 0x63825363
 
 #define DHCP_TAG_PAD 0x00
@@ -82,7 +85,7 @@ static void dhcp_client_lease_expire(struct dhcp_client_t *dc)
 	}
 }
 
-static void dhcp_client_send(struct dhcp_client_t *dc, uint8_t message_type, ipv4_addr_t server_ip, ipv4_addr_t requested_ip)
+static void dhcp_client_send(struct dhcp_client_t *dc, uint8_t message_type, ipv4_addr_t server_ip, ipv4_addr_t requested_ip, uint16_t flags)
 {
 	struct netbuf *txnb = netbuf_alloc_with_fwd_space(300); /* DHCP packets must be padded to 300 bytes if shorter. */
 	if (!txnb) {
@@ -99,7 +102,7 @@ static void dhcp_client_send(struct dhcp_client_t *dc, uint8_t message_type, ipv
 	netbuf_fwd_write_u8(txnb, 0); /* hops */
 	netbuf_fwd_write_u32(txnb, dc->transaction_id);
 	netbuf_fwd_write_u16(txnb, (timer_get_ticks() - dc->discover_start_time) / TICK_RATE);
-	netbuf_fwd_write_u16(txnb, 0x8000); /* flags */
+	netbuf_fwd_write_u16(txnb, flags);
 	netbuf_fwd_write_u32(txnb, dc->bound_local_ip); /* client ip address */
 	netbuf_fwd_write_u32(txnb, 0x00000000); /* your ip address */
 	netbuf_fwd_write_u32(txnb, 0x00000000); /* next server ip address */
@@ -146,7 +149,8 @@ static void dhcp_client_send(struct dhcp_client_t *dc, uint8_t message_type, ipv
 	netbuf_fwd_fill_u8(txnb, netbuf_get_remaining(txnb), 0);
 
 	netbuf_set_pos_to_start(txnb);
-	udp_dhcp_socket_send_netbuf(dc->sock, dc->idi, 0xFFFFFFFF, DHCP_SERVER_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+	ipv4_addr_t dst_addr = (flags & DHCP_BOOTP_FLAGS_BROADCAST) ? 0xFFFFFFFF : server_ip;
+	udp_dhcp_socket_send_netbuf(dc->sock, dc->idi, dst_addr, DHCP_SERVER_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 
@@ -292,7 +296,7 @@ static void dhcp_client_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 			break;
 		}
 
-		dhcp_client_send(dc, DHCP_MESSAGE_TYPE_REQUEST, server_ip, ip_addr);
+		dhcp_client_send(dc, DHCP_MESSAGE_TYPE_REQUEST, server_ip, ip_addr, DHCP_BOOTP_FLAGS_BROADCAST);
 		break;
 
 	case DHCP_MESSAGE_TYPE_ACK:
@@ -368,9 +372,11 @@ static void dhcp_client_timer_callback(void *arg)
 	dc->transaction_id = random_get32();
 
 	if (dc->bound_server_ip != 0) {
-		dhcp_client_send(dc, DHCP_MESSAGE_TYPE_REQUEST, dc->bound_server_ip, dc->bound_local_ip);
+		/* attempt to renew the existing lease */
+		dhcp_client_send(dc, DHCP_MESSAGE_TYPE_REQUEST, dc->bound_server_ip, dc->bound_local_ip, DHCP_BOOTP_FLAGS_NONE);
 	} else {
-		dhcp_client_send(dc, DHCP_MESSAGE_TYPE_DISCOVER, 0, dc->bound_local_ip);
+		/* no-ip or rebind */
+		dhcp_client_send(dc, DHCP_MESSAGE_TYPE_DISCOVER, 0, 0, DHCP_BOOTP_FLAGS_BROADCAST);
 	}
 }
 

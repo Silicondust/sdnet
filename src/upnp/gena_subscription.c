@@ -227,7 +227,7 @@ static void gena_subscription_connect(void *arg)
 		return;
 	}
 
-	if (tcp_connection_connect(subscription->conn, subscription->callback_ip, subscription->callback_port, 0, 0, gena_subscription_conn_established, gena_subscription_conn_recv, NULL, gena_subscription_conn_close, subscription) != TCP_OK) {
+	if (tcp_connection_connect(subscription->conn, subscription->callback_ip, subscription->callback_port, 0, 0, gena_subscription_conn_established, gena_subscription_conn_recv, gena_subscription_conn_close, subscription) != TCP_OK) {
 		DEBUG_WARN("connect failed");
 		tcp_connection_deref(subscription->conn);
 		subscription->conn = NULL;

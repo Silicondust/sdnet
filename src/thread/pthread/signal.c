@@ -39,7 +39,21 @@ void thread_suspend_wait_for_signal(struct thread_signal_t *signal)
 	pthread_mutex_unlock(&signal->mutex);
 }
 
-void thread_suspend_wait_for_signal_or_timeout(struct thread_signal_t *signal, ticks_t timeout_time)
+void thread_suspend_wait_for_signal_or_ticks(struct thread_signal_t *signal, ticks_t ticks)
+{
+	thread_yield();
+
+	pthread_mutex_lock(&signal->mutex);
+
+	if (!signal->signaled) {
+		thread_pthread_cond_timedwait(&signal->cond, &signal->mutex, ticks);
+	}
+
+	signal->signaled = false;
+	pthread_mutex_unlock(&signal->mutex);
+}
+
+void thread_suspend_wait_for_signal_or_timestamp(struct thread_signal_t *signal, ticks_t timestamp)
 {
 	thread_yield();
 
@@ -47,8 +61,8 @@ void thread_suspend_wait_for_signal_or_timeout(struct thread_signal_t *signal, t
 
 	if (!signal->signaled) {
 		ticks_t current_time = timer_get_ticks();
-		if (current_time < timeout_time) {
-			thread_pthread_cond_timedwait(&signal->cond, &signal->mutex, timeout_time - current_time);
+		if (current_time < timestamp) {
+			thread_pthread_cond_timedwait(&signal->cond, &signal->mutex, timestamp - current_time);
 		}
 	}
 

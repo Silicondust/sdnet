@@ -1,70 +1,5 @@
 <?php
 
-/*
-  [0]=>
-  string(5) "Owner"
-  [1]=>
-  string(31) "Certificate Issuer Organization"
-  [2]=>
-  string(38) "Certificate Issuer Organizational Unit"
-  [3]=>
-  string(31) "Common Name or Certificate Name"
-  [4]=>
-  string(25) "Certificate Serial Number"
-  [5]=>
-  string(19) "SHA-256 Fingerprint"
-  [6]=>
-  string(21) "Subject + SPKI SHA256"
-  [7]=>
-  string(16) "Valid From [GMT]"
-  [8]=>
-  string(14) "Valid To [GMT]"
-  [9]=>
-  string(20) "Public Key Algorithm"
-  [10]=>
-  string(24) "Signature Hash Algorithm"
-  [11]=>
-  string(10) "Trust Bits"
-  [12]=>
-  string(16) "EV Policy OID(s)"
-  [13]=>
-  string(12) "Approval Bug"
-  [14]=>
-  string(31) "NSS Release When First Included"
-  [15]=>
-  string(35) "Firefox Release When First Included"
-  [16]=>
-  string(20) "Test Website - Valid"
-  [17]=>
-  string(22) "Test Website - Expired"
-  [18]=>
-  string(22) "Test Website - Revoked"
-  [19]=>
-  string(27) "Mozilla Applied Constraints"
-  [20]=>
-  string(15) "Company Website"
-  [21]=>
-  string(16) "Geographic Focus"
-  [22]=>
-  string(23) "Certificate Policy (CP)"
-  [23]=>
-  string(38) "Certification Practice Statement (CPS)"
-  [24]=>
-  string(14) "Standard Audit"
-  [25]=>
-  string(8) "BR Audit"
-  [26]=>
-  string(8) "EV Audit"
-  [27]=>
-  string(7) "Auditor"
-  [28]=>
-  string(19) "Standard Audit Type"
-  [29]=>
-  string(27) "Standard Audit Statement Dt"
-  [30]=>
-  string(8) "PEM Info"
-*/
-
 $key_types_valid = [];
 $key_types_valid[] = 'RSA 2048 bits';
 $key_types_valid[] = 'RSA 4096 bits';
@@ -75,13 +10,13 @@ $key_types_invalid[] = 'EC secp384r1';
 
 function process_cert($csv_data)
 {
-	$name = $csv_data[3];
+	$name = $csv_data['Common Name or Certificate Name'];
 
 	/* Check key type */
 	global $key_types_valid;
 	global $key_types_invalid;
 
-	$key_type = $csv_data[9];
+	$key_type = $csv_data['Public Key Algorithm'];
 
 	if (in_array($key_type, $key_types_invalid)) {
 		printf("ignoring '%s' with key type '%s'\n", $name, $key_type);
@@ -95,7 +30,7 @@ function process_cert($csv_data)
 
 	/* Output cert file */
 	$filename = $name . '.crt';
-	$cert_data = trim($csv_data[30], "'") . "\n";
+	$cert_data = trim($csv_data['PEM Info'], "'") . "\n";
 	file_put_contents($filename, $cert_data);
 
 	/* Decode cert */
@@ -147,13 +82,21 @@ function process()
 		return;
 	}
 
-	fgetcsv($fp, 0, ',', '"');
+	$headers = fgetcsv($fp, 0, ',', '"');
+	$field_count = count($headers);
 
 	while (1) {
-		$csv_data = fgetcsv($fp, 0, ',', '"');
-		if (!$csv_data) {
+		$fields = fgetcsv($fp, 0, ',', '"');
+		if (!$fields) {
 			break;
 		}
+
+		if (count($fields) != $field_count) {
+			error_log("ERROR: field count miss-match");
+			continue;
+		}
+
+		$csv_data = array_combine($headers, $fields);
 
 		process_cert($csv_data);
 	}

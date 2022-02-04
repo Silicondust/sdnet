@@ -29,15 +29,22 @@ void thread_suspend_wait_for_signal(struct thread_signal_t *signal)
 	WaitForSingleObject(signal->event_handle, INFINITE);
 }
 
-void thread_suspend_wait_for_signal_or_timeout(struct thread_signal_t *signal, ticks_t timeout_time)
+void thread_suspend_wait_for_signal_or_ticks(struct thread_signal_t *signal, ticks_t ticks)
+{
+	thread_yield();
+
+	WaitForSingleObject(signal->event_handle, (DWORD)ticks);
+}
+
+void thread_suspend_wait_for_signal_or_timestamp(struct thread_signal_t *signal, ticks_t timestamp)
 {
 	thread_yield();
 
 	ticks_t current_time = timer_get_ticks();
-	if (current_time >= timeout_time) {
+	if (current_time >= timestamp) {
 		WaitForSingleObject(signal->event_handle, 0);
 	} else {
-		WaitForSingleObject(signal->event_handle, (DWORD)(timeout_time - current_time));
+		WaitForSingleObject(signal->event_handle, (DWORD)(timestamp - current_time));
 	}
 }
 

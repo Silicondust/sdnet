@@ -100,7 +100,7 @@ struct appfs_file_t *appfs_file_open(const char *filename, const char *root)
 		size_t file_size = strtoul(header->file_size, NULL, 8);
 
 		if (appfs_file_open_filename_compare((uint32_t *)(addr_t)header->filename, desired_filename)) {
-			DEBUG_INFO("file %s = %u bytes", header->filename, file_size);
+			DEBUG_TRACE("file %s = %u bytes", header->filename, file_size);
 			ptr += 512;
 			end = ptr + file_size;
 			break;

@@ -11,6 +11,7 @@
 #include <os.h>
 #include <linux/route.h>
 #include <linux/sockios.h>
+#include <linux/wireless.h>
 #include <linux/mii.h>
 
 #if defined(DEBUG)
@@ -72,7 +73,9 @@ int ip_datalink_get_ifindex(struct ip_datalink_instance *idi)
 	strncpy(ifr.ifr_name, idi->interface_name, IFNAMSIZ);
 	if (ioctl(idi->ioctl_sock, SIOCGIFINDEX, &ifr) < 0) {
 		 DEBUG_ERROR("ioctl failed %d", errno);
+		 return -1;
 	}
+
 	return ifr.ifr_ifindex;
 }
 
@@ -159,6 +162,8 @@ void ip_datalink_set_ipaddr(struct ip_datalink_instance *idi, ipv4_addr_t ip_add
 		ip_datalink_get_ifflags(idi, &ifflags);
 		ifflags.ifr_flags &= ~(IFF_UP | IFF_RUNNING);
 		ip_datalink_set_ifflags(idi, &ifflags);
+
+		igmp_manager_local_ip_changed();
 		return;
 	}
 
@@ -204,6 +209,25 @@ void ip_datalink_set_ipaddr(struct ip_datalink_instance *idi, ipv4_addr_t ip_add
 	if (gateway != 0) {
 		DEBUG_INFO("adding gateway route");
 		ip_datalink_add_route(idi, 0x00000000, 0x00000000, gateway);
+	}
+
+	igmp_manager_local_ip_changed();
+}
+
+void ip_datalink_set_wifi_ap(struct ip_datalink_instance *idi)
+{
+	struct ifreq ifflags;
+	ip_datalink_get_ifflags(idi, &ifflags);
+	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
+	ip_datalink_set_ifflags(idi, &ifflags);
+
+	struct iwreq iwr;
+	memset(&iwr, 0, sizeof(struct iwreq));
+	strncpy(iwr.ifr_name, idi->interface_name, IFNAMSIZ);
+
+	iwr.u.mode = IW_MODE_MASTER;
+	if (ioctl(idi->ioctl_sock, SIOCSIWMODE, &iwr)) {
+		DEBUG_ERROR("ioctl SIOCSIWMODE failed %d %s", errno, strerror(errno));
 	}
 }
 

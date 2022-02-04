@@ -20,6 +20,10 @@
 
 THIS_FILE("system_managed");
 
+#if !defined(SYSTEM_CAPSET_ADDITIONAL)
+#define SYSTEM_CAPSET_ADDITIONAL 0
+#endif
+
 extern int capset(cap_user_header_t, const cap_user_data_t);
 
 static volatile uint32_t signal_in_progress = 0;
@@ -36,6 +40,7 @@ static void system_signal_handler_quit(int signal, siginfo_t *si, void *context_
 		return;
 	}
 
+	file_sync_all();
 	flash_shutdown(NULL);
 
 	if (RUNTIME_DEBUG) {
@@ -74,6 +79,7 @@ static void system_signal_handler_fault(int signal, siginfo_t *si, void *context
 	DEBUG_ERROR("%08X %08X %08X %08X %08X %08X %08X %08X", data[0], data[1], data[2],  data[3],  data[4],  data[5],  data[6],  data[7]);
 	DEBUG_ERROR("%08X %08X %08X %08X %08X %08X %08X %08X", data[8], data[9], data[10], data[11], data[12], data[13], data[14], data[15]);
 
+	file_sync_all();
 	flash_shutdown(&crash_dump);
 
 	if (RUNTIME_DEBUG) {
@@ -123,7 +129,7 @@ void system_drop_root(void)
 
 	header.version = _LINUX_CAPABILITY_VERSION;
 	header.pid = 0;
-	cap.permitted = (1 << CAP_SYS_BOOT) | (1 << CAP_SYS_TIME) | (1 << CAP_NET_ADMIN) | (1 << CAP_NET_RAW) | (1 << CAP_NET_BROADCAST) | (1 << CAP_SYS_RAWIO);
+	cap.permitted = SYSTEM_CAPSET_ADDITIONAL | (1 << CAP_SYS_BOOT) | (1 << CAP_SYS_TIME) | (1 << CAP_SYS_RAWIO) | (1 << CAP_NET_ADMIN) | (1 << CAP_NET_RAW) | (1 << CAP_NET_BROADCAST);
 	cap.effective = cap.permitted; 
 	cap.inheritable = 0;
 	status |= capset(&header, &cap);

@@ -88,6 +88,10 @@ static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, ip
 
 static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye)
 {
+#if defined(IP3K)
+	ipv4_addr_t local_ip = ip_get_local_ip_for_remote_ip(SSDP_MULTICAST_IP);
+	ssdp_service_send_notify_internal(service, local_ip, byebye);
+#else
 	struct ip_datalink_instance *idi = ip_datalink_manager_get_head();
 	while (idi) {
 		ipv4_addr_t local_ip = ip_datalink_get_ipaddr(idi);
@@ -98,6 +102,7 @@ static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye
 
 		ssdp_service_send_notify_internal(service, local_ip, byebye);
 	}
+#endif
 }
 
 static void ssdp_service_send_discover_response(struct ssdp_service_t *service, ipv4_addr_t remote_ip, uint16_t remote_port)

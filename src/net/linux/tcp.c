@@ -43,6 +43,10 @@ void tcp_set_sock_send_buffer_size(int sock, size_t size)
 
 tcp_error_t tcp_connection_send_file(struct tcp_connection *tc, struct file_t *file, size_t length, size_t *pactual)
 {
+	if (tcp_manager.disable_sendfile) {
+		return tcp_connection_send_file_fallback(tc, file, length, pactual);
+	}
+
 	if (tc->app_closed) {
 		return TCP_ERROR_FAILED;
 	}

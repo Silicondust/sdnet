@@ -18,10 +18,11 @@ struct nvlist_entry_t {
 extern void nvlist_clear_all(struct slist_t *list);
 extern struct nvlist_entry_t *nvlist_lookup(struct slist_t *list, const char *name);
 extern const char *nvlist_lookup_str(struct slist_t *list, const char *name);
+extern const char *nvlist_lookup_str_with_fallback(struct slist_t *list, const char *name, const char *value_on_error);
 extern int64_t nvlist_lookup_int64(struct slist_t *list, const char *name, int64_t value_on_error);
-extern void nvlist_set_str(struct slist_t *list, const char *name, const char *str);
-extern void nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, uint8_t *end);
-extern void nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb);
+extern const char *nvlist_set_str(struct slist_t *list, const char *name, const char *str);
+extern const char *nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, uint8_t *end);
+extern const char *nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb);
 extern void nvlist_set_int64(struct slist_t *list, const char *name, int64_t value);
-extern void nvlist_unset(struct slist_t *list, const char *name);
+extern bool nvlist_unset(struct slist_t *list, const char *name);
 extern void nvlist_copy(struct slist_t *dst_list, struct slist_t *src_list, const char *name);

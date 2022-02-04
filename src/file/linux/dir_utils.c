@@ -21,7 +21,7 @@
 THIS_FILE("dir_utils");
 
 /* Work around broken uclibc statfs64 implementation on 32-bit platforms */
-#if defined(__UCLIBC__) && !defined(__x86_64)
+#if defined(__UCLIBC__) && (__INT_FAST16_WIDTH__ == 32)
 int statfs64(const char *path, struct statfs64 *buf)
 {
 	return syscall(SYS_statfs64, path, sizeof(*buf), buf);
@@ -126,6 +126,7 @@ static struct dir_get_fs_type_lookup_t dir_get_fs_type_lookup[] =
 	{0x5dca2df5, "sdcardfs"},
 	{0x65735546, "fuse"},
 	{0x9123683e, "btrfs"},
+	{0xfe534d42, "smb2"},
 	{0xff534d42, "cifs"},
 	{0x00000000, ""}
 };

@@ -17,9 +17,9 @@
 
 THIS_FILE("char_utf8");
 
-uint16_t utf8_get_wchar(char **pptr, uint16_t error_char)
+uint16_t utf8_get_wchar(const char **pptr, uint16_t error_char)
 {
-	char *ptr = *pptr;
+	const char *ptr = *pptr;
 
 	uint8_t c = (uint8_t)*ptr++;
 	if (c == 0) {
@@ -85,7 +85,7 @@ void utf8_truncate_str_on_error(char *str)
 	char *ptr = str;
 	while (1) {
 		char *tmp = ptr;
-		if (utf8_get_wchar(&tmp, 0) == 0) {
+		if (utf8_get_wchar((const char **)&tmp, 0) == 0) {
 			*ptr = 0;
 			break;
 		}

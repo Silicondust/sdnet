@@ -153,7 +153,7 @@ static void oneshot_timer_thread_execute(void *arg)
 		ticks_t next_notification_time = oneshot_timer_notification();
 		thread_main_exit();
 
-		thread_suspend_wait_for_signal_or_timeout(oneshot_manager.signal, next_notification_time);
+		thread_suspend_wait_for_signal_or_timestamp(oneshot_manager.signal, next_notification_time);
 	}
 }
 

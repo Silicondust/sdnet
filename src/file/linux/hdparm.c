@@ -147,14 +147,8 @@ bool hdparm_smart_id_get_value_str(struct hdparm_smart_id_decode_t *decode, char
 	return decode->get_value_str_func(ptr, end, raw);
 }
 
-static bool hdparm_ata_cmd_non_data(const char *dev_name, uint8_t cmd[16])
+static bool hdparm_ata_cmd_non_data(struct file_t *dev_file, uint8_t cmd[16])
 {
-	struct file_t *dev_file = file_open_existing(dev_name);
-	if (!dev_file) {
-		DEBUG_ERROR("failed to open %s (%d)", dev_name, errno);
-		return false;
-	}
-
 	struct sg_io_hdr hdr;
 	memset(&hdr, 0, sizeof(hdr));
 
@@ -170,40 +164,21 @@ static bool hdparm_ata_cmd_non_data(const char *dev_name, uint8_t cmd[16])
 	hdr.timeout = 15000;
 
 	if (ioctl(dev_file->fp, SG_IO, &hdr) < 0) {
-		DEBUG_ERROR("command sent to %s failed (%d)", dev_name, errno);
-		file_close(dev_file);
+		DEBUG_ERROR("command failed (%d)", errno);
 		return false;
 	}
 
-	file_close(dev_file);
-
-	if (hdr.status && (hdr.status != SG_CHECK_CONDITION)) {
-		DEBUG_ERROR("%s scsi status error %u", dev_name, hdr.status);
-		return false;
-	}
-
-	if (hdr.host_status) {
-		DEBUG_ERROR("%s host status error %u", dev_name, hdr.host_status);
-		return false;
-	}
-
-	if (hdr.driver_status && (hdr.driver_status != SG_DRIVER_SENSE)) {
-		DEBUG_ERROR("%s driver status error %u", dev_name, hdr.driver_status);
+	if ((hdr.info & SG_INFO_OK_MASK) != SG_INFO_OK) {
+		DEBUG_ERROR("info did not report ok");
 		return false;
 	}
 
 	return true;
 }
 
-static bool hdparm_ata_cmd_pio_in(const char *dev_name, uint8_t ata_op, uint8_t feature, uint32_t lba, uint8_t output_buffer[512])
+static bool hdparm_ata_cmd_pio_in(struct file_t *dev_file, uint8_t ata_op, uint8_t feature, uint32_t lba, uint8_t output_buffer[512])
 {
 	memset(output_buffer, 0, 512);
-
-	struct file_t *dev_file = file_open_existing(dev_name);
-	if (!dev_file) {
-		DEBUG_ERROR("failed to open %s (%d)", dev_name, errno);
-		return false;
-	}
 
 	struct sg_io_hdr hdr;
 	memset(&hdr, 0, sizeof(hdr));
@@ -235,25 +210,12 @@ static bool hdparm_ata_cmd_pio_in(const char *dev_name, uint8_t ata_op, uint8_t 
 	hdr.timeout = 15000;
 
 	if (ioctl(dev_file->fp, SG_IO, &hdr) < 0) {
-		DEBUG_ERROR("command sent to %s failed (%d)", dev_name, errno);
-		file_close(dev_file);
+		DEBUG_ERROR("command failed (%d)", errno);
 		return false;
 	}
 
-	file_close(dev_file);
-
-	if (hdr.status && (hdr.status != SG_CHECK_CONDITION)) {
-		DEBUG_ERROR("%s scsi status error %u", dev_name, hdr.status);
-		return false;
-	}
-
-	if (hdr.host_status) {
-		DEBUG_ERROR("%s host status error %u", dev_name, hdr.host_status);
-		return false;
-	}
-
-	if (hdr.driver_status && (hdr.driver_status != SG_DRIVER_SENSE)) {
-		DEBUG_ERROR("%s driver status error %u", dev_name, hdr.driver_status);
+	if ((hdr.info & SG_INFO_OK_MASK) != SG_INFO_OK) {
+		DEBUG_ERROR("info did not report ok");
 		return false;
 	}
 
@@ -287,11 +249,11 @@ static void hdparm_get_identify_str_internal(char *dst, uint8_t *src_ptr, uint8_
 	str_trim_whitespace(dst);
 }
 
-bool hdparm_get_identify(const char *dev_name, struct hdparm_identify_t *identify)
+bool hdparm_get_identify(struct file_t *dev_file, struct hdparm_identify_t *identify)
 {
 	uint8_t data[512];
-	if (!hdparm_ata_cmd_pio_in(dev_name, ATA_OP_IDENTIFY, 0x00, 0x00000000, data)) {
-		DEBUG_ERROR("ATA_OP_IDENTIFY failed for %s", dev_name);
+	if (!hdparm_ata_cmd_pio_in(dev_file, ATA_OP_IDENTIFY, 0x00, 0x00000000, data)) {
+		DEBUG_ERROR("ATA_OP_IDENTIFY failed");
 		return false;
 	}
 
@@ -301,11 +263,11 @@ bool hdparm_get_identify(const char *dev_name, struct hdparm_identify_t *identif
 	return true;
 }
 
-bool hdparm_get_smart(const char *dev_name, struct hdparm_smart_t *smart)
+bool hdparm_get_smart(struct file_t *dev_file, struct hdparm_smart_t *smart)
 {
 	uint8_t data[512];
-	if (!hdparm_ata_cmd_pio_in(dev_name, ATA_OP_SMART_READ_DATA, ATA_SMART_READ_DATA_FEATURE_READ_VALUES, 0x00C24F00, data)) {
-		DEBUG_ERROR("ATA_OP_SMART_READ_DATA failed for %s", dev_name);
+	if (!hdparm_ata_cmd_pio_in(dev_file, ATA_OP_SMART_READ_DATA, ATA_SMART_READ_DATA_FEATURE_READ_VALUES, 0x00C24F00, data)) {
+		DEBUG_ERROR("ATA_OP_SMART_READ_DATA failed");
 		return false;
 	}
 
@@ -336,8 +298,8 @@ bool hdparm_get_smart(const char *dev_name, struct hdparm_smart_t *smart)
 		ptr += 12;
 	}
 
-	if (!hdparm_ata_cmd_pio_in(dev_name, ATA_OP_SMART_READ_DATA, ATA_SMART_READ_DATA_FEATURE_READ_THRESHOLDS, 0x00C24F00, data)) {
-		DEBUG_ERROR("ATA_OP_SMART_READ_DATA failed for %s", dev_name);
+	if (!hdparm_ata_cmd_pio_in(dev_file, ATA_OP_SMART_READ_DATA, ATA_SMART_READ_DATA_FEATURE_READ_THRESHOLDS, 0x00C24F00, data)) {
+		DEBUG_ERROR("ATA_OP_SMART_READ_DATA failed");
 		return false;
 	}
 
@@ -383,7 +345,34 @@ bool hdparm_get_smart(const char *dev_name, struct hdparm_smart_t *smart)
 	return true;
 }
 
-bool hdparm_set_standby_time(const char *dev_name, uint32_t seconds)
+int8_t hdparm_get_smart_temperature(struct file_t *dev_file, int8_t value_on_error)
+{
+	uint8_t data[512];
+	if (!hdparm_ata_cmd_pio_in(dev_file, ATA_OP_SMART_READ_DATA, ATA_SMART_READ_DATA_FEATURE_READ_VALUES, 0x00C24F00, data)) {
+		DEBUG_ERROR("ATA_OP_SMART_READ_DATA failed");
+		return value_on_error;
+	}
+
+	uint8_t *ptr = data + 2;
+
+	for (uint8_t i = 0; i < 30; i++) {
+		uint8_t id = ptr[0];
+
+		if ((id == 190) || (id == 194)) {
+			uint8_t temperature = ptr[5];
+			if (temperature > 127) {
+				return value_on_error;
+			}
+			return (int8_t)temperature;
+		}
+
+		ptr += 12;
+	}
+
+	return value_on_error;
+}
+
+bool hdparm_set_standby_time(struct file_t *dev_file, uint32_t seconds)
 {
 	uint32_t value = (seconds + 4) / 5;
 	if (value > 240) {
@@ -399,9 +388,9 @@ bool hdparm_set_standby_time(const char *dev_name, uint32_t seconds)
 	cmd[13] = ATA_USING_LBA;
 	cmd[14] = ATA_OP_IDLE;
 
-	bool ret1 = hdparm_ata_cmd_non_data(dev_name, cmd);
+	bool ret1 = hdparm_ata_cmd_non_data(dev_file, cmd);
 	if (!ret1) {
-		DEBUG_WARN("failed to set idle time of %s", dev_name);
+		DEBUG_WARN("failed to set idle time");
 	}
 
 	memset(cmd, 0, sizeof(cmd));
@@ -412,15 +401,15 @@ bool hdparm_set_standby_time(const char *dev_name, uint32_t seconds)
 	cmd[13] = ATA_USING_LBA;
 	cmd[14] = ATA_OP_STANDBY;
 
-	bool ret2 = hdparm_ata_cmd_non_data(dev_name, cmd);
+	bool ret2 = hdparm_ata_cmd_non_data(dev_file, cmd);
 	if (!ret2) {
-		DEBUG_WARN("failed to set standby time of %s", dev_name);
+		DEBUG_WARN("failed to set standby time");
 	}
 
 	return ret1 || ret2;
 }
 
-bool hdparm_set_advanced_power_management(const char *dev_name, uint8_t level)
+bool hdparm_set_advanced_power_management(struct file_t *dev_file, uint8_t level)
 {
 	uint8_t cmd[16];
 	memset(cmd, 0, sizeof(cmd));
@@ -432,8 +421,8 @@ bool hdparm_set_advanced_power_management(const char *dev_name, uint8_t level)
 	cmd[13] = ATA_USING_LBA;
 	cmd[14] = ATA_OP_SET_FEATURES;
 
-	if (!hdparm_ata_cmd_non_data(dev_name, cmd)) {
-		DEBUG_ERROR("failed to set advanced power management level of %s", dev_name);
+	if (!hdparm_ata_cmd_non_data(dev_file, cmd)) {
+		DEBUG_ERROR("failed to set advanced power management level");
 		return false;
 	}
 

@@ -90,7 +90,6 @@ struct tls_client_connection_t {
 
 	tls_client_establish_callback_t establish_callback;
 	tls_client_recv_callback_t recv_callback;
-	tls_client_send_resume_callback_t send_resume_callback;
 	tls_client_close_callback_t close_callback;
 	void *callback_arg;
 };
@@ -171,7 +170,6 @@ void tls_client_connection_close(struct tls_client_connection_t *tls_conn)
 	tls_conn->state = TLS_CLIENT_CONNECTION_STATE_NULL;
 	tls_conn->establish_callback = NULL;
 	tls_conn->recv_callback = NULL;
-	tls_conn->send_resume_callback = NULL;
 	tls_conn->close_callback = NULL;
 }
 
@@ -194,19 +192,6 @@ static void tls_client_connection_tcp_close_callback(void *arg, tcp_close_reason
 	tls_conn->conn = NULL;
 
 	tls_client_connection_close_and_notify(tls_conn);
-}
-
-static void tls_client_connection_tcp_send_resume_callback(void *arg)
-{
-	struct tls_client_connection_t *tls_conn = (struct tls_client_connection_t *)arg;
-
-	if (tls_conn->state != TLS_CLIENT_CONNECTION_STATE_APPLICATION_DATA) {
-		return;
-	}
-
-	if (tls_conn->send_resume_callback) {
-		tls_conn->send_resume_callback(tls_conn->callback_arg);
-	}
 }
 
 static bool tls_client_connection_append_hash_data(struct tls_client_connection_t *tls_conn, struct netbuf *nb)
@@ -1336,7 +1321,7 @@ static void tls_client_connection_tcp_establish_callback(void *arg)
 	tls_conn->state = TLS_CLIENT_CONNECTION_STATE_CLIENT_HELLO_SENT_EXPECTING_SERVER_HELLO;
 }
 
-bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, const char *host_name, tls_client_establish_callback_t est, tls_client_recv_callback_t recv, tls_client_send_resume_callback_t send_resume, tls_client_close_callback_t close, void *callback_arg)
+bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, const char *host_name, tls_client_establish_callback_t est, tls_client_recv_callback_t recv, tls_client_close_callback_t close, void *callback_arg)
 {
 	if (tls_conn->state != TLS_CLIENT_CONNECTION_STATE_NULL) {
 		DEBUG_ASSERT(0, "attempt to connect when already active");
@@ -1351,7 +1336,6 @@ bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv
 
 	tls_conn->establish_callback = est;
 	tls_conn->recv_callback = recv;
-	tls_conn->send_resume_callback = send_resume;
 	tls_conn->close_callback = close;
 	tls_conn->callback_arg = callback_arg;
 
@@ -1366,7 +1350,7 @@ bool tls_client_connection_connect(struct tls_client_connection_t *tls_conn, ipv
 
 	tcp_connection_set_max_recv_nb_size(tls_conn->conn, min(TLS_MAX_RECORD_LENGTH, NETBUF_MAX_LENGTH));
 
-	tcp_error_t ret = tcp_connection_connect(tls_conn->conn, dest_addr, dest_port, src_addr, src_port, tls_client_connection_tcp_establish_callback, tls_client_connection_tcp_recv_callback, tls_client_connection_tcp_send_resume_callback, tls_client_connection_tcp_close_callback, tls_conn);
+	tcp_error_t ret = tcp_connection_connect(tls_conn->conn, dest_addr, dest_port, src_addr, src_port, tls_client_connection_tcp_establish_callback, tls_client_connection_tcp_recv_callback, tls_client_connection_tcp_close_callback, tls_conn);
 	if (ret != TCP_OK) {
 		DEBUG_ERROR("tcp_connection_connect failed");
 		tcp_connection_deref(tls_conn->conn);

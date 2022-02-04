@@ -199,6 +199,20 @@ void hmap_clear_custom_impl(struct hmap_t *map, void *state, hmap_clear_custom_f
 	}
 }
 
+bool hmap_exchange(struct hmap_t *map1, struct hmap_t *map2)
+{
+	if (map1->hash_mask != map2->hash_mask) {
+		return false;
+	}
+
+	struct hmap_prefix_t **map1_hash_array = map1->hash_array;
+	struct hmap_prefix_t **map2_hash_array = map2->hash_array;
+
+	map1->hash_array = map2_hash_array;
+	map2->hash_array = map1_hash_array;
+	return true;
+}
+
 void hmap_dispose(struct hmap_t *map)
 {
 	if (map->hash_array) {

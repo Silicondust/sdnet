@@ -352,16 +352,6 @@ static http_parser_error_t webserver_connection_http_event(void *arg, http_parse
 	}
 }
 
-static void webserver_connection_send_resume(void *arg)
-{
-	struct webserver_connection_t *connection = (struct webserver_connection_t *)arg;
-	if (!connection->page_active_state) {
-		return;
-	}
-
-	webserver_start_page_timer(connection->webserver);
-}
-
 void webserver_connection_page_resume(struct webserver_connection_t *connection)
 {
 	if (!connection->page) {
@@ -441,7 +431,7 @@ http_server_probe_result_t webserver_connection_accept(struct webserver_t *webse
 	 * Accept connection.
 	 */
 	http_server_connection_set_http_tag_list(http_connection, webserver_connection_http_tag_list, connection);
-	http_server_connection_accept(http_connection, webserver_connection_http_event, webserver_connection_send_resume, webserver_connection_tcp_close, connection);
+	http_server_connection_accept(http_connection, webserver_connection_http_event, webserver_connection_tcp_close, connection);
 
 	/*
 	 * Validate method.

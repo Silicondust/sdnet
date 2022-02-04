@@ -74,6 +74,3 @@ typedef uint64_t ticks_t;
 
 #define LIKELY(exp) __builtin_expect((exp) != 0, 1)
 #define UNLIKELY(exp) __builtin_expect((exp) != 0, 0)
-
-#define MSG_NOSIGNAL 0
-

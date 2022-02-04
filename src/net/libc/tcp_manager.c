@@ -30,6 +30,11 @@ void tcp_manager_reset_network_ok_indication(void)
 	tcp_manager.network_ok_indication = false;
 }
 
+void tcp_manager_disable_sendfile(void)
+{
+	tcp_manager.disable_sendfile = true;
+}
+
 void tcp_manager_start(void)
 {
 	thread_start(tcp_socket_thread_execute, NULL);

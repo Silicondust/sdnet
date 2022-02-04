@@ -30,9 +30,9 @@ void tls_server_socket_reject(struct tls_server_socket_t *tls_sock)
 	tcp_socket_reject(tls_sock->sock);
 }
 
-void tls_server_socket_accept(struct tls_server_socket_t *tls_sock, struct tls_server_connection_t *tls_conn, tls_server_establish_callback_t est, tls_server_recv_callback_t recv, tls_server_send_resume_callback_t send_resume, tls_server_close_callback_t close, void *callback_arg)
+void tls_server_socket_accept(struct tls_server_socket_t *tls_sock, struct tls_server_connection_t *tls_conn, tls_server_establish_callback_t est, tls_server_recv_callback_t recv, tls_server_close_callback_t close, void *callback_arg)
 {
-	//tls_server_connection_accept(tls_conn, tls_sock->sock, est, recv, send_resume, close, callback_arg);
+	//tls_server_connection_accept(tls_conn, tls_sock->sock, est, recv, close, callback_arg);
 }
 
 static void tls_server_socket_tcp_connect_callback(void *arg)

@@ -415,6 +415,6 @@ http_server_probe_result_t soap_service_connection_accept(struct http_server_con
 	 * Accept connection.
 	 */
 	http_server_connection_set_http_tag_list(http_connection, soap_service_connection_http_tag_list, connection);
-	http_server_connection_accept(http_connection, soap_service_connection_http_event, NULL, soap_service_connection_tcp_close_callback, connection);
+	http_server_connection_accept(http_connection, soap_service_connection_http_event, soap_service_connection_tcp_close_callback, connection);
 	return HTTP_SERVER_PROBE_RESULT_MATCH;
 }

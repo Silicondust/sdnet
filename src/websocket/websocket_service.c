@@ -479,7 +479,7 @@ struct websocket_service_connection_t *websocket_service_connection_accept(struc
 
 	ws_conn->http_connection = http_connection;
 	http_server_connection_set_http_tag_list(http_connection, websocket_service_connection_http_tag_list, ws_conn);
-	http_server_connection_accept(http_connection, websocket_service_connection_http_event, NULL, websocket_service_connection_tcp_close_callback, ws_conn);
+	http_server_connection_accept(http_connection, websocket_service_connection_http_event, websocket_service_connection_tcp_close_callback, ws_conn);
 
 	return ws_conn;
 }

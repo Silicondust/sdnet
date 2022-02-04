@@ -24,6 +24,7 @@ typedef bool (*hmap_clear_custom_func_t)(struct hmap_prefix_t *item, void *state
 typedef void (*hmap_clear_callback_func_t)(struct hmap_prefix_t *item);
 
 extern bool hmap_init(struct hmap_t *map, uint32_t hash_size);
+extern bool hmap_exchange(struct hmap_t *map1, struct hmap_t *map2);
 extern void hmap_dispose(struct hmap_t *map);
 
 extern uint32_t hmap_hash_create(const void *ptr, size_t length);

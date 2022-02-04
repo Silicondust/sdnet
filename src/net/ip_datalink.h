@@ -28,6 +28,7 @@ extern int ip_datalink_get_ifindex(struct ip_datalink_instance *idi);
 extern void ip_datalink_get_hwaddr(struct ip_datalink_instance *idi, uint8_t *hwaddr, uint8_t hwaddr_len);
 extern void ip_datalink_set_hwaddr(struct ip_datalink_instance *idi, uint8_t *hwaddr, uint8_t hwaddr_len);
 extern void ip_datalink_set_ipaddr(struct ip_datalink_instance *idi, ipv4_addr_t ip_addr, ipv4_addr_t subnet_mask, ipv4_addr_t gateway);
+extern void ip_datalink_set_wifi_ap(struct ip_datalink_instance *idi);
 extern void ip_datalink_set_loopback(struct ip_datalink_instance *idi);
 extern bool ip_datalink_read_ethernet_mii_register(struct ip_datalink_instance *idi, uint8_t reg_addr, uint16_t *presult);
 
@@ -44,6 +45,11 @@ extern struct ip_datalink_instance *ip_datalink_manager_ip_datalink_alloc(const 
 static inline bool ip_addr_is_unicast(ipv4_addr_t addr)
 {
 	return (addr > 0x00000000) && (addr < 0xE0000000);
+}
+
+static inline bool ip_addr_is_localhost(ipv4_addr_t addr)
+{
+	return (addr >= 0x7F000000) && (addr < 0x80000000);
 }
 
 static inline bool ip_addr_is_multicast(ipv4_addr_t addr)

@@ -35,7 +35,7 @@ void str_utf8_to_utf16(uint16_t *out, uint16_t *end, const char *in)
 	end--;
 
 	while (out < end) {
-		uint16_t c = utf8_get_wchar((char **)&in, 0);
+		uint16_t c = utf8_get_wchar((const char **)&in, 0);
 		if (c == 0) {
 			break;
 		}

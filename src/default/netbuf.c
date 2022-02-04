@@ -123,6 +123,10 @@ struct netbuf *netbuf_clone(struct netbuf *orig)
 	}
 
 	size_t orig_len = orig->end - orig->start;
+	if (orig_len == 0) {
+		return nb;
+	}
+
 	size_t orig_pos = orig->pos - orig->start;
 	size_t alloc_size = netbuf_alloc_size(orig_len);
 
@@ -218,6 +222,20 @@ uint32_t netbuf_fwd_read_u32(struct netbuf *nb)
 	v |= (uint32_t)*nb->pos++ << 16;
 	v |= (uint32_t)*nb->pos++ << 8;
 	v |= (uint32_t)*nb->pos++ << 0;
+	return v;
+}
+
+uint64_t netbuf_fwd_read_u48(struct netbuf *nb)
+{
+	DEBUG_ASSERT(nb->pos + 6 <= nb->end, "read beyond end of netbuf");
+
+	uint64_t v;
+	v  = (uint64_t)*nb->pos++ << 40;
+	v |= (uint64_t)*nb->pos++ << 32;
+	v |= (uint64_t)*nb->pos++ << 24;
+	v |= (uint64_t)*nb->pos++ << 16;
+	v |= (uint64_t)*nb->pos++ << 8;
+	v |= (uint64_t)*nb->pos++ << 0;
 	return v;
 }
 
@@ -485,6 +503,18 @@ void netbuf_fwd_write_u32(struct netbuf *nb, uint32_t v)
 {
 	DEBUG_ASSERT(nb->pos + 4 <= nb->end, "write beyond end of netbuf");
 
+	*nb->pos++ = (uint8_t)(v >> 24);
+	*nb->pos++ = (uint8_t)(v >> 16);
+	*nb->pos++ = (uint8_t)(v >> 8);
+	*nb->pos++ = (uint8_t)(v >> 0);
+}
+
+void netbuf_fwd_write_u48(struct netbuf *nb, uint64_t v)
+{
+	DEBUG_ASSERT(nb->pos + 6 <= nb->end, "write beyond end of netbuf");
+
+	*nb->pos++ = (uint8_t)(v >> 40);
+	*nb->pos++ = (uint8_t)(v >> 32);
 	*nb->pos++ = (uint8_t)(v >> 24);
 	*nb->pos++ = (uint8_t)(v >> 16);
 	*nb->pos++ = (uint8_t)(v >> 8);

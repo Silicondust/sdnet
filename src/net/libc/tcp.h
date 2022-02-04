@@ -8,8 +8,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#define TCP_RX_NETBUF_SIZE 1460
-#define TCP_TX_BUFFER_SIZE (128 * 1024)
+#define TCP_MAX_RECV_NB_SIZE_DEFAULT (3 * 1024)
+#define TCP_SEND_BUFFER_SIZE_DEFAULT (128 * 1024)
 #define TCP_ESTABLISHED_TIMEOUT (TICK_RATE * 5)
 
 struct tcp_connection;
@@ -31,10 +31,11 @@ struct tcp_connection {
 	size_t max_recv_nb_size;
 	size_t send_buffer_size;
 	ticks_t established_timeout;
+	uint8_t *sendfile_buffer;
+	size_t sendfile_buffer_size;
 
 	tcp_establish_callback_t est_callback;
 	tcp_recv_callback_t recv_callback;
-	tcp_send_resume_callback_t send_resume_callback;
 	tcp_close_callback_t close_callback;
 	void *callback_inst;
 };
@@ -55,13 +56,16 @@ struct tcp_manager_t {
 	int connection_poll_trigger_fd;
 
 	bool network_ok_indication;
+	bool disable_sendfile;
 };
 
 extern struct tcp_manager_t tcp_manager;
 
 extern void tcp_socket_thread_execute(void *arg);
 extern void tcp_connection_thread_execute(void *arg);
-extern void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_send_resume_callback_t send_resume, tcp_close_callback_t close, void *inst);
+extern void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst);
 extern void tcp_connection_trigger_poll(void);
 extern void tcp_set_sock_nosigpipe(int sock);
 extern void tcp_set_sock_send_buffer_size(int sock, size_t size);
+
+extern tcp_error_t tcp_connection_send_file_fallback(struct tcp_connection *tc, struct file_t *file, size_t length, size_t *pactual);

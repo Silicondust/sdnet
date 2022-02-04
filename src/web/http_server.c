@@ -120,10 +120,9 @@ void http_server_connection_set_http_tag_list(struct http_server_connection_t *c
 	http_parser_set_tag_list(connection->http_parser, http_tag_list, callback_arg);
 }
 
-void http_server_connection_accept(struct http_server_connection_t *connection, http_server_connection_http_event_func_t http_event, http_server_connection_send_resume_func_t send_resume, http_server_connection_close_func_t close, void *callback_arg)
+void http_server_connection_accept(struct http_server_connection_t *connection, http_server_connection_http_event_func_t http_event, http_server_connection_close_func_t close, void *callback_arg)
 {
 	connection->http_event = http_event;
-	connection->send_resume = send_resume;
 	connection->close = close;
 	connection->callback_arg = callback_arg;
 }
@@ -188,15 +187,6 @@ static http_parser_error_t http_server_connection_http_event(void *arg, http_par
 		}
 
 		return connection->http_event(connection->callback_arg, event, nb);
-	}
-}
-
-static void http_server_connection_tcp_send_resume(void *arg)
-{
-	struct http_server_connection_t *connection = (struct http_server_connection_t *)arg;
-
-	if (connection->send_resume) {
-		connection->send_resume(connection->callback_arg);
 	}
 }
 
@@ -266,7 +256,7 @@ static void http_server_sock_accept(void *arg)
 	connection->connection_timeout = timer_get_ticks() + HTTP_SERVER_DEFAULT_CONNECTION_TIMEOUT;
 	http_server_add_connection(http_server, connection);
 
-	tcp_socket_accept(http_server->listen_sock, connection->conn, http_server_connection_establish, http_server_connection_tcp_recv, http_server_connection_tcp_send_resume, http_server_connection_tcp_close, connection);
+	tcp_socket_accept(http_server->listen_sock, connection->conn, http_server_connection_establish, http_server_connection_tcp_recv, http_server_connection_tcp_close, connection);
 }
 
 uint16_t http_server_get_port(struct http_server_t *http_server)
