@@ -21,6 +21,7 @@
 #include <utils/base36.h>
 #include <utils/base64.h>
 #include <utils/guid.h>
+#include <net/ip_addr.h>
 #include <text/doprint_custom.h>
 #include <text/sprintf_custom.h>
 #include <text/sscanf_custom.h>
@@ -48,7 +49,8 @@
 #include <crypto/x509.h>
 #include <crypto/bsd/random.h>
 #include <crypto/libtom/mpi.h>
-#include <net/ip_datalink.h>
+#include <net/ip_interface.h>
+#include <net/libc/ip_interface.h>
 #include <net/igmp.h>
 #include <net/dhcp_client.h>
 #include <net/dns_lookup.h>

@@ -37,8 +37,11 @@ const struct http_parser_tag_lookup_t ssdp_service_manager_msearch_http_tag_list
 	{NULL, NULL}
 };
 
-static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, ipv4_addr_t local_ip, bool byebye)
+static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, struct ssdp_manager_transport_t *transport, struct ip_interface_t *idi, bool byebye)
 {
+	ip_addr_t local_ip;
+	ip_interface_get_local_ip(idi, &local_ip);
+
 	struct netbuf *txnb = netbuf_alloc();
 	if (!txnb) {
 		upnp_error_out_of_memory(__this_file, __LINE__);
@@ -47,7 +50,7 @@ static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, ip
 
 	bool success = true;
 	success &= netbuf_sprintf(txnb, "NOTIFY * HTTP/1.1\r\n");
-	success &= netbuf_sprintf(txnb, "Host: 239.255.255.250:%u\r\n", SSDP_SERVICE_PORT);
+	success &= netbuf_sprintf(txnb, "Host: %V:%u\r\n", transport->multicast_ip, SSDP_SERVICE_PORT);
 
 	char uuid_str[37];
 	guid_write_string(&service->uuid, uuid_str);
@@ -63,7 +66,7 @@ static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, ip
 	} else {
 		success &= netbuf_sprintf(txnb, "NTS: ssdp:alive\r\n");
 		success &= netbuf_sprintf(txnb, "Server: %s\r\n", SSDP_SERVER_NAME);
-		success &= netbuf_sprintf(txnb, "Location: http://%v:%u%s\r\n", local_ip, ssdp_manager.webserver_port, service->device_xml_uri);
+		success &= netbuf_sprintf(txnb, "Location: http://%V:%u%s\r\n", &local_ip, ssdp_manager.webserver_port, service->device_xml_uri);
 		success &= http_header_write_cache_control(txnb, 1800);
 	}
 
@@ -82,30 +85,28 @@ static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, ip
 	}
 
 	netbuf_set_pos_to_start(txnb);
-	udp_socket_send_multipath(ssdp_manager.sock, SSDP_MULTICAST_IP, SSDP_SERVICE_PORT, local_ip, 4, UDP_TOS_DEFAULT, txnb);
+	udp_socket_send_multipath(transport->sock, transport->multicast_ip, SSDP_SERVICE_PORT, idi, 4, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 
 static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye)
 {
-#if defined(IP3K)
-	ipv4_addr_t local_ip = ip_get_local_ip_for_remote_ip(SSDP_MULTICAST_IP);
-	ssdp_service_send_notify_internal(service, local_ip, byebye);
-#else
-	struct ip_datalink_instance *idi = ip_datalink_manager_get_head();
+	struct ip_interface_t *idi = ip_interface_manager_get_head();
 	while (idi) {
-		ipv4_addr_t local_ip = ip_datalink_get_ipaddr(idi);
-		idi = slist_get_next(struct ip_datalink_instance, idi);
-		if (local_ip == 0) {
+#if defined(IPV6_SUPPORT)
+		if (ip_interface_is_ipv6(idi)) {
+			ssdp_service_send_notify_internal(service, &ssdp_manager.ipv6, idi, byebye);
+			idi = slist_get_next(struct ip_interface_t, idi);
 			continue;
 		}
-
-		ssdp_service_send_notify_internal(service, local_ip, byebye);
-	}
 #endif
+
+		ssdp_service_send_notify_internal(service, &ssdp_manager.ipv4, idi, byebye);
+		idi = slist_get_next(struct ip_interface_t, idi);
+	}
 }
 
-static void ssdp_service_send_discover_response(struct ssdp_service_t *service, ipv4_addr_t remote_ip, uint16_t remote_port)
+static void ssdp_service_send_discover_response(struct ssdp_service_t *service, struct ssdp_manager_transport_t *transport, const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
 	char uuid_str[37];
 	guid_write_string(&service->uuid, uuid_str);
@@ -127,8 +128,9 @@ static void ssdp_service_send_discover_response(struct ssdp_service_t *service, 
 		success &= netbuf_sprintf(txnb, "ST: uuid:%s\r\n", uuid_str);
 	}
 
-	ipv4_addr_t local_ip = ip_get_local_ip_for_remote_ip(remote_ip);
-	success &= netbuf_sprintf(txnb, "Location: http://%v:%u%s\r\n", local_ip, ssdp_manager.webserver_port, service->device_xml_uri);
+	ip_addr_t local_ip;
+	ip_interface_manager_get_local_ip_for_remote_ip(remote_ip, ipv6_scope_id, &local_ip);
+	success &= netbuf_sprintf(txnb, "Location: http://%V:%u%s\r\n", &local_ip, ssdp_manager.webserver_port, service->device_xml_uri);
 	success &= http_header_write_cache_control(txnb, 1800);
 
 	if (service->urn) {
@@ -149,7 +151,7 @@ static void ssdp_service_send_discover_response(struct ssdp_service_t *service, 
 	}
 
 	netbuf_set_pos_to_start(txnb);
-	udp_socket_send_netbuf(ssdp_manager.sock, remote_ip, remote_port, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+	udp_socket_send_netbuf(transport->sock, remote_ip, remote_port, ipv6_scope_id, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 
@@ -322,7 +324,8 @@ static void ssdp_service_manager_discover_timer_callback(void *arg)
 			return;
 		}
 
-		ssdp_service_send_discover_response(reply->service, reply->remote_ip, reply->remote_port);
+		struct ssdp_manager_transport_t *transport = ip_addr_is_ipv6(&reply->remote_ip) ? &ssdp_manager.ipv6 : &ssdp_manager.ipv4;
+		ssdp_service_send_discover_response(reply->service, transport, &reply->remote_ip, reply->remote_port, reply->ipv6_scope_id);
 		heap_free(slist_detach_head(struct ssdp_service_discover_reply_t, &ssdp_service_manager.discover_reply_list));
 	}
 }
@@ -332,7 +335,7 @@ static int8_t ssdp_service_manager_add_discover_reply_insert_before(struct ssdp_
 	return (list_item->send_time > item->send_time);
 }
 
-static void ssdp_service_manager_process_discover_service(struct ssdp_service_t *service, ipv4_addr_t remote_ip, uint16_t remote_port, ticks_t base_time, uint16_t max_delay)
+static void ssdp_service_manager_process_discover_service(struct ssdp_service_t *service, const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id, ticks_t base_time, uint16_t max_delay)
 {
 	struct ssdp_service_discover_reply_t *reply = (struct ssdp_service_discover_reply_t *)heap_alloc_and_zero(sizeof(struct ssdp_service_discover_reply_t), PKG_OS, MEM_TYPE_OS_SSDP_REPLY);
 	if (!reply) {
@@ -341,14 +344,15 @@ static void ssdp_service_manager_process_discover_service(struct ssdp_service_t 
 	}
 
 	reply->service = service;
-	reply->remote_ip = remote_ip;
+	reply->remote_ip = *remote_ip;
 	reply->remote_port = remote_port;
+	reply->ipv6_scope_id = ipv6_scope_id;
 	reply->send_time = base_time + ((uint16_t)random_get32() % max_delay);
 
 	slist_insert_custom(struct ssdp_service_discover_reply_t, &ssdp_service_manager.discover_reply_list, reply, ssdp_service_manager_add_discover_reply_insert_before);
 }
 
-static void ssdp_service_manager_process_discover(ipv4_addr_t remote_ip, uint16_t remote_port)
+static void ssdp_service_manager_process_discover(const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
 	if (!ssdp_service_manager.mx_present) {
 		return;
@@ -362,8 +366,8 @@ static void ssdp_service_manager_process_discover(ipv4_addr_t remote_ip, uint16_
 
 	while (ssdp_service_manager.discover_list) {
 		struct ssdp_service_t *service = ssdp_service_manager.discover_list;
-		ssdp_service_manager_process_discover_service(service, remote_ip, remote_port, current_time, half_max_delay);
-		ssdp_service_manager_process_discover_service(service, remote_ip, remote_port, current_time + half_max_delay, half_max_delay);
+		ssdp_service_manager_process_discover_service(service, remote_ip, remote_port, ipv6_scope_id, current_time, half_max_delay);
+		ssdp_service_manager_process_discover_service(service, remote_ip, remote_port, ipv6_scope_id, current_time + half_max_delay, half_max_delay);
 		ssdp_service_manager.discover_list = service->discover_next;
 	}
 
@@ -384,10 +388,10 @@ static void ssdp_service_manager_process_discover(ipv4_addr_t remote_ip, uint16_
 	oneshot_attach(&ssdp_service_manager.discover_reply_timer, delay, ssdp_service_manager_discover_timer_callback, NULL);
 }
 
-void ssdp_service_manager_msearch_recv_complete(ipv4_addr_t remote_ip, uint16_t remote_port)
+void ssdp_service_manager_msearch_recv_complete(const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
 	if (ssdp_service_manager.discover_mode) {
-		ssdp_service_manager_process_discover(remote_ip, remote_port);
+		ssdp_service_manager_process_discover(remote_ip, remote_port, ipv6_scope_id);
 	}
 
 	ssdp_service_manager.mx_present = false;

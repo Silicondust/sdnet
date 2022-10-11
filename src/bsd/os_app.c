@@ -36,7 +36,7 @@ int os_main(int argc, char *argv[])
 	thread_manager_init();
 	oneshot_manager_init();
 	long_task_manager_init();
-	ip_datalink_manager_init();
+	ip_interface_manager_init();
 	igmp_manager_init();
 	tcp_manager_init();
 	udp_manager_init();

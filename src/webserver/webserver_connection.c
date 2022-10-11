@@ -207,26 +207,24 @@ static http_parser_error_t webserver_connection_http_tag_host(void *arg, const c
 static http_parser_error_t webserver_connection_http_tag_range(void *arg, const char *header, struct netbuf *nb)
 {
 	struct webserver_connection_t *connection = (struct webserver_connection_t *)arg;
-
-	DEBUG_PRINT_NETBUF_TEXT(nb, 0);
+	connection->range_detected = true;
 
 	if (netbuf_fwd_strncasecmp(nb, "bytes=", 6) != 0) {
 		DEBUG_WARN("invalid range request");
+		connection->range_error = true;
 		return HTTP_PARSER_OK;
 	}
 
 	netbuf_advance_pos(nb, 6);
 
-	uint64_t range_start = 0;
-	uint64_t range_last = 0;
-
 	if (netbuf_fwd_strncmp(nb, "-", 1) != 0) {
 		addr_t end;
-		range_start = netbuf_fwd_strtoull(nb, &end, 10);
+		connection->range_start = netbuf_fwd_strtoull(nb, &end, 10);
 		netbuf_set_pos(nb, end);
 
 		if (netbuf_fwd_strncmp(nb, "-", 1) != 0) {
 			DEBUG_WARN("invalid range request");
+			connection->range_error = true;
 			return HTTP_PARSER_OK;
 		}
 	}
@@ -235,23 +233,24 @@ static http_parser_error_t webserver_connection_http_tag_range(void *arg, const 
 
 	if (netbuf_get_remaining(nb) > 0) {
 		addr_t end;
-		range_last = netbuf_fwd_strtoull(nb, &end, 10);
+		connection->range_last = netbuf_fwd_strtoull(nb, &end, 10);
 
 		if (end != netbuf_get_end(nb)) {
 			DEBUG_WARN("invalid range request");
+			connection->range_error = true;
 			return HTTP_PARSER_OK;
 		}
+	} else {
+		connection->range_last = WEBSERVER_RANGE_LAST_UNSPECIFIED;
 	}
 
-	if ((range_last != 0) && (range_start > range_last)) {
+	if ((connection->range_last != 0) && (connection->range_start > connection->range_last)) {
 		DEBUG_WARN("invalid range request");
+		connection->range_error = true;
 		return HTTP_PARSER_OK;
 	}
 
-	DEBUG_INFO("range request = %llu - %llu", range_start, range_last);
-	connection->range_detected = true;
-	connection->range_start = range_start;
-	connection->range_last = range_last;
+	DEBUG_INFO("range request = %llu - %llu", connection->range_start, connection->range_last);
 	return HTTP_PARSER_OK;
 }
 
@@ -367,14 +366,14 @@ void webserver_connection_page_resume(struct webserver_connection_t *connection)
 	webserver_start_page_timer(connection->webserver);
 }
 
-ipv4_addr_t webserver_connection_get_local_ip(struct webserver_connection_t *connection)
+void webserver_connection_get_local_ip(struct webserver_connection_t *connection, ip_addr_t *result)
 {
-	return tcp_connection_get_local_addr(connection->conn);
+	tcp_connection_get_local_addr(connection->conn, result);
 }
 
-ipv4_addr_t webserver_connection_get_remote_ip(struct webserver_connection_t *connection)
+void webserver_connection_get_remote_ip(struct webserver_connection_t *connection, ip_addr_t *result)
 {
-	return tcp_connection_get_remote_addr(connection->conn);
+	tcp_connection_get_remote_addr(connection->conn, result);
 }
 
 void *webserver_connection_get_page_callback_state(struct webserver_connection_t *connection)

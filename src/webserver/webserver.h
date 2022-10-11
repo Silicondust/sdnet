@@ -8,14 +8,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#if !defined(WEBSERVER_NAME)
-#define WEBSERVER_NAME "HDHomeRun/1.0"
-#endif
 #if !defined(WEBSERVER_PORT)
 #define WEBSERVER_PORT 80
 #endif
 
 #define WEBSERVER_CONTENT_LENGTH_UNKNOWN 0xFFFFFFFFFFFFFFFFULL
+#define WEBSERVER_RANGE_LAST_UNSPECIFIED 0x7FFFFFFFFFFFFFFEULL
 
 struct webserver_connection_t;
 
@@ -46,8 +44,8 @@ extern void webserver_register_page_filesystem(struct webserver_t *webserver, co
 extern void webserver_register_page_custom(struct webserver_t *webserver, const char *uri, webserver_page_start_handler_t start_callback, webserver_page_post_handler_t post_callback, webserver_page_continue_handler_t continue_callback, webserver_page_free_handler_t free_callback, void *callback_arg);
 extern uint16_t webserver_get_port(struct webserver_t *webserver);
 
-extern ipv4_addr_t webserver_connection_get_local_ip(struct webserver_connection_t *connection);
-extern ipv4_addr_t webserver_connection_get_remote_ip(struct webserver_connection_t *connection);
+extern void webserver_connection_get_local_ip(struct webserver_connection_t *connection, ip_addr_t *result);
+extern void webserver_connection_get_remote_ip(struct webserver_connection_t *connection, ip_addr_t *result);
 extern void *webserver_connection_get_page_callback_state(struct webserver_connection_t *connection);
 extern void webserver_connection_set_additional_response_header(struct webserver_connection_t *connection, const char *additional_response_header);
 extern void webserver_connection_send_error(struct webserver_connection_t *connection, const char *http_result);
@@ -88,6 +86,7 @@ struct webserver_connection_t {
 	uint32_t host_required:1;
 	uint32_t host_detected:1;
 	uint32_t range_detected:1;
+	uint32_t range_error:1;
 	uint32_t language_header:1;
 	uint32_t page_active_state:1;
 	const struct webserver_page_t *page;

@@ -121,20 +121,21 @@ static void webserver_page_proxy_server_est(void *inst)
 	netbuf_free(txnb);
 }
 
-static void webserver_page_server_dns_callback(void *arg, ipv4_addr_t ip)
+static void webserver_page_server_dns_callback(void *arg, uint16_t record_type, const ip_addr_t *ip, ticks_t expire_time)
 {
 	struct webserver_page_proxy_state_t *page_state = (struct webserver_page_proxy_state_t *)arg;
+	ip_addr_t server_ip = *ip;
 	dns_lookup_deref(page_state->server_dns);
 	page_state->server_dns = NULL;
 
-	if (ip == 0) {
+	if (ip_addr_is_zero(&server_ip)) {
 		DEBUG_WARN("dns returned fail");
 		webserver_connection_send_error(page_state->connection, http_result_service_unavailable, NULL);
 		webserver_connection_free(page_state->connection);
 		return;
 	}
 
-	DEBUG_INFO("server ip = %lx", ip);
+	DEBUG_INFO("server ip = %V", &server_ip);
 
 	page_state->server_conn = tcp_connection_alloc();
 	if (!page_state->server_conn) {
@@ -143,7 +144,7 @@ static void webserver_page_server_dns_callback(void *arg, ipv4_addr_t ip)
 		return;
 	}
 
-	if (tcp_connection_connect(page_state->server_conn, ip, page_state->server_port, 0, 0, webserver_page_proxy_server_recv, NULL, NULL, webserver_page_proxy_server_est, webserver_page_proxy_server_close, page_state) != TCP_OK) {
+	if (tcp_connection_connect(page_state->server_conn, &server_ip, page_state->server_port, 0, webserver_page_proxy_server_recv, NULL, NULL, webserver_page_proxy_server_est, webserver_page_proxy_server_close, page_state) != TCP_OK) {
 		DEBUG_ERROR("connect failed");
 		tcp_connection_deref(page_state->server_conn);
 		page_state->server_conn = NULL;
@@ -177,7 +178,7 @@ webserver_page_result_t webserver_page_proxy_start(struct webserver_connection_t
 		return WEBSERVER_PAGE_RESULT_CLOSE;
 	}
 
-	if (!dns_lookup_gethostbyname(page_state->server_dns, server_name, webserver_page_server_dns_callback, page_state)) {
+	if (!dns_lookup_gethostbyname(page_state->server_dns, server_name, DNS_RECORD_TYPE_A, webserver_page_server_dns_callback, page_state)) {
 		DEBUG_INFO("dns call failed");
 		webserver_connection_send_error(connection, http_result_service_unavailable, NULL);
 		return WEBSERVER_PAGE_RESULT_CLOSE;

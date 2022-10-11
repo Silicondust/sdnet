@@ -16,3 +16,4 @@ extern void gpio_pin_write_low(uint32_t port, uint8_t pin);
 extern void gpio_pin_write_xor(uint32_t port, uint8_t pin);
 extern void gpio_pin_dir_input(uint32_t port, uint8_t pin);
 extern void gpio_pin_dir_output(uint32_t port, uint8_t pin, bool initial_value);
+extern void gpio_watchdog_ping(void);

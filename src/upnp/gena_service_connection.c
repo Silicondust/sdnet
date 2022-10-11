@@ -144,7 +144,7 @@ static void gena_service_connection_subscribe_renew(struct gena_service_connecti
 		return;
 	}
 
-	DEBUG_INFO("renew subscription http://%v:%u%s for %us", subscription->callback_ip, subscription->callback_port, subscription->callback_uri, connection->subscription_period);
+	DEBUG_INFO("renew subscription http://%V:%u%s for %us", &subscription->callback_ip, subscription->callback_port, subscription->callback_uri, connection->subscription_period);
 	gena_subscription_renew(subscription, connection->subscription_period);
 	gena_service_connection_send_subscribe_result(connection, &subscription->sid);
 }
@@ -169,9 +169,11 @@ static void gena_service_connection_subscribe(struct gena_service_connection_t *
 		return;
 	}
 
-	DEBUG_INFO("new subscription http://%v:%u%s for %us", connection->callback_ip, connection->callback_port, connection->callback_uri, connection->subscription_period);
-	ipv4_addr_t local_ip = tcp_connection_get_local_addr(connection->conn);
-	struct gena_subscription_t *subscription = gena_subscription_accept(connection->service, local_ip, connection->callback_ip, connection->callback_port, connection->callback_uri, connection->subscription_period);
+	DEBUG_INFO("new subscription http://%V:%u%s for %us", &connection->callback_ip, connection->callback_port, connection->callback_uri, connection->subscription_period);
+
+	ip_addr_t local_ip;
+	tcp_connection_get_local_addr(connection->conn, &local_ip);
+	struct gena_subscription_t *subscription = gena_subscription_accept(connection->service, &local_ip, &connection->callback_ip, connection->callback_port, connection->callback_ipv6_scope_id, connection->callback_uri, connection->subscription_period);
 	if (!subscription) {
 		gena_service_connection_send_basic_result(connection, http_result_internal_server_error);
 		return;
@@ -201,7 +203,7 @@ static void gena_service_connection_unsubscribe(struct gena_service_connection_t
 		return;
 	}
 
-	DEBUG_INFO("unsubscribe http://%v:%u%s", subscription->callback_ip, subscription->callback_port, subscription->callback_uri);
+	DEBUG_INFO("unsubscribe http://%V:%u%s", &subscription->callback_ip, subscription->callback_port, subscription->callback_uri);
 	gena_subscription_unsubscribe(subscription);
 	gena_service_connection_send_basic_result(connection, http_result_ok);
 }
@@ -247,7 +249,7 @@ static bool gena_service_connection_http_tag_callback_parse(struct url_t *callba
 	if (!url_parse_nb(callback_url, nb)) {
 		return false;
 	}
-	if ((callback_url->ip_addr == 0) || (callback_url->ip_port == 0)) {
+	if (ip_addr_is_zero(&callback_url->ip_addr) || (callback_url->ip_port == 0)) {
 		return false;
 	}
 
@@ -272,7 +274,9 @@ static http_parser_error_t gena_service_connection_http_tag_callback(void *arg, 
 		return HTTP_PARSER_OK; /* Need to check bad-request error before reporting this error. */
 	}
 
-	if (callback_url.ip_addr != http_server_connection_get_remote_addr(connection->http_connection)) {
+	ip_addr_t remote_ip;
+	uint32_t ipv6_scope_id = http_server_connection_get_remote_addr(connection->http_connection, &remote_ip);
+	if (!ip_addr_cmp(&callback_url.ip_addr, &remote_ip)) {
 		DEBUG_WARN("callback ip doesn't match requestor");
 		connection->precondition_failed = true;
 		return HTTP_PARSER_OK; /* Need to check bad-request error before reporting this error. */
@@ -280,6 +284,7 @@ static http_parser_error_t gena_service_connection_http_tag_callback(void *arg, 
 
 	connection->callback_ip = callback_url.ip_addr;
 	connection->callback_port = callback_url.ip_port;
+	connection->callback_ipv6_scope_id = ipv6_scope_id;
 	connection->callback_uri = heap_strdup(callback_url.uri, PKG_OS, MEM_TYPE_OS_GENA_CONNECTION_CALLBACK_URI);
 	if (!connection->callback_uri) {
 		upnp_error_out_of_memory(__this_file, __LINE__);

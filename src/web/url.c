@@ -46,8 +46,8 @@ bool url_to_str(struct url_t *url, char *buffer, char *end)
 	if (url->dns_name[0]) {
 		success &= sprintf_custom(ptr, end, "%s", url->dns_name);
 		ptr = strchr(ptr, 0);
-	} else if (url->ip_addr != 0) {
-		success &= sprintf_custom(ptr, end, "%v", url->ip_addr);
+	} else if (ip_addr_is_non_zero(&url->ip_addr)) {
+		success &= sprintf_custom(ptr, end, "%V", &url->ip_addr);
 		ptr = strchr(ptr, 0);
 	}
 
@@ -63,7 +63,8 @@ bool url_to_str(struct url_t *url, char *buffer, char *end)
 void url_wipe(struct url_t *output)
 {
 	output->protocol = URL_PROTOCOL_UNKNOWN;
-	output->ip_addr = 0;
+	output->ipv6_scope_id = 0;
+	ip_addr_set_zero(&output->ip_addr);
 	output->ip_port = 0;
 	output->flags = 0;
 	output->dns_name[0] = 0;
@@ -102,8 +103,8 @@ static bool url_parse_ip_addr(struct url_t *output, struct url_t *base)
 		return false;
 	}
 
-	if (sscanf_custom(output->dns_name, "%v", &output->ip_addr)) {
-		if (output->ip_addr == 0) {
+	if (sscanf_custom(output->dns_name, "%V", &output->ip_addr)) {
+		if (ip_addr_is_zero(&output->ip_addr)) {
 			DEBUG_WARN("zero ip addr");
 			return false;
 		}
@@ -115,7 +116,7 @@ static bool url_parse_ip_addr(struct url_t *output, struct url_t *base)
 		return true;
 	}
 
-	output->ip_addr = 0;
+	ip_addr_set_zero(&output->ip_addr);
 	return true;
 }
 
@@ -175,6 +176,7 @@ static bool url_parse_str_protocol_name_port(struct url_t *output, struct url_t 
 	 */
 	if (!url_parse_str_protocol(output, pstr)) {
 		output->protocol = base->protocol;
+		output->ipv6_scope_id = base->ipv6_scope_id;
 		output->ip_addr = base->ip_addr;
 		output->ip_port = base->ip_port;
 		output->flags = base->flags;
@@ -187,6 +189,11 @@ static bool url_parse_str_protocol_name_port(struct url_t *output, struct url_t 
 	}
 	
 	/*
+	 * ipv6 scope id
+	 */
+	output->ipv6_scope_id = 0;
+
+	/*
 	 * DNS name.
 	 */
 	const char *str = *pstr;
@@ -194,27 +201,71 @@ static bool url_parse_str_protocol_name_port(struct url_t *output, struct url_t 
 	char *dns_name_end = output->dns_name + sizeof(output->dns_name) - 1;
 	bool port_present = false;
 
-	while (1) {
-		char c = *str++;
-		if (c == 0) {
-			break;
-		}
-
-		if (c == '/') {
-			str--;
-			break;
-		}
-		if (c == ':') {
-			port_present = true;
-			break;
-		}
-
-		if (dns_name_ptr >= dns_name_end) {
-			DEBUG_WARN("ip/name too long");
-			return false;
-		}
-
+	char c = *str;
+	if (c == '[') {
 		*dns_name_ptr++ = c;
+		str++;
+
+		while (1) {
+			c = *str++;
+			if (c == 0) {
+				DEBUG_WARN("missing ']'");
+				return false;
+			}
+
+			if (dns_name_ptr >= dns_name_end) {
+				DEBUG_WARN("ip/name too long");
+				return false;
+			}
+
+			*dns_name_ptr++ = c;
+
+			if (c == ']') {
+				c = *str++;
+				if (c == 0) {
+					str--;
+					break;
+				}
+
+				if (c == '/') {
+					str--;
+					break;
+				}
+
+				if (c == ':') {
+					port_present = true;
+					break;
+				}
+
+				DEBUG_WARN("invalid char after ']'");
+				return false;
+			}
+		}
+	} else {
+		while (1) {
+			c = *str++;
+			if (c == 0) {
+				str--;
+				break;
+			}
+
+			if (c == '/') {
+				str--;
+				break;
+			}
+
+			if (c == ':') {
+				port_present = true;
+				break;
+			}
+
+			if (dns_name_ptr >= dns_name_end) {
+				DEBUG_WARN("ip/name too long");
+				return false;
+			}
+
+			*dns_name_ptr++ = c;
+		}
 	}
 
 	*dns_name_ptr = 0;
@@ -252,18 +303,30 @@ static bool url_parse_str_uri(struct url_t *output, struct url_t *base, const ch
 
 	strcpy(output->uri, base->uri);
 
-	char *ptr = strchr(output->uri, '?');
-	if (ptr) {
-		*ptr = 0;
+	char *output_append_ptr = strchr(output->uri, '?');
+	if (output_append_ptr) {
+		*output_append_ptr = 0;
 	}
 
-	ptr = strrchr(output->uri, '/');
-	if (!ptr) {
+	output_append_ptr = strrchr(output->uri, '/');
+	if (!output_append_ptr) {
 		DEBUG_WARN("relative uri without base: %s", str);
 		return false;
 	}
 
-	sprintf_custom(ptr + 1, output->uri + sizeof(output->uri), "%s", str);
+	const char *str_ptr = str;
+	while (strncmp(str_ptr, "../", 3) == 0) {
+		str_ptr += 3;
+		*output_append_ptr = 0;
+
+		output_append_ptr = strrchr(output->uri, '/');
+		if (!output_append_ptr) {
+			DEBUG_WARN("relative uri below base: %s", str);
+			return false;
+		}
+	}
+
+	sprintf_custom(output_append_ptr + 1, output->uri + sizeof(output->uri), "%s", str_ptr);
 	return true;
 }
 
@@ -348,6 +411,7 @@ static bool url_parse_nb_protocol_name_port(struct url_t *output, struct url_t *
 	 */
 	if (!url_parse_nb_protocol(output, nb)) {
 		output->protocol = base->protocol;
+		output->ipv6_scope_id = base->ipv6_scope_id;
 		output->ip_addr = base->ip_addr;
 		output->ip_port = base->ip_port;
 		output->flags = base->flags;
@@ -358,7 +422,12 @@ static bool url_parse_nb_protocol_name_port(struct url_t *output, struct url_t *
 	if (output->protocol == URL_PROTOCOL_UNKNOWN) {
 		return false;
 	}
-	
+
+	/*
+	 * ipv6 scope id
+	 */
+	output->ipv6_scope_id = 0;
+
 	/*
 	 * DNS name.
 	 */
@@ -366,27 +435,77 @@ static bool url_parse_nb_protocol_name_port(struct url_t *output, struct url_t *
 	char *dns_name_end = output->dns_name + sizeof(output->dns_name) - 1;
 	bool port_present = false;
 
-	while (1) {
-		if (!netbuf_fwd_check_space(nb, 1)) {
-			break;
-		}
+	if (!netbuf_fwd_check_space(nb, 1)) {
+		return false;
+	}
 
-		uint8_t c = netbuf_fwd_read_u8(nb);
-		if (c == '/') {
-			netbuf_retreat_pos(nb, 1);
-			break;
-		}
-		if (c == ':') {
-			port_present = true;
-			break;
-		}
-
-		if (dns_name_ptr >= dns_name_end) {
-			DEBUG_WARN("ip/name too long");
-			return false;
-		}
-
+	char c = (char)netbuf_fwd_read_u8(nb);
+	if (c == '[') {
 		*dns_name_ptr++ = c;
+
+		while (1) {
+			if (!netbuf_fwd_check_space(nb, 1)) {
+				DEBUG_WARN("missing ']'");
+				return false;
+			}
+
+			c = (char)netbuf_fwd_read_u8(nb);
+
+			if (dns_name_ptr >= dns_name_end) {
+				DEBUG_WARN("ip/name too long");
+				return false;
+			}
+
+			*dns_name_ptr++ = c;
+
+			if (c == ']') {
+				if (!netbuf_fwd_check_space(nb, 1)) {
+					break;
+				}
+
+				c = (char)netbuf_fwd_read_u8(nb);
+
+				if (c == '/') {
+					netbuf_retreat_pos(nb, 1);
+					break;
+				}
+
+				if (c == ':') {
+					port_present = true;
+					break;
+				}
+
+				DEBUG_WARN("invalid char after ']'");
+				return false;
+			}
+		}
+	} else {
+		netbuf_retreat_pos(nb, 1);
+
+		while (1) {
+			if (!netbuf_fwd_check_space(nb, 1)) {
+				break;
+			}
+
+			c = (char)netbuf_fwd_read_u8(nb);
+
+			if (c == '/') {
+				netbuf_retreat_pos(nb, 1);
+				break;
+			}
+
+			if (c == ':') {
+				port_present = true;
+				break;
+			}
+
+			if (dns_name_ptr >= dns_name_end) {
+				DEBUG_WARN("ip/name too long");
+				return false;
+			}
+
+			*dns_name_ptr++ = c;
+		}
 	}
 
 	*dns_name_ptr = 0;
@@ -439,18 +558,33 @@ static bool url_parse_nb_uri(struct url_t *output, struct url_t *base, struct ne
 		return true;
 	}
 
-	char *base_uri_end = strrchr(base->uri, '/');
-	if (!base_uri_end) {
+	strcpy(output->uri, base->uri);
+
+	char *output_append_ptr = strchr(output->uri, '?');
+	if (output_append_ptr) {
+		*output_append_ptr = 0;
+	}
+
+	output_append_ptr = strrchr(output->uri, '/');
+	if (!output_append_ptr) {
 		DEBUG_WARN("relative uri without base");
 		DEBUG_PRINT_NETBUF_TEXT(nb, 0);
 		return false;
 	}
 
-	base_uri_end++;
-	size_t base_length = base_uri_end - base->uri;
-	memcpy(output->uri, base->uri, base_length);
+	while (netbuf_fwd_strncmp(nb, "../", 3) == 0) {
+		netbuf_advance_pos(nb, 3);
+		*output_append_ptr = 0;
 
-	url_parse_nb_uri_fast_copy(output->uri + base_length, output->uri + sizeof(output->uri), nb);
+		output_append_ptr = strrchr(output->uri, '/');
+		if (!output_append_ptr) {
+			DEBUG_WARN("relative uri below base");
+			DEBUG_PRINT_NETBUF_TEXT(nb, 0);
+			return false;
+		}
+	}
+
+	url_parse_nb_uri_fast_copy(output_append_ptr + 1, output->uri + sizeof(output->uri), nb);
 	return true;
 }
 
@@ -500,7 +634,10 @@ bool url_compare(struct url_t *a, struct url_t *b)
 	if (a->protocol != b->protocol) {
 		return false;
 	}
-	if (a->ip_addr != b->ip_addr) {
+	if (a->ipv6_scope_id != b->ipv6_scope_id) {
+		return false;
+	}
+	if (!ip_addr_cmp(&a->ip_addr, &b->ip_addr)) {
 		return false;
 	}
 	if (a->ip_port != b->ip_port) {

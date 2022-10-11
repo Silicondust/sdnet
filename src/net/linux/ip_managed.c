@@ -14,6 +14,9 @@
 #include <linux/wireless.h>
 #include <linux/mii.h>
 
+/* net/if.net conflicts with linux headers */
+extern unsigned int if_nametoindex(const char *ifname);
+
 #if defined(DEBUG)
 #define RUNTIME_DEBUG 1
 #else
@@ -22,87 +25,67 @@
 
 THIS_FILE("ip_managed");
 
-struct ip_datalink_instance {
+struct ip_managed_t {
 	struct slist_prefix_t slist_prefix;
 	char interface_name[IFNAMSIZ];
 	int ioctl_sock;
-	ipv4_addr_t ip_addr;
-	ipv4_addr_t subnet_mask;
+	uint32_t ifindex;
+	ip_addr_t ip_addr;
+	ip_addr_t subnet_mask;
 	uint8_t mac_addr[6];
 	uint8_t metric;
 	bool secondary;
 };
 
-static struct slist_t ip_datalink_list;
-
-ipv4_addr_t ip_datalink_get_ipaddr(struct ip_datalink_instance *idi)
+char *ip_managed_get_interface_name(struct ip_managed_t *ipm)
 {
-	return idi->ip_addr;
+	return ipm->interface_name;
 }
 
-ipv4_addr_t ip_datalink_get_subnet_mask(struct ip_datalink_instance *idi)
+uint32_t ip_managed_get_ifindex(struct ip_managed_t *ipm)
 {
-	return idi->subnet_mask;
+	return ipm->ifindex;
 }
 
-ipv4_addr_t ip_datalink_get_subnet_broadcast(struct ip_datalink_instance *idi)
+void ip_managed_get_mac_addr(struct ip_managed_t *ipm, uint8_t mac_addr[6])
 {
-	ipv4_addr_t subnet_broadcast = idi->ip_addr | ~idi->subnet_mask;
-	if (subnet_broadcast == idi->ip_addr) {
-		return 0;
-	}
-
-	return subnet_broadcast;
+	memcpy(mac_addr, ipm->mac_addr, 6);
 }
 
-void ip_datalink_get_hwaddr(struct ip_datalink_instance *idi, uint8_t *hwaddr, uint8_t hwaddr_len)
+void ip_managed_get_local_ip(struct ip_managed_t *ipm, ip_addr_t *result)
 {
-	DEBUG_ASSERT(hwaddr_len == 6, "invalid length");
-	memcpy(hwaddr, idi->mac_addr, 6);
+	*result = ipm->ip_addr;
 }
 
-char *ip_datalink_get_interface_name(struct ip_datalink_instance *idi)
+void ip_managed_get_subnet_mask(struct ip_managed_t *ipm, ip_addr_t *result)
 {
-	return idi->interface_name;
+	*result = ipm->subnet_mask;
 }
 
-int ip_datalink_get_ifindex(struct ip_datalink_instance *idi)
-{
-	struct ifreq ifr;
-	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, idi->interface_name, IFNAMSIZ);
-	if (ioctl(idi->ioctl_sock, SIOCGIFINDEX, &ifr) < 0) {
-		 DEBUG_ERROR("ioctl failed %d", errno);
-		 return -1;
-	}
-
-	return ifr.ifr_ifindex;
-}
-
-static void ip_datalink_get_ifflags(struct ip_datalink_instance *idi, struct ifreq *ifr)
+static void ip_managed_get_ifflags(struct ip_managed_t *ipm, struct ifreq *ifr)
 {
 	memset(ifr, 0, sizeof(struct ifreq));
-	strncpy(ifr->ifr_name, idi->interface_name, IFNAMSIZ);
-	if (ioctl(idi->ioctl_sock, SIOCGIFFLAGS, ifr)) {
+	strncpy(ifr->ifr_name, ipm->interface_name, IFNAMSIZ);
+	if (ioctl(ipm->ioctl_sock, SIOCGIFFLAGS, ifr)) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 	}
 }
 
-static void ip_datalink_set_ifflags(struct ip_datalink_instance *idi, struct ifreq *ifr)
+static void ip_managed_set_ifflags(struct ip_managed_t *ipm, struct ifreq *ifr)
 {
-	if (ioctl(idi->ioctl_sock, SIOCSIFFLAGS, ifr)) {
+	if (ioctl(ipm->ioctl_sock, SIOCSIFFLAGS, ifr)) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 	}
 }
 
-static void ip_datalink_add_route(struct ip_datalink_instance *idi, ipv4_addr_t dst_ip, ipv4_addr_t dst_mask, ipv4_addr_t gateway)
+static void ip_managed_add_route(struct ip_managed_t *ipm, ipv4_addr_t dst_ip, ipv4_addr_t dst_mask, ipv4_addr_t gateway)
 {
 	struct rtentry rte;
 	memset(&rte, 0, sizeof(struct rtentry));
 
-	rte.rt_dev = idi->interface_name;
+	rte.rt_dev = ipm->interface_name;
 	rte.rt_flags = RTF_UP;
-	rte.rt_metric = idi->metric;
+	rte.rt_metric = ipm->metric;
 
 	if (gateway != 0) {
 		rte.rt_flags |= RTF_GATEWAY;
@@ -120,161 +103,166 @@ static void ip_datalink_add_route(struct ip_datalink_instance *idi, ipv4_addr_t 
 	rt_gateway->sin_family = AF_INET;
 	rt_gateway->sin_addr.s_addr = htonl(gateway);
 
-	if (ioctl(idi->ioctl_sock, SIOCADDRT, &rte) < 0) {
+	if (ioctl(ipm->ioctl_sock, SIOCADDRT, &rte) < 0) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 	}
 }
 
-void ip_datalink_set_hwaddr(struct ip_datalink_instance *idi, uint8_t *hwaddr, uint8_t hwaddr_len)
+void ip_managed_set_mac_addr(struct ip_managed_t *ipm, uint8_t mac_addr[6])
 {
 	DEBUG_INFO("set mac addr");
-	DEBUG_PRINT_HEX_ARRAY(hwaddr, hwaddr_len);
-	DEBUG_ASSERT(hwaddr_len == 6, "invalid hwaddr_len %u", hwaddr_len);
-	memcpy(idi->mac_addr, hwaddr, 6);
+	DEBUG_PRINT_HEX_ARRAY(mac_addr, 6);
+	memcpy(ipm->mac_addr, mac_addr, 6);
 
 	struct ifreq ifflags;
-	ip_datalink_get_ifflags(idi, &ifflags);
+	ip_managed_get_ifflags(ipm, &ifflags);
 	ifflags.ifr_flags &= ~(IFF_UP | IFF_RUNNING);
-	ip_datalink_set_ifflags(idi, &ifflags);
+	ip_managed_set_ifflags(ipm, &ifflags);
 
 	struct ifreq ifr;
 	memset(&ifr, 0, sizeof(struct ifreq));
-	strncpy(ifr.ifr_name, idi->interface_name, IFNAMSIZ);
+	strncpy(ifr.ifr_name, ipm->interface_name, IFNAMSIZ);
 	ifr.ifr_hwaddr.sa_family = 1;
-	memcpy(ifr.ifr_hwaddr.sa_data, hwaddr, 6);
-	if (ioctl(idi->ioctl_sock, SIOCSIFHWADDR, &ifr) < 0) {
+	memcpy(ifr.ifr_hwaddr.sa_data, mac_addr, 6);
+	if (ioctl(ipm->ioctl_sock, SIOCSIFHWADDR, &ifr) < 0) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 	}
 
 	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
-	ip_datalink_set_ifflags(idi, &ifflags);
+	ip_managed_set_ifflags(ipm, &ifflags);
 
-	ip_datalink_set_ipaddr(idi, 0, 0, 0);
+	ip_managed_set_ipv4_addr(ipm, 0, 0, 0);
 }
 
-void ip_datalink_set_ipaddr(struct ip_datalink_instance *idi, ipv4_addr_t ip_addr, ipv4_addr_t subnet_mask, ipv4_addr_t gateway)
+void ip_managed_set_ipv4_addr(struct ip_managed_t *ipm, ipv4_addr_t ip_addr, ipv4_addr_t subnet_mask, ipv4_addr_t gateway)
 {
-	idi->ip_addr = ip_addr;
-	idi->subnet_mask = subnet_mask;
+	ip_addr_set_ipv4(&ipm->ip_addr, ip_addr);
+	ip_addr_set_ipv4(&ipm->subnet_mask, subnet_mask);
 
-	if (idi->secondary && (ip_addr == 0)) {
+	if (ipm->secondary && (ip_addr == 0)) {
 		struct ifreq ifflags;
-		ip_datalink_get_ifflags(idi, &ifflags);
+		ip_managed_get_ifflags(ipm, &ifflags);
 		ifflags.ifr_flags &= ~(IFF_UP | IFF_RUNNING);
-		ip_datalink_set_ifflags(idi, &ifflags);
+		ip_managed_set_ifflags(ipm, &ifflags);
 
+		ip_interface_manager_redetect_required();
 		igmp_manager_local_ip_changed();
 		return;
 	}
 
 	struct ifreq ifr;
 	memset(&ifr, 0, sizeof(struct ifreq));
-	strncpy(ifr.ifr_name, idi->interface_name, IFNAMSIZ);
+	strncpy(ifr.ifr_name, ipm->interface_name, IFNAMSIZ);
 
 	struct sockaddr_in *ifraddr = (struct sockaddr_in *)&ifr.ifr_addr;
 	ifraddr->sin_family = AF_INET;
 
 	ifraddr->sin_addr.s_addr = htonl(ip_addr);
-	if (ioctl(idi->ioctl_sock, SIOCSIFADDR, &ifr)) {
+	if (ioctl(ipm->ioctl_sock, SIOCSIFADDR, &ifr)) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 	}
 
 	if (ip_addr != 0) {
 		ifraddr->sin_addr.s_addr = htonl(subnet_mask);
-		if (ioctl(idi->ioctl_sock, SIOCSIFNETMASK, &ifr)) {
+		if (ioctl(ipm->ioctl_sock, SIOCSIFNETMASK, &ifr)) {
 			DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 		}
 
 		ifraddr->sin_addr.s_addr = htonl(ip_addr | ~subnet_mask);
-		if (ioctl(idi->ioctl_sock, SIOCSIFBRDADDR, &ifr)) {
+		if (ioctl(ipm->ioctl_sock, SIOCSIFBRDADDR, &ifr)) {
 			DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 		}
 	}
 
-	if (idi->secondary) {
+	if (ipm->secondary) {
 		struct ifreq ifflags;
-		ip_datalink_get_ifflags(idi, &ifflags);
+		ip_managed_get_ifflags(ipm, &ifflags);
 		ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
-		ip_datalink_set_ifflags(idi, &ifflags);
+		ip_managed_set_ifflags(ipm, &ifflags);
 	}
 
 	DEBUG_INFO("adding broadcast route");
-	ip_datalink_add_route(idi, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000);
+	ip_managed_add_route(ipm, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000);
 
 	if (ip_addr != 0) {
 		DEBUG_INFO("adding multicast route");
-		ip_datalink_add_route(idi, 0xE0000000, 0xF0000000, 0x00000000);
+		ip_managed_add_route(ipm, 0xE0000000, 0xF0000000, 0x00000000);
 	}
 
 	if (gateway != 0) {
 		DEBUG_INFO("adding gateway route");
-		ip_datalink_add_route(idi, 0x00000000, 0x00000000, gateway);
+		ip_managed_add_route(ipm, 0x00000000, 0x00000000, gateway);
 	}
 
+	ip_interface_manager_redetect_required();
 	igmp_manager_local_ip_changed();
 }
 
-void ip_datalink_set_wifi_ap(struct ip_datalink_instance *idi)
+void ip_managed_set_wifi_ap(struct ip_managed_t *ipm)
 {
 	struct ifreq ifflags;
-	ip_datalink_get_ifflags(idi, &ifflags);
+	ip_managed_get_ifflags(ipm, &ifflags);
 	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
-	ip_datalink_set_ifflags(idi, &ifflags);
+	ip_managed_set_ifflags(ipm, &ifflags);
 
 	struct iwreq iwr;
 	memset(&iwr, 0, sizeof(struct iwreq));
-	strncpy(iwr.ifr_name, idi->interface_name, IFNAMSIZ);
+	strncpy(iwr.ifr_name, ipm->interface_name, IFNAMSIZ);
 
 	iwr.u.mode = IW_MODE_MASTER;
-	if (ioctl(idi->ioctl_sock, SIOCSIWMODE, &iwr)) {
+	if (ioctl(ipm->ioctl_sock, SIOCSIWMODE, &iwr)) {
 		DEBUG_ERROR("ioctl SIOCSIWMODE failed %d %s", errno, strerror(errno));
 	}
+
+	ip_interface_manager_redetect_required();
 }
 
-void ip_datalink_set_loopback(struct ip_datalink_instance *idi)
+void ip_managed_set_loopback(struct ip_managed_t *ipm)
 {
-	idi->ip_addr = LOCALHOST;
-	idi->subnet_mask = 0xFF000000;
+	ip_addr_set_ipv4(&ipm->ip_addr, 0x7F000001UL);
+	ip_addr_set_ipv4(&ipm->subnet_mask, 0xFF000000UL);
 
 	struct ifreq ifr;
 	memset(&ifr, 0, sizeof(struct ifreq));
-	strncpy(ifr.ifr_name, idi->interface_name, IFNAMSIZ);
+	strncpy(ifr.ifr_name, ipm->interface_name, IFNAMSIZ);
 
 	struct sockaddr_in *ifraddr = (struct sockaddr_in *)&ifr.ifr_addr;
 	ifraddr->sin_family = AF_INET;
 
-	ifraddr->sin_addr.s_addr = htonl(idi->ip_addr);
-	if (ioctl(idi->ioctl_sock, SIOCSIFADDR, &ifr)) {
+	ifraddr->sin_addr.s_addr = htonl(ip_addr_get_ipv4(&ipm->ip_addr));
+	if (ioctl(ipm->ioctl_sock, SIOCSIFADDR, &ifr)) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 	}
 
-	ifraddr->sin_addr.s_addr = htonl(idi->subnet_mask);
-	if (ioctl(idi->ioctl_sock, SIOCSIFNETMASK, &ifr)) {
+	ifraddr->sin_addr.s_addr = htonl(ip_addr_get_ipv4(&ipm->subnet_mask));
+	if (ioctl(ipm->ioctl_sock, SIOCSIFNETMASK, &ifr)) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 	}
 
 	struct ifreq ifflags;
-	ip_datalink_get_ifflags(idi, &ifflags);
+	ip_managed_get_ifflags(ipm, &ifflags);
 	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
-	ip_datalink_set_ifflags(idi, &ifflags);
+	ip_managed_set_ifflags(ipm, &ifflags);
+
+	ip_interface_manager_redetect_required();
 }
 
-bool ip_datalink_read_ethernet_mii_register(struct ip_datalink_instance *idi, uint8_t reg_addr, uint16_t *presult)
+bool ip_managed_read_ethernet_mii_register(struct ip_managed_t *ipm, uint8_t reg_addr, uint16_t *presult)
 {
 	struct ifreq ifr;
 	memset(&ifr, 0, sizeof(struct ifreq));
-	strncpy(ifr.ifr_name, idi->interface_name, IFNAMSIZ);
+	strncpy(ifr.ifr_name, ipm->interface_name, IFNAMSIZ);
 
 	struct mii_ioctl_data *mii = (struct mii_ioctl_data *)&ifr.ifr_data;
 	mii->reg_num = reg_addr;
 
-	if (ioctl(idi->ioctl_sock, SIOCGMIIPHY, &ifr) < 0) {
+	if (ioctl(ipm->ioctl_sock, SIOCGMIIPHY, &ifr) < 0) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 		*presult = 0;
 		return false;
 	}
 
-	if (ioctl(idi->ioctl_sock, SIOCGMIIREG, &ifr) < 0) {
+	if (ioctl(ipm->ioctl_sock, SIOCGMIIREG, &ifr) < 0) {
 		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
 		*presult = 0;
 		return false;
@@ -284,60 +272,18 @@ bool ip_datalink_read_ethernet_mii_register(struct ip_datalink_instance *idi, ui
 	return true;
 }
 
-struct ip_datalink_instance *ip_datalink_manager_get_head(void)
+struct ip_managed_t *ip_managed_alloc(const char *interface_name, uint8_t metric)
 {
-	return slist_get_head(struct ip_datalink_instance, &ip_datalink_list);
-}
-
-struct ip_datalink_instance *ip_datalink_manager_get_by_local_ip(ipv4_addr_t local_ip)
-{
-	struct ip_datalink_instance *idi = slist_get_head(struct ip_datalink_instance, &ip_datalink_list);
-	while (idi) {
-		if (idi->ip_addr == local_ip) {
-			return idi;
-		}
-
-		idi = slist_get_next(struct ip_datalink_instance, idi);
-	}
-
-	return NULL;
-}
-
-struct ip_datalink_instance *ip_datalink_manager_get_by_remote_ip(ipv4_addr_t remote_ip)
-{
-	struct ip_datalink_instance *idi = slist_get_head(struct ip_datalink_instance, &ip_datalink_list);
-	while (idi) {
-		if (idi->subnet_mask == 0) {
-			idi = slist_get_next(struct ip_datalink_instance, idi);
-			continue;
-		}
-
-		if ((idi->ip_addr & idi->subnet_mask) == (remote_ip & idi->subnet_mask)) {
-			return idi;
-		}
-
-		idi = slist_get_next(struct ip_datalink_instance, idi);
-	}
-
-	return slist_get_head(struct ip_datalink_instance, &ip_datalink_list);
-}
-
-struct ip_datalink_instance *ip_datalink_manager_ip_datalink_alloc(const char *interface_name, uint8_t metric)
-{
-	struct ip_datalink_instance *idi = (struct ip_datalink_instance *)heap_alloc_and_zero(sizeof(struct ip_datalink_instance), PKG_OS, MEM_TYPE_OS_IP_DATALINK);
-	if (!idi) {
+	struct ip_managed_t *ipm = (struct ip_managed_t *)heap_alloc_and_zero(sizeof(struct ip_managed_t), PKG_OS, MEM_TYPE_OS_IP_MANAGED);
+	if (!ipm) {
 		return NULL;
 	}
 
-	idi->ioctl_sock = socket(AF_INET, SOCK_DGRAM, 0);
-	sprintf_custom(idi->interface_name, idi->interface_name + sizeof(idi->interface_name), "%s", interface_name);
-	idi->metric = metric;
-	idi->secondary = (strchr(interface_name, ':') != 0);
+	sprintf_custom(ipm->interface_name, ipm->interface_name + sizeof(ipm->interface_name), "%s", interface_name);
+	ipm->ioctl_sock = socket(AF_INET, SOCK_DGRAM, 0);
+	ipm->ifindex = if_nametoindex(interface_name);
+	ipm->metric = metric;
+	ipm->secondary = (strchr(interface_name, ':') != 0);
 
-	slist_attach_tail(struct ip_datalink_instance, &ip_datalink_list, idi);
-	return idi;
-}
-
-void ip_datalink_manager_init(void)
-{
+	return ipm;
 }

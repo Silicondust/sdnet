@@ -8,7 +8,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-extern void dhcp_server_init(struct ip_datalink_instance *link, ipv4_addr_t local_ip_addr, ipv4_addr_t client_ip_first, ipv4_addr_t client_ip_last, ipv4_addr_t subnet_mask);
+extern void dhcp_server_init(struct ip_interface_t *idi, ipv4_addr_t local_ip_addr, ipv4_addr_t client_ip_first, ipv4_addr_t client_ip_last, ipv4_addr_t subnet_mask);
 extern void dhcp_server_load_state(uint8_t *ptr, uint8_t *end);
 
 extern void dhcp_server_store_state_impl(struct netbuf *nb);

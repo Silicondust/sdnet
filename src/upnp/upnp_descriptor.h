@@ -45,7 +45,6 @@ struct upnp_descriptor_t {
 	struct slist_prefix_t slist_prefix;
 	struct slist_t device_list;
 	struct upnp_descriptor_loader_t *loader;
-	ipv4_addr_t ip_addr;
 	uint32_t device_url_hash;
 	ref_t refs;
 };

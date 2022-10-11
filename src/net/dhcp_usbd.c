@@ -125,11 +125,11 @@ static void dhcp_usbd_send(struct dhcp_usbd_instance *ddi, uint8_t message_type,
 	netbuf_fwd_fill_u8(txnb, netbuf_get_remaining(txnb), 0x00);
 
 	netbuf_set_pos_to_start(txnb);
-	udp_socket_send_netbuf(ddi->sock, 0xFFFFFFFF, DHCP_CLIENT_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+	udp_socket_send_netbuf(ddi->sock, &ip_addr_ipv4_broadcast, DHCP_CLIENT_PORT, 0, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 
-static void dhcp_usbd_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port, struct netbuf *nb)
+static void dhcp_usbd_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, uint32_t ipv6_scope_id, struct netbuf *nb)
 {
 	struct dhcp_usbd_instance *ddi = (struct dhcp_usbd_instance *)inst;
 
@@ -247,6 +247,6 @@ void dhcp_usbd_init(uint8_t host_mac_addr[6], ipv4_addr_t host_ip_addr, ipv4_add
 	ddi->device_ip_addr = device_ip_addr;
 	ddi->subnet_mask = subnet_mask;
 
-	ddi->sock = udp_socket_alloc();
-	udp_socket_listen(ddi->sock, device_ip_addr, DHCP_SERVER_PORT, dhcp_usbd_recv, NULL, ddi);
+	ddi->sock = udp_socket_alloc(IP_MODE_IPV4);
+	udp_socket_listen(ddi->sock, DHCP_SERVER_PORT, dhcp_usbd_recv, NULL, ddi);
 }

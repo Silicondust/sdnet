@@ -17,6 +17,11 @@
 
 THIS_FILE("ssdp_manager");
 
+static const ip_addr_t ssdp_multicast_ipv4 = IP_ADDR_INIT_IPV4(0xEFFFFFFA);
+#if defined(IPV6_SUPPORT)
+static const ip_addr_t ssdp_multicast_ipv6 = IP_ADDR_INIT_IPV6(0xFF02, 0, 0, 0, 0, 0, 0, 0xC);
+#endif
+
 struct ssdp_manager_t ssdp_manager;
 
 static http_parser_error_t ssdp_manager_http_event(void *arg, http_parser_event_t event, struct netbuf *nb)
@@ -56,14 +61,14 @@ static http_parser_error_t ssdp_manager_http_event(void *arg, http_parser_event_
 	}
 }
 
-static void ssdp_manager_sock_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port, struct netbuf *nb)
+static void ssdp_manager_sock_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, uint32_t ipv6_scope_id, struct netbuf *nb)
 {
 	http_parser_recv_netbuf(ssdp_manager.http_parser, nb);
 	http_parser_reset(ssdp_manager.http_parser);
 	http_parser_set_tag_list(ssdp_manager.http_parser, NULL, NULL);
 
 	if (ssdp_manager.recv_complete) {
-		ssdp_manager.recv_complete(src_addr, src_port);
+		ssdp_manager.recv_complete(src_addr, src_port, ipv6_scope_id);
 		ssdp_manager.recv_complete = NULL;
 	}
 }
@@ -104,16 +109,15 @@ void ssdp_manager_init(uint16_t webserver_port)
 		return;
 	}
 
-	ssdp_manager.sock = udp_socket_alloc();
-	if (!ssdp_manager.sock) {
-		DEBUG_ERROR("out of memory");
-		return;
-	}
+	ssdp_manager.ipv4.multicast_ip = &ssdp_multicast_ipv4;
+	ssdp_manager.ipv4.sock = udp_socket_alloc(IP_MODE_IPV4);
+	udp_socket_listen(ssdp_manager.ipv4.sock, SSDP_SERVICE_PORT, ssdp_manager_sock_recv, NULL, NULL);
+	igmp_manager_join_group(ssdp_manager.ipv4.sock, &ssdp_multicast_ipv4);
 
-	if (udp_socket_listen(ssdp_manager.sock, 0, SSDP_SERVICE_PORT, ssdp_manager_sock_recv, NULL, NULL) != UDP_OK) {
-		DEBUG_ERROR("failed to listen on socket");
-		return;
-	}
-
-	igmp_manager_join_group(ssdp_manager.sock, SSDP_MULTICAST_IP);
+#if defined(IPV6_SUPPORT)
+	ssdp_manager.ipv6.multicast_ip = &ssdp_multicast_ipv6;
+	ssdp_manager.ipv6.sock = udp_socket_alloc(IP_MODE_IPV6);
+	udp_socket_listen(ssdp_manager.ipv6.sock, SSDP_SERVICE_PORT, ssdp_manager_sock_recv, NULL, NULL);
+	igmp_manager_join_group(ssdp_manager.ipv6.sock, &ssdp_multicast_ipv6);
+#endif
 }

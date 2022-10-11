@@ -39,7 +39,7 @@ const struct http_parser_tag_lookup_t ssdp_client_manager_response_http_tag_list
 	{NULL, NULL}
 };
 
-static void ssdp_client_send_msearch(struct ssdp_client_t *client)
+static void ssdp_client_send_msearch_internal(struct ssdp_client_t *client, struct ssdp_manager_transport_t *transport, struct ip_interface_t *idi)
 {
 	DEBUG_INFO("sending M-SEARCH for %s", client->st);
 
@@ -51,7 +51,7 @@ static void ssdp_client_send_msearch(struct ssdp_client_t *client)
 
 	bool success = true;
 	success &= netbuf_sprintf(txnb, "M-SEARCH * HTTP/1.1\r\n");
-	success &= netbuf_sprintf(txnb, "Host: 239.255.255.250:%u\r\n", SSDP_SERVICE_PORT);
+	success &= netbuf_sprintf(txnb, "Host: %V:%u\r\n", transport->multicast_ip, SSDP_SERVICE_PORT);
 	success &= netbuf_sprintf(txnb, "ST: %s\r\n", client->st);
 	success &= netbuf_sprintf(txnb, "MAN: \"ssdp:discover\"\r\n");
 	success &= netbuf_sprintf(txnb, "MX: 2\r\n");
@@ -63,8 +63,25 @@ static void ssdp_client_send_msearch(struct ssdp_client_t *client)
 	}
 
 	netbuf_set_pos_to_start(txnb);
-	udp_socket_send_multipath(ssdp_manager.sock, SSDP_MULTICAST_IP, SSDP_SERVICE_PORT, 0, 4, UDP_TOS_DEFAULT, txnb);
+	udp_socket_send_multipath(transport->sock, transport->multicast_ip, SSDP_SERVICE_PORT, idi, 4, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
+}
+
+static void ssdp_client_send_msearch(struct ssdp_client_t *client)
+{
+	struct ip_interface_t *idi = ip_interface_manager_get_head();
+	while (idi) {
+#if defined(IPV6_SUPPORT)
+		if (ip_interface_is_ipv6(idi)) {
+			ssdp_client_send_msearch_internal(client, &ssdp_manager.ipv6, idi);
+			idi = slist_get_next(struct ip_interface_t, idi);
+			continue;
+		}
+#endif
+
+		ssdp_client_send_msearch_internal(client, &ssdp_manager.ipv4, idi);
+		idi = slist_get_next(struct ip_interface_t, idi);
+	}
 }
 
 static void ssdp_client_manager_msearch_timer_callback(void *arg)
@@ -111,7 +128,6 @@ static struct ssdp_client_device_t *ssdp_client_device_alloc(void)
 		return NULL;
 	}
 
-	device->ip_addr = ssdp_client_manager.location.ip_addr;
 	device->usn_hash = ssdp_client_manager.usn_hash;
 
 	device->descriptor = upnp_descriptor_manager_descriptor_alloc(&ssdp_client_manager.location);
@@ -192,7 +208,7 @@ static void ssdp_client_manager_recv_complete_client(struct ssdp_client_t *clien
 	}
 
 	if (!device) {
-		DEBUG_INFO("found match @ %v", ssdp_client_manager.location.ip_addr);
+		DEBUG_INFO("found match @ %V", &ssdp_client_manager.location.ip_addr);
 
 		device = ssdp_client_device_alloc();
 		if (!device) {
@@ -215,7 +231,7 @@ static void ssdp_client_manager_recv_complete_client(struct ssdp_client_t *clien
 	}
 }
 
-static void ssdp_client_manager_recv_complete(ipv4_addr_t remote_ip)
+static void ssdp_client_manager_recv_complete(const ip_addr_t *remote_ip)
 {
 	if (!ssdp_client_manager.usn_detected) {
 		DEBUG_WARN("no usn in packet");
@@ -236,15 +252,20 @@ static void ssdp_client_manager_recv_complete(ipv4_addr_t remote_ip)
 			return;
 		}
 
-		if (ssdp_client_manager.location.ip_addr == 0) {
-			ssdp_client_manager.location.ip_addr = remote_ip;
+		if (ip_addr_is_zero(&ssdp_client_manager.location.ip_addr)) {
+			ssdp_client_manager.location.ip_addr = *remote_ip;
 		}
 		if (ssdp_client_manager.location.ip_port == 0) {
 			ssdp_client_manager.location.ip_port = 80;
 		}
 
-		if (ssdp_client_manager.location.ip_addr != remote_ip) {
+		if (!ip_addr_cmp(&ssdp_client_manager.location.ip_addr, remote_ip)) {
 			DEBUG_WARN("ip miss-match in location");
+			return;
+		}
+
+		if (!ip_addr_ipv6_scope_id_check(&ssdp_client_manager.location.ip_addr, ssdp_client_manager.location.ipv6_scope_id)) {
+			DEBUG_ERROR("invalid ipv6 addr/scope_id state");
 			return;
 		}
 	}
@@ -271,15 +292,17 @@ static void ssdp_client_manager_recv_complete_reset(void)
 	ssdp_client_manager.location.uri[0] = 0;
 }
 
-void ssdp_client_manager_notify_recv_complete(ipv4_addr_t remote_ip, uint16_t remote_port)
+void ssdp_client_manager_notify_recv_complete(const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
+	ssdp_client_manager.location.ipv6_scope_id = ipv6_scope_id;
 	ssdp_client_manager_recv_complete(remote_ip);
 	ssdp_client_manager_recv_complete_reset();
 }
 
-void ssdp_client_manager_response_recv_complete(ipv4_addr_t remote_ip, uint16_t remote_port)
+void ssdp_client_manager_response_recv_complete(const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
 	ssdp_client_manager.notify_alive = true;
+	ssdp_client_manager.location.ipv6_scope_id = ipv6_scope_id;
 	ssdp_client_manager_recv_complete(remote_ip);
 	ssdp_client_manager_recv_complete_reset();
 }

@@ -95,6 +95,16 @@ void http_server_connection_close(struct http_server_connection_t *connection)
 	http_server_connection_free(connection);
 }
 
+void http_server_connection_set_timeout(struct http_server_connection_t *connection, ticks_t duration)
+{
+	struct http_server_t *http_server = connection->http_server;
+	(void)slist_detach_item(struct http_server_connection_t, &http_server->connection_list, connection);
+
+	connection->connection_timeout = timer_get_ticks() + duration;
+
+	http_server_add_connection(connection->http_server, connection);
+}
+
 void http_server_connection_disable_timeout(struct http_server_connection_t *connection)
 {
 	struct http_server_t *http_server = connection->http_server;
@@ -105,9 +115,9 @@ void http_server_connection_disable_timeout(struct http_server_connection_t *con
 	http_server_add_connection(connection->http_server, connection);
 }
 
-ipv4_addr_t http_server_connection_get_remote_addr(struct http_server_connection_t *connection)
+uint32_t http_server_connection_get_remote_addr(struct http_server_connection_t *connection, ip_addr_t *result)
 {
-	return tcp_connection_get_remote_addr(connection->conn);
+	return tcp_connection_get_remote_addr(connection->conn, result);
 }
 
 struct tcp_connection *http_server_connection_get_tcp_connection(struct http_server_connection_t *connection)
@@ -226,12 +236,13 @@ static void http_server_add_connection(struct http_server_t *http_server, struct
 
 static void http_server_sock_accept(void *arg)
 {
-	struct http_server_t *http_server = (struct http_server_t *)arg;
+	struct http_server_listen_t *listen = (struct http_server_listen_t *)arg;
+	struct http_server_t *http_server = listen->http_server;
 
 	struct http_server_connection_t *connection = (struct http_server_connection_t *)heap_alloc_and_zero(sizeof(struct http_server_connection_t), PKG_OS, MEM_TYPE_OS_HTTP_SERVER_CONNECTION);
 	if (!connection) {
 		DEBUG_ERROR("out of memory");
-		tcp_socket_reject(http_server->listen_sock);
+		tcp_socket_reject(listen->listen_sock);
 		return;
 	}
 
@@ -239,16 +250,18 @@ static void http_server_sock_accept(void *arg)
 	if (!connection->conn) {
 		DEBUG_ERROR("out of memory");
 		heap_free(connection);
-		tcp_socket_reject(http_server->listen_sock);
+		tcp_socket_reject(listen->listen_sock);
 		return;
 	}
+
+	tcp_connection_set_ttl(connection->conn, http_server->default_ttl);
 
 	connection->http_parser = http_parser_alloc(http_server_connection_http_event, connection);
 	if (!connection->http_parser) {
 		DEBUG_ERROR("out of memory");
 		tcp_connection_deref(connection->conn);
 		heap_free(connection);
-		tcp_socket_reject(http_server->listen_sock);
+		tcp_socket_reject(listen->listen_sock);
 		return;
 	}
 
@@ -256,12 +269,17 @@ static void http_server_sock_accept(void *arg)
 	connection->connection_timeout = timer_get_ticks() + HTTP_SERVER_DEFAULT_CONNECTION_TIMEOUT;
 	http_server_add_connection(http_server, connection);
 
-	tcp_socket_accept(http_server->listen_sock, connection->conn, http_server_connection_establish, http_server_connection_tcp_recv, http_server_connection_tcp_close, connection);
+	tcp_socket_accept(listen->listen_sock, connection->conn, http_server_connection_establish, http_server_connection_tcp_recv, http_server_connection_tcp_close, connection);
 }
 
 uint16_t http_server_get_port(struct http_server_t *http_server)
 {
-	return tcp_socket_get_port(http_server->listen_sock);
+	return tcp_socket_get_port(http_server->ipv4.listen_sock);
+}
+
+void http_server_set_default_ttl(struct http_server_t *http_server, uint8_t default_ttl)
+{
+	http_server->default_ttl = default_ttl;
 }
 
 void http_server_network_reset(struct http_server_t *http_server)
@@ -302,19 +320,17 @@ struct http_server_t *http_server_instance_alloc(uint16_t port)
 	}
 
 	oneshot_init(&http_server->connection_timer);
+	http_server->default_ttl = 64;
 
-	http_server->listen_sock = tcp_socket_alloc();
-	if (!http_server->listen_sock) {
-		DEBUG_ERROR("out of memory");
-		heap_free(http_server);
-		return NULL;
-	}
+	http_server->ipv4.http_server = http_server;
+	http_server->ipv4.listen_sock = tcp_socket_alloc(IP_MODE_IPV4);
+	tcp_socket_listen(http_server->ipv4.listen_sock, port, http_server_sock_accept, &http_server->ipv4);
 
-	if (tcp_socket_listen(http_server->listen_sock, 0, port, http_server_sock_accept, http_server) != TCP_OK) {
-		DEBUG_ERROR("sock failed");
-		heap_free(http_server);
-		return NULL;
-	}
+#if defined(IPV6_SUPPORT)
+	http_server->ipv6.http_server = http_server;
+	http_server->ipv6.listen_sock = tcp_socket_alloc(IP_MODE_IPV6);
+	tcp_socket_listen(http_server->ipv6.listen_sock, port, http_server_sock_accept, &http_server->ipv6);
+#endif
 
 	return http_server;
 }

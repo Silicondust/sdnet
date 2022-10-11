@@ -30,11 +30,11 @@ extern void gena_service_manager_network_reset(void);
 
 extern bool gena_service_has_subscriptions(struct gena_service_t *service);
 extern void gena_service_enqueue_message(struct gena_service_t *service, uint8_t queue_policy, struct netbuf *notify_nb);
-extern void gena_service_enqueue_message_specific_ip(struct gena_service_t *service, ipv4_addr_t specific_ip, uint8_t queue_policy, struct netbuf *notify_nb);
+extern void gena_service_enqueue_message_specific_ip(struct gena_service_t *service, const ip_addr_t *specific_ip, uint8_t queue_policy, struct netbuf *notify_nb);
 extern void gena_service_notify_vars(struct gena_service_t *service, uint8_t queue_policy, gena_service_notify_vars_callback_t notify_vars_callback, void *callback_arg);
 
-extern ipv4_addr_t gena_subscription_get_local_ip(struct gena_subscription_t *subscription);
-extern ipv4_addr_t gena_subscription_get_callback_ip(struct gena_subscription_t *subscription);
+extern uint32_t gena_subscription_get_local_ip(struct gena_subscription_t *subscription, ip_addr_t *result);
+extern uint32_t gena_subscription_get_callback_ip(struct gena_subscription_t *subscription, ip_addr_t *result);
 
 extern bool gena_message_begin(struct netbuf *notify_nb);
 extern bool gena_message_end(struct netbuf *notify_nb);
@@ -48,9 +48,10 @@ struct gena_subscription_t {
 	struct slist_prefix_t slist_prefix;
 	struct gena_service_t *service;
 	struct guid sid;
-	ipv4_addr_t local_ip;
-	ipv4_addr_t callback_ip;
+	ip_addr_t local_ip;
+	ip_addr_t callback_ip;
 	uint16_t callback_port;
+	uint32_t callback_ipv6_scope_id;
 	char *callback_uri;
 	uint32_t sequence;
 	struct netbuf_queue tx_queue;
@@ -84,8 +85,9 @@ struct gena_service_connection_t {
 	bool nt_present;
 	bool sid_present;
 	struct guid sid;
-	ipv4_addr_t callback_ip;
+	ip_addr_t callback_ip;
 	uint16_t callback_port;
+	uint32_t callback_ipv6_scope_id;
 	char *callback_uri;
 	uint32_t subscription_period;
 };
@@ -99,7 +101,7 @@ extern struct gena_service_t *gena_service_manager_find_service_by_uri_hash(sha1
 
 extern struct gena_service_t *gena_service_alloc(const char *uri, gena_service_new_subscription_callback_t new_subscription_callback, void *callback_arg, uint32_t default_subscription_period);
 extern struct gena_subscription_t *gena_service_find_subscription_by_sid(struct gena_service_t *service, struct guid *sid);
-extern struct gena_subscription_t *gena_service_find_subscription_by_callback(struct gena_service_t *service, ipv4_addr_t callback_ip, uint16_t callback_port, char *callback_uri);
+extern struct gena_subscription_t *gena_service_find_subscription_by_callback(struct gena_service_t *service, const ip_addr_t *callback_ip, uint16_t callback_port, uint32_t callback_ipv6_scope_id, char *callback_uri);
 extern void gena_service_add_subscription(struct gena_service_t *service, struct gena_subscription_t *subscription);
 extern void gena_service_remove_subscription(struct gena_service_t *service, struct gena_subscription_t *subscription);
 extern void gena_service_network_reset(struct gena_service_t *service);
@@ -107,7 +109,7 @@ extern void gena_service_network_reset(struct gena_service_t *service);
 extern http_server_probe_result_t gena_service_connection_accept(struct http_server_connection_t *http_connection, http_server_connection_method_t method, const char *uri);
 extern void gena_service_connection_free(struct gena_service_connection_t *connection);
 
-extern struct gena_subscription_t *gena_subscription_accept(struct gena_service_t *service, ipv4_addr_t local_ip, ipv4_addr_t callback_ip, uint16_t callback_port, char *callback_uri, uint32_t subscription_period);
+extern struct gena_subscription_t *gena_subscription_accept(struct gena_service_t *service, const ip_addr_t *local_ip, const ip_addr_t *callback_ip, uint16_t callback_port, uint32_t callback_ipv6_scope_id, char *callback_uri, uint32_t subscription_period);
 extern void gena_subscription_renew(struct gena_subscription_t *subscription, uint32_t subscription_period);
 extern void gena_subscription_unsubscribe(struct gena_subscription_t *subscription);
 extern void gena_subscription_free(struct gena_subscription_t *subscription);

@@ -34,4 +34,4 @@ extern struct tcp_manager_t tcp_manager;
 extern void tcp_socket_thread_execute(void *arg);
 extern void tcp_connection_thread_execute(void *arg);
 
-extern void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst);
+extern void tcp_connection_accept(struct tcp_connection *tc, int sock, ip_mode_t ip_mode, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst);

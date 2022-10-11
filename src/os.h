@@ -13,7 +13,7 @@
 #elif defined(_WIN32)
 #include <windows/os.h>
 #elif defined(__APPLE__)
-#include <osx/os.h>
+#include <macos/os.h>
 #elif defined(__FreeBSD__)
 #include <bsd/os.h>
 #else

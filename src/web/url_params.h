@@ -13,5 +13,6 @@ extern bool url_params_str_get_value_u32(const char *params_str, const char *nam
 extern bool url_params_str_get_value_u64(const char *params_str, const char *name, uint64_t *pvalue, int base);
 
 extern bool url_params_nb_get_value(struct netbuf *params_nb, const char *name, char *value, size_t value_buffer_size);
+extern bool url_params_nb_get_value_s32(struct netbuf *params_nb, const char *name, int32_t *pvalue);
 extern bool url_params_nb_get_value_u32(struct netbuf *params_nb, const char *name, uint32_t *pvalue, int base);
 extern bool url_params_nb_get_value_u64(struct netbuf *params_nb, const char *name, uint64_t *pvalue, int base);

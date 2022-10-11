@@ -122,3 +122,17 @@ void gpio_pin_dir_output(uint32_t port, uint8_t pin, bool initial_value)
 		return;
 	}
 }
+
+void gpio_watchdog_ping(void)
+{
+#if defined(GPIO_WDT_PING)
+	struct sd_gpio gp;
+	gp.port = 0;
+	gp.pin = 0;
+
+	if (ioctl(gpio_fd, GPIO_WDT_PING, &gp) < 0) {
+		DEBUG_ERROR("gpio_watchdog_ping failed");
+		return;
+	}
+#endif
+}

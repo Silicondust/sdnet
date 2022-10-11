@@ -41,6 +41,10 @@ void tcp_set_sock_send_buffer_size(int sock, size_t size)
 	}
 }
 
+void tcp_set_sock_keepalive(int sock, int seconds)
+{
+}
+
 tcp_error_t tcp_connection_send_file(struct tcp_connection *tc, struct file_t *file, size_t length, size_t *pactual)
 {
 	if (tcp_manager.disable_sendfile) {

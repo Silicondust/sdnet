@@ -24,7 +24,8 @@ THIS_FILE("doprint_custom");
 #define ELEMENT_TYPE_DOUBLE 5
 #define ELEMENT_TYPE_MAC_ADDR 6
 #define	ELEMENT_TYPE_IPV4_ADDR 7
-#define ELEMENT_TYPE_STRING 8
+#define	ELEMENT_TYPE_IP_ADDR 8
+#define ELEMENT_TYPE_STRING 9
 
 static uint8_t doprint_custom_get_element_str(const char **pfmt, char element_str[])
 {
@@ -85,6 +86,11 @@ static uint8_t doprint_custom_get_element_str(const char **pfmt, char element_st
 			*eptr = 0;
 			*pfmt = fmt;
 			return ELEMENT_TYPE_IPV4_ADDR;
+
+		case 'V':
+			*eptr = 0;
+			*pfmt = fmt;
+			return ELEMENT_TYPE_IP_ADDR;
 
 		case 's':
 			*eptr = 0;
@@ -363,6 +369,32 @@ bool doprint_custom(doprint_custom_write_func_t write_func, void *write_arg, uin
 				return false;
 			}
 
+			continue;
+		}
+
+		if (element_type == ELEMENT_TYPE_IP_ADDR) {
+			const ip_addr_t *val = va_arg(ap, const ip_addr_t *);
+#if defined(IPV6_SUPPORT)
+			if (ip_addr_is_ipv4(val) || ip_addr_is_zero(val)) {
+				uint32_t v = (uint32_t)val->low;
+				if (!doprint_custom_sprintf(write_func, write_arg, "%u.%u.%u.%u", (v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, (v >> 0) & 0xFF)) {
+					return false;
+				}
+			} else {
+				uint32_t va = (uint32_t)(val->high >> 32);
+				uint32_t vb = (uint32_t)(val->high >> 0);
+				uint32_t vc = (uint32_t)(val->low >> 32);
+				uint32_t vd = (uint32_t)(val->low >> 0);
+				if (!doprint_custom_sprintf(write_func, write_arg, "[%x:%x:%x:%x:%x:%x:%x:%x]", va >> 16, va & 0xFFFF, vb >> 16, vb & 0xFFFF, vc >> 16, vc & 0xFFFF, vd >> 16, vd & 0xFFFF)) {
+					return false;
+				}
+			}
+#else
+			uint32_t v = (uint32_t)val->ipv4;
+			if (!doprint_custom_sprintf(write_func, write_arg, "%u.%u.%u.%u", (v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, (v >> 0) & 0xFF)) {
+				return false;
+			}
+#endif
 			continue;
 		}
 

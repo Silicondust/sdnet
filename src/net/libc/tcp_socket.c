@@ -20,6 +20,7 @@ THIS_FILE("tcp_socket");
 
 struct tcp_socket {
 	struct slist_prefix_t slist_prefix;
+	ip_mode_t ip_mode;
 	int sock;
 	int accept_connection_sock;
 	tcp_connect_callback_t connect_callback;
@@ -36,18 +37,38 @@ static void tcp_socket_trigger_poll(void)
 
 uint16_t tcp_socket_get_port(struct tcp_socket *ts)
 {
-	struct sockaddr_in local_addr;
-	memset(&local_addr, 0, sizeof(local_addr));
-	socklen_t addr_len = sizeof(local_addr);
-	getsockname(ts->sock, (struct sockaddr *)&local_addr, &addr_len);
-	return ntohs(local_addr.sin_port);
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#else
+	struct sockaddr_in sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#endif
+
+	if (getsockname(ts->sock, (struct sockaddr *)&sock_addr, &sock_addr_size) != 0) {
+		return 0;
+	}
+
+#if defined(IPV6_SUPPORT)
+	if (sock_addr.ss_family == AF_INET6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		return ntohs(sock_addr_in->sin6_port);
+} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		return ntohs(sock_addr_in->sin_port);
+	}
+#else
+	return ntohs(sock_addr.sin_port);
+#endif
 }
 
 void tcp_socket_accept(struct tcp_socket *ts, struct tcp_connection *tc, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst)
 {
 	DEBUG_ASSERT(ts->accept_connection_sock != -1, "tcp accept called without connection pending");
 
-	tcp_connection_accept(tc, ts->accept_connection_sock, est, recv, close, inst);
+	tcp_connection_accept(tc, ts->accept_connection_sock, ts->ip_mode, est, recv, close, inst);
 	ts->accept_connection_sock = -1;
 }
 
@@ -93,7 +114,7 @@ static void tcp_socket_thread_accept(struct tcp_socket *ts)
 	DEBUG_ASSERT(ts->accept_connection_sock == -1, "tcp accept/reject not called");
 }
 
-tcp_error_t tcp_socket_listen(struct tcp_socket *ts, ipv4_addr_t addr, uint16_t port, tcp_connect_callback_t connect, void *inst)
+tcp_error_t tcp_socket_listen(struct tcp_socket *ts, uint16_t port, tcp_connect_callback_t connect, void *inst)
 {
 	DEBUG_ASSERT(connect, "no connect callback specified");
 
@@ -101,19 +122,37 @@ tcp_error_t tcp_socket_listen(struct tcp_socket *ts, ipv4_addr_t addr, uint16_t 
 	ts->callback_inst = inst;
 
 	/* Bind socket. */
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size;
+	if (ts->ip_mode == IP_MODE_IPV6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		sock_addr_in->sin6_family = AF_INET6;
+		sock_addr_in->sin6_port = htons(port);
+		sock_addr_size = sizeof(struct sockaddr_in6);
+	} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		sock_addr_in->sin_family = AF_INET;
+		sock_addr_in->sin_port = htons(port);
+		sock_addr_size = sizeof(struct sockaddr_in);
+	}
+#else
 	struct sockaddr_in sock_addr;
 	memset(&sock_addr, 0, sizeof(sock_addr));
 	sock_addr.sin_family = AF_INET;
-	sock_addr.sin_addr.s_addr = htonl(addr);
 	sock_addr.sin_port = htons(port);
-	if (bind(ts->sock, (struct sockaddr *)&sock_addr, sizeof(sock_addr)) != 0) {
-		DEBUG_WARN("failed to bind socket to %08X:%u", addr, port);
+	socklen_t sock_addr_size = sizeof(struct sockaddr_in);
+#endif
+
+	if (bind(ts->sock, (struct sockaddr *)&sock_addr, sock_addr_size) != 0) {
+		DEBUG_WARN("failed to bind socket to %u", port);
 		return TCP_ERROR_SOCKET_BUSY;
 	}
 
 	/* Listen. */
 	if (listen(ts->sock, 10) != 0) {
-		DEBUG_WARN("listen failed on %08X:%u", addr, port);
+		DEBUG_WARN("listen failed on %u", port);
 		return TCP_ERROR_SOCKET_BUSY;
 	}
 
@@ -125,15 +164,18 @@ tcp_error_t tcp_socket_listen(struct tcp_socket *ts, ipv4_addr_t addr, uint16_t 
 	return TCP_OK;
 }
 
-struct tcp_socket *tcp_socket_alloc(void)
+struct tcp_socket *tcp_socket_alloc(ip_mode_t ip_mode)
 {
 	struct tcp_socket *ts = (struct tcp_socket *)heap_alloc_and_zero(sizeof(struct tcp_socket), PKG_OS, MEM_TYPE_OS_TCP_SOCKET);
 	if (!ts) {
 		return NULL;
 	}
 
+	ts->ip_mode = ip_mode;
+
 	/* Create socket. */
-	ts->sock = (int)socket(AF_INET, SOCK_STREAM, 0);
+	int af_inet = (ip_mode == IP_MODE_IPV6) ? AF_INET6 : AF_INET;
+	ts->sock = (int)socket(af_inet, SOCK_STREAM, 0);
 	if (ts->sock == -1) {
 		DEBUG_ERROR("failed to allocate socket");
 		heap_free(ts);
@@ -149,10 +191,18 @@ struct tcp_socket *tcp_socket_alloc(void)
 	}
 
 	/* Allow port reuse. */
-	int sock_opt = 1;
-	if (setsockopt(ts->sock, SOL_SOCKET, SO_REUSEADDR, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
+	int sock_opt_reuseaddr = 1;
+	if (setsockopt(ts->sock, SOL_SOCKET, SO_REUSEADDR, (char *)&sock_opt_reuseaddr, sizeof(sock_opt_reuseaddr)) < 0) {
 		DEBUG_WARN("setsockopt SO_REUSEADDR error %d", errno);
 	}
+
+	/* Set IPV6 only */
+#if defined(IPV6_SUPPORT)
+	if (ip_mode == IP_MODE_IPV6) {
+		int sock_opt_ipv6only = 1;
+		setsockopt(ts->sock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&sock_opt_ipv6only, sizeof(sock_opt_ipv6only));
+	}
+#endif
 
 	return ts;
 }

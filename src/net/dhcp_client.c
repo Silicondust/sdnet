@@ -54,7 +54,7 @@ THIS_FILE("dhcp_client");
 #define DHCP_MESSAGE_TYPE_INFORM 0x08
 
 struct dhcp_client_t {
-	struct ip_datalink_instance *idi;
+	struct ip_managed_t *ipm;
 	struct udp_socket *sock;
 	struct oneshot timer;
 
@@ -94,7 +94,7 @@ static void dhcp_client_send(struct dhcp_client_t *dc, uint8_t message_type, ipv
 	}
 
 	uint8_t mac_addr[6];
-	ip_datalink_get_hwaddr(dc->idi, mac_addr, 6);
+	ip_managed_get_mac_addr(dc->ipm, mac_addr);
 
 	netbuf_fwd_write_u8(txnb, DHCP_BOOTP_REQUEST);
 	netbuf_fwd_write_u8(txnb, 0x01); /* hardware type (ethernet) */
@@ -148,13 +148,15 @@ static void dhcp_client_send(struct dhcp_client_t *dc, uint8_t message_type, ipv
 	netbuf_fwd_write_u8(txnb, DHCP_TAG_END);
 	netbuf_fwd_fill_u8(txnb, netbuf_get_remaining(txnb), 0);
 
+	ip_addr_t dst_addr;
+	ip_addr_set_ipv4(&dst_addr, (flags & DHCP_BOOTP_FLAGS_BROADCAST) ? 0xFFFFFFFF : server_ip);
+
 	netbuf_set_pos_to_start(txnb);
-	ipv4_addr_t dst_addr = (flags & DHCP_BOOTP_FLAGS_BROADCAST) ? 0xFFFFFFFF : server_ip;
-	udp_dhcp_socket_send_netbuf(dc->sock, dc->idi, dst_addr, DHCP_SERVER_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+	udp_dhcp_socket_send_netbuf(dc->sock, dc->ipm, &dst_addr, DHCP_SERVER_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 
-static void dhcp_client_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port, struct netbuf *nb)
+static void dhcp_client_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, uint32_t ipv6_scope_id, struct netbuf *nb)
 {
 	struct dhcp_client_t *dc = (struct dhcp_client_t *)inst;
 
@@ -184,7 +186,7 @@ static void dhcp_client_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 	netbuf_advance_pos(nb, 8);
 
 	uint8_t mac_addr[6];
-	ip_datalink_get_hwaddr(dc->idi, mac_addr, 6);
+	ip_managed_get_mac_addr(dc->ipm, mac_addr);
 	if (netbuf_fwd_memcmp(nb, mac_addr, 6) != 0) {
 		DEBUG_INFO("dhcp packet for unknown mac");
 		return;
@@ -287,7 +289,7 @@ static void dhcp_client_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 
 	switch (message_type) {
 	case DHCP_MESSAGE_TYPE_OFFER:
-		if (!ip_addr_is_unicast(ip_addr)) {
+		if (!ipv4_addr_is_unicast(ip_addr)) {
 			DEBUG_WARN("invalid ip addr %v", ip_addr);
 			break;
 		}
@@ -300,7 +302,7 @@ static void dhcp_client_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 		break;
 
 	case DHCP_MESSAGE_TYPE_ACK:
-		if (!ip_addr_is_unicast(ip_addr)) {
+		if (!ipv4_addr_is_unicast(ip_addr)) {
 			DEBUG_WARN("invalid ip addr %v", ip_addr);
 			break;
 		}
@@ -396,7 +398,7 @@ void dhcp_client_link_down(struct dhcp_client_t *dc)
 	dc->discover_start_time = 0;
 }
 
-struct dhcp_client_t *dhcp_client_alloc(struct ip_datalink_instance *idi, const char *client_name, dhcp_client_callback_t callback, void *callback_arg)
+struct dhcp_client_t *dhcp_client_alloc(struct ip_managed_t *ipm, const char *client_name, dhcp_client_callback_t callback, void *callback_arg)
 {
 	struct dhcp_client_t *dc = (struct dhcp_client_t *)heap_alloc_and_zero(sizeof(struct dhcp_client_t), PKG_OS, MEM_TYPE_OS_DHCP_CLIENT);
 	if (!dc) {
@@ -411,7 +413,7 @@ struct dhcp_client_t *dhcp_client_alloc(struct ip_datalink_instance *idi, const 
 		return NULL;
 	}
 
-	dc->idi = idi;
+	dc->ipm = ipm;
 	dc->callback = callback;
 	dc->callback_arg = callback_arg;
 	strncpy(dc->client_name, client_name, sizeof(dc->client_name) - 1);
@@ -420,7 +422,7 @@ struct dhcp_client_t *dhcp_client_alloc(struct ip_datalink_instance *idi, const 
 	dc->lease_rebind_time = TICKS_INFINITE;
 
 	oneshot_init(&dc->timer);
-	udp_dhcp_socket_listen(dc->sock, idi, 0, DHCP_CLIENT_PORT, dhcp_client_recv, NULL, dc);
+	udp_dhcp_socket_listen(dc->sock, ipm, DHCP_CLIENT_PORT, dhcp_client_recv, NULL, dc);
 
 	return dc;
 }

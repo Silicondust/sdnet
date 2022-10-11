@@ -20,6 +20,8 @@ THIS_FILE("url_unescape");
 
 const char *url_unescape(char *out, char *end, const char *in)
 {
+	char last_c = 0;
+
 	while (1) {
 		if (out >= end) {
 			return NULL;
@@ -31,6 +33,12 @@ const char *url_unescape(char *out, char *end, const char *in)
 			*out = 0;
 			return in - 1;
 		}
+
+		if ((c == '/') && (last_c == '/')) {
+			continue;
+		}
+
+		last_c = c;
 
 		if (c == '%') {
 			char str[4];

@@ -13,4 +13,5 @@ struct udp_socket;
 extern void igmp_manager_init(void);
 extern void igmp_manager_start(void);
 extern void igmp_manager_local_ip_changed(void);
-extern void igmp_manager_join_group(struct udp_socket *us, ipv4_addr_t addr);
+extern void igmp_manager_join_group(struct udp_socket *us, const ip_addr_t *addr);
+extern void igmp_manager_leave_group(struct udp_socket *us, const ip_addr_t *addr);

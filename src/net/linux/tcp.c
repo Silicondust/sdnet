@@ -41,6 +41,18 @@ void tcp_set_sock_send_buffer_size(int sock, size_t size)
 	}
 }
 
+void tcp_set_sock_keepalive(int sock, int seconds)
+{
+	if (setsockopt(sock, SOL_TCP, TCP_KEEPIDLE, (char *)&seconds, sizeof(seconds)) < 0) {
+		DEBUG_WARN("setsockopt TCP_KEEPIDLE error %d", errno);
+	}
+
+	int keepalive_enable = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&keepalive_enable, sizeof(keepalive_enable)) < 0) {
+		DEBUG_WARN("setsockopt SO_KEEPALIVE error %d", errno);
+	}
+}
+
 tcp_error_t tcp_connection_send_file(struct tcp_connection *tc, struct file_t *file, size_t length, size_t *pactual)
 {
 	if (tcp_manager.disable_sendfile) {

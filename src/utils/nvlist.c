@@ -18,6 +18,22 @@
 
 THIS_FILE("nvlist");
 
+#if (RUNTIME_DEBUG)
+void nvlist_debug_print(struct slist_t *list)
+{
+	struct nvlist_entry_t *entry = slist_get_head(struct nvlist_entry_t, list);
+	while (entry) {
+		if (entry->value_str) {
+			DEBUG_INFO("%s=%s", entry->name, entry->value_str);
+		} else {
+			DEBUG_INFO("%s=%lld", entry->name, entry->value_int64);
+		}
+
+		entry = slist_get_next(struct nvlist_entry_t, entry);
+	}
+}
+#endif
+
 void nvlist_clear_all(struct slist_t *list)
 {
 	slist_clear(struct nvlist_entry_t, list, heap_free);

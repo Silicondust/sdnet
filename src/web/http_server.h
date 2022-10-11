@@ -35,12 +35,14 @@ extern struct http_server_t *http_server_instance_alloc(uint16_t port);
 extern struct http_server_service_t *http_server_register_service(struct http_server_t *http_server, http_server_service_probe_func_t probe, void *callback_arg);
 extern void http_server_network_reset(struct http_server_t *http_server);
 extern uint16_t http_server_get_port(struct http_server_t *http_server);
+extern void http_server_set_default_ttl(struct http_server_t *http_server, uint8_t default_ttl);
 
 extern void http_server_connection_accept(struct http_server_connection_t *connection, http_server_connection_http_event_func_t http_event, http_server_connection_close_func_t close, void *callback_arg);
 extern void http_server_connection_close(struct http_server_connection_t *connection);
 extern void http_server_connection_set_http_tag_list(struct http_server_connection_t *connection, const struct http_parser_tag_lookup_t *webserver_connection_http_tag_list, void *callback_arg);
+extern void http_server_connection_set_timeout(struct http_server_connection_t *connection, ticks_t duration);
 extern void http_server_connection_disable_timeout(struct http_server_connection_t *connection);
-extern ipv4_addr_t http_server_connection_get_remote_addr(struct http_server_connection_t *connection);
+extern uint32_t http_server_connection_get_remote_addr(struct http_server_connection_t *connection, ip_addr_t *result);
 extern struct tcp_connection *http_server_connection_get_tcp_connection(struct http_server_connection_t *connection);
 
 struct http_server_connection_t {
@@ -62,9 +64,16 @@ struct http_server_service_t {
 	void *callback_arg;
 };
 
+struct http_server_listen_t {
+	struct http_server_t *http_server;
+	struct tcp_socket *listen_sock;
+};
+
 struct http_server_t {
 	struct slist_t service_list;
 	struct slist_t connection_list;
 	struct oneshot connection_timer;
-	struct tcp_socket *listen_sock;
+	struct http_server_listen_t ipv4;
+	struct http_server_listen_t ipv6;
+	uint8_t default_ttl;
 };

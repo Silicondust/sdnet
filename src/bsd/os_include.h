@@ -37,7 +37,6 @@
 #include <sys/ioctl.h>
 #include <sys/uio.h>
 #include <sys/resource.h>
-#include <net/if.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>

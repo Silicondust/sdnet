@@ -355,14 +355,14 @@ static http_parser_error_t soap_service_connection_http_event(void *arg, http_pa
 	}
 }
 
-ipv4_addr_t soap_service_connection_get_local_ip(struct soap_service_connection_t *connection)
+void soap_service_connection_get_local_ip(struct soap_service_connection_t *connection, ip_addr_t *result)
 {
-	return tcp_connection_get_local_addr(connection->conn);
+	tcp_connection_get_local_addr(connection->conn, result);
 }
 
-ipv4_addr_t soap_service_connection_get_remote_ip(struct soap_service_connection_t *connection)
+void soap_service_connection_get_remote_ip(struct soap_service_connection_t *connection, ip_addr_t *result)
 {
-	return tcp_connection_get_remote_addr(connection->conn);
+	tcp_connection_get_remote_addr(connection->conn, result);
 }
 
 void *soap_service_connection_get_action_callback_arg(struct soap_service_connection_t *connection)

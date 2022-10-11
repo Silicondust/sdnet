@@ -231,7 +231,7 @@ static void soap_client_request_conn_established(void *arg)
 
 	bool success = true;
 	success &= netbuf_sprintf(header_nb, "POST %s HTTP/1.1\r\n", client->url.uri);
-	success &= netbuf_sprintf(header_nb, "Host: %v:%u\r\n", client->url.ip_addr, client->url.ip_port);
+	success &= netbuf_sprintf(header_nb, "Host: %V:%u\r\n", &client->url.ip_addr, client->url.ip_port);
 	success &= netbuf_sprintf(header_nb, "SOAPACTION: \"%s#%s\"\r\n", client->urn, request->action_name);
 	success &= netbuf_sprintf(header_nb, "Content-Type: %s\r\n", http_content_type_xml);
 	success &= netbuf_sprintf(header_nb, "Content-Length: %u\r\n", content_length);
@@ -297,7 +297,7 @@ static void soap_client_request_start(void *arg)
 		return;
 	}
 
-	if (tcp_connection_connect(client->conn, client->url.ip_addr, client->url.ip_port, 0, 0, soap_client_request_conn_established, soap_client_request_conn_recv, soap_client_request_conn_close, client) != TCP_OK) {
+	if (tcp_connection_connect(client->conn, &client->url.ip_addr, client->url.ip_port, client->url.ipv6_scope_id, soap_client_request_conn_established, soap_client_request_conn_recv, soap_client_request_conn_close, client) != TCP_OK) {
 		DEBUG_WARN("connect failed");
 		tcp_connection_deref(client->conn);
 		client->conn = NULL;

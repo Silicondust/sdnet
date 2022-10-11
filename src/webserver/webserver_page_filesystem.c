@@ -259,7 +259,11 @@ static webserver_page_result_t webserver_page_filesystem_start(void *arg, struct
 		return WEBSERVER_PAGE_RESULT_CLOSE;
 	}
 
-	DEBUG_INFO("%v %s", webserver_connection_get_remote_ip(connection), filename);
+	if (RUNTIME_DEBUG) {
+		ip_addr_t remote_ip;
+		webserver_connection_get_remote_ip(connection, &remote_ip);
+		DEBUG_INFO("%V %s", &remote_ip, filename);
+	}
 
 	struct appfs_file_t *file = appfs_file_open(filename, connection->webserver->filesystem_chroot);
 	if (!file) {

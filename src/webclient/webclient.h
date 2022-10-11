@@ -64,7 +64,7 @@ typedef void(*webclient_operation_complete_callback_t)(void *arg, struct webclie
 extern struct webclient_t *webclient_alloc(const char *additional_header_lines, ticks_t max_idle_time);
 extern void webclient_release(struct webclient_t *webclient);
 extern void webclient_set_max_recv_nb_size(struct webclient_t *webclient, size_t max_recv_nb_size);
-extern ipv4_addr_t webclient_get_local_ip(struct webclient_t *webclient);
+extern void webclient_get_local_ip(struct webclient_t *webclient, ip_addr_t *result);
 
 extern struct webclient_operation_t *webclient_operation_execute_get(struct webclient_t *webclient, struct url_t *url, const char *additional_header_lines, const struct http_parser_tag_lookup_t *http_tag_list, webclient_operation_redirect_callback_t redirect_callback, webclient_operation_data_callback_t data_callback, webclient_operation_complete_callback_t complete_callback, void *callback_arg);
 extern struct webclient_operation_t *webclient_operation_execute_post(struct webclient_t *webclient, struct url_t *url, const char *additional_header_lines, const struct http_parser_tag_lookup_t *http_tag_list, webclient_operation_redirect_callback_t redirect_callback, webclient_operation_post_callback_t post_callback, webclient_operation_data_callback_t data_callback, webclient_operation_complete_callback_t complete_callback, void *callback_arg);

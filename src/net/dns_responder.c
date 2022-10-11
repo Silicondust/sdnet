@@ -29,9 +29,15 @@ struct dns_responder_name_t {
 	char *name;
 };
 
+struct dns_respodnder_transport_t {
+	uint16_t dns_type;
+	struct udp_socket *sock;
+};
+
 struct dns_responder_t {
 	struct slist_t name_list;
-	struct udp_socket *sock;
+	struct dns_respodnder_transport_t ipv4;
+	struct dns_respodnder_transport_t ipv6;
 };
 
 static struct dns_responder_t dns_responder;
@@ -140,14 +146,13 @@ static bool dns_responser_lookup_name(char *name)
 struct dns_responder_output_state {
 	struct netbuf *question_nb;
 	struct netbuf *answer_nb;
-	ipv4_addr_t local_ip;
 	uint16_t question_count;
 	uint16_t answer_count;
 };
 
-static bool dns_responder_output_prep(struct dns_responder_output_state *state, ipv4_addr_t src_addr)
+static bool dns_responder_output_prep(struct dns_responder_output_state *state, const ip_addr_t *src_addr)
 {
-	if (state->local_ip) {
+	if (ip_addr_is_non_zero(&state->local_ip)) {
 		return true;
 	}
 
@@ -160,12 +165,6 @@ static bool dns_responder_output_prep(struct dns_responder_output_state *state, 
 	state->answer_nb = netbuf_alloc();
 	if (!state->answer_nb) {
 		DEBUG_ERROR("out of memory");
-		return false;
-	}
-
-	state->local_ip = ip_get_local_ip_for_remote_ip(src_addr);
-	if (!state->local_ip) {
-		DEBUG_ERROR("no local ip");
 		return false;
 	}
 
@@ -211,11 +210,12 @@ static bool dns_responder_output_question(struct dns_responder_output_state *sta
 	return true;
 }
 
-static bool dns_responder_output_answer(struct dns_responder_output_state *state, uint16_t dns_type, char *name)
+static bool dns_responder_output_answer(struct dns_respodnder_transport_t *transport, struct dns_responder_output_state *state, const ip_addr_t *local_ip, char *name)
 {
 	size_t encoded_name_length = 1 + strlen(name) + 1;
+	size_t ip_addr_len = (transport->dns_type == DNS_RECORD_TYPE_AAAA) ? 16 : 4;
 
-	if (!netbuf_fwd_make_space(state->answer_nb, encoded_name_length + 14)) {
+	if (!netbuf_fwd_make_space(state->answer_nb, encoded_name_length + 10 + ip_addr_len)) {
 		DEBUG_ERROR("out of memory");
 		return false;
 	}
@@ -243,18 +243,34 @@ static bool dns_responder_output_answer(struct dns_responder_output_state *state
 	}
 
 	netbuf_fwd_write_u8(state->answer_nb, 0);
-	netbuf_fwd_write_u16(state->answer_nb, dns_type);
-	netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_CLASS_IN);
-	netbuf_fwd_write_u32(state->answer_nb, 300); /* time to live */
-	netbuf_fwd_write_u16(state->answer_nb, 4); /* data length */
-	netbuf_fwd_write_u32(state->answer_nb, state->local_ip);
+
+	if (transport->dns_type == DNS_RECORD_TYPE_AAAA) {
+		uint8_t ip_addr_bytes[16];
+		ip_addr_get_ipv6_bytes(local_ip, ip_addr_bytes);
+		netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_TYPE_AAAA);
+		netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_CLASS_IN);
+		netbuf_fwd_write_u32(state->answer_nb, 600); /* time to live */
+		netbuf_fwd_write_u16(state->answer_nb, 16); /* data length */
+		netbuf_fwd_write(state->answer_nb, ip_addr_bytes, 16);
+	} else {
+		netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_TYPE_A);
+		netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_CLASS_IN);
+		netbuf_fwd_write_u32(state->answer_nb, 600); /* time to live */
+		netbuf_fwd_write_u16(state->answer_nb, 4); /* data length */
+		netbuf_fwd_write_u32(state->answer_nb, ip_addr_get_ipv4(local_ip));
+	}
 
 	state->answer_count++;
 	return true;
 }
 
-static void dns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port, struct netbuf *nb)
+static void dns_responder_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, uint32_t ipv6_scope_id, struct netbuf *nb)
 {
+	struct dns_respodnder_transport_t *transport = (struct dns_respodnder_transport_t *)inst;
+
+	ip_addr_t local_ip;
+	ip_interface_manager_get_local_ip_for_remote_ip(src_addr, ipv6_scope_id, &local_ip);
+
 	if (!netbuf_fwd_check_space(nb, 12)) {
 		DEBUG_WARN("short packet");
 		return;
@@ -289,10 +305,10 @@ static void dns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_po
 
 		uint16_t dns_type = netbuf_fwd_read_u16(nb);
 		uint16_t dns_class = netbuf_fwd_read_u16(nb);
-		if (dns_class != DNS_RECORD_CLASS_IN) {
+		if (dns_type != transport->dns_type) {
 			continue;
 		}
-		if ((dns_type != DNS_RECORD_TYPE_A) && (dns_type != DNS_RECORD_TYPE_AAAA)) {
+		if (dns_class != DNS_RECORD_CLASS_IN) {
 			continue;
 		}
 
@@ -306,11 +322,11 @@ static void dns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_po
 			break;
 		}
 
-		if ((dns_type != DNS_RECORD_TYPE_A) || !dns_responser_lookup_name(name)) {
+		if (!dns_responser_lookup_name(name)) {
 			continue;
 		}
 
-		if (!dns_responder_output_answer(&state, dns_type, name)) {
+		if (!dns_responder_output_answer(transport, &state, &local_ip, name)) {
 			success = false;
 			break;
 		}
@@ -350,7 +366,7 @@ static void dns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_po
 	netbuf_rev_write_u16(txnb, 0x8400); /* flags */
 	netbuf_rev_write_u16(txnb, transaction_id);
 
-	udp_socket_send_netbuf(dns_responder.sock, src_addr, src_port, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+	udp_socket_send_netbuf(transport->sock, src_addr, src_port, ipv6_scope_id, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
 
 	netbuf_free(txnb);
 	netbuf_free(state.answer_nb);
@@ -361,7 +377,7 @@ bool dns_responder_register_name(const char *name)
 {
 	size_t name_len = strlen(name);
 
-	struct dns_responder_name_t *dns_name = (struct dns_responder_name_t *)heap_alloc_and_zero(sizeof(struct dns_responder_name_t) + name_len + 1, PKG_OS, MEM_TYPE_OS_MDNS_RESPONDER_NAME);
+	struct dns_responder_name_t *dns_name = (struct dns_responder_name_t *)heap_alloc_and_zero(sizeof(struct dns_responder_name_t) + name_len + 1, PKG_OS, MEM_TYPE_OS_DNS_RESPONDER_NAME);
 	if (!dns_name) {
 		return false;
 	}
@@ -375,6 +391,13 @@ bool dns_responder_register_name(const char *name)
 
 void dns_responder_init(void)
 {
-	dns_responder.sock = udp_socket_alloc();
-	udp_socket_listen(dns_responder.sock, 0, DNS_PORT, dns_responder_recv, NULL, NULL);
+	dns_responder.ipv4.dns_type = DNS_RECORD_TYPE_A;
+	dns_responder.ipv4.sock = udp_socket_alloc(IP_MODE_IPV4);
+	udp_socket_listen(dns_responder.ipv4.sock, DNS_PORT, dns_responder_recv, NULL, &dns_responder.ipv4);
+
+#if defined(IPV6_SUPPORT)
+	dns_responder.ipv6.dns_type = DNS_RECORD_TYPE_AAAA;
+	dns_responder.ipv6.sock = udp_socket_alloc(IP_MODE_IPV6);
+	udp_socket_listen(dns_responder.ipv6.sock, DNS_PORT, dns_responder_recv, NULL, &dns_responder.ipv6);
+#endif
 }

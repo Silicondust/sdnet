@@ -683,7 +683,7 @@ static void webclient_execute_connect(struct webclient_t *webclient)
 			tcp_connection_set_max_recv_nb_size(webclient->tcp_conn, webclient->max_recv_nb_size);
 		}
 
-		if (tcp_connection_connect(webclient->tcp_conn, operation->url.ip_addr, operation->url.ip_port, 0, 0, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient) != TCP_OK) {
+		if (tcp_connection_connect(webclient->tcp_conn, &operation->url.ip_addr, operation->url.ip_port, operation->url.ipv6_scope_id, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient) != TCP_OK) {
 			DEBUG_WARN("connect failed");
 			tcp_connection_deref(webclient->tcp_conn);
 			webclient->tcp_conn = NULL;
@@ -702,7 +702,7 @@ static void webclient_execute_connect(struct webclient_t *webclient)
 			return;
 		}
 
-		if (!tls_client_connection_connect(webclient->tls_conn, operation->url.ip_addr, operation->url.ip_port, 0, 0, operation->url.dns_name, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient)) {
+		if (!tls_client_connection_connect(webclient->tls_conn, &operation->url.ip_addr, operation->url.ip_port, operation->url.ipv6_scope_id, operation->url.dns_name, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient)) {
 			DEBUG_WARN("connect failed");
 			tls_client_connection_deref(webclient->tls_conn);
 			webclient->tls_conn = NULL;
@@ -717,27 +717,35 @@ static void webclient_execute_connect(struct webclient_t *webclient)
 	webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_CONNECT_FAILED, 0, "connect failed");
 }
 
-static void webclient_execute_dns_callback(void *arg, ipv4_addr_t ip, ticks_t expire_time)
+static void webclient_execute_dns_callback(void *arg, uint16_t record_type, const ip_addr_t *ip, ticks_t expire_time)
 {
 	struct webclient_t *webclient = (struct webclient_t *)arg;
 	struct webclient_operation_t *operation = webclient->current_operation;
+	if (!operation) {
+		dns_lookup_deref(webclient->dns_lookup);
+		webclient->dns_lookup = NULL;
+		return;
+	}
+
+	if (ip_addr_is_zero(ip) && (record_type == DNS_RECORD_TYPE_AAAA)) {
+		if (dns_lookup_gethostbyname(webclient->dns_lookup, operation->url.dns_name, DNS_RECORD_TYPE_A, webclient_execute_dns_callback, webclient)) {
+			return;
+		}
+	}
+
+	operation->url.ip_addr = *ip;
+	operation->stats.dns_time = timer_get_ticks();
 
 	dns_lookup_deref(webclient->dns_lookup);
 	webclient->dns_lookup = NULL;
 
-	if (!operation) {
-		return;
-	}
-
-	operation->stats.dns_time = timer_get_ticks();
-
-	if (ip == 0) {
+	if (ip_addr_is_zero(&operation->url.ip_addr)) {
 		DEBUG_WARN("dns failed");
 		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_DNS_FAILED, 0, "dns failed");
 		return;
 	}
 
-	operation->url.ip_addr = ip;
+	DEBUG_INFO("%s ip = %V", operation->url.dns_name, &operation->url.ip_addr);
 	webclient_execute_connect(webclient);
 }
 
@@ -748,7 +756,7 @@ static void webclient_execute_dns_or_connect(struct webclient_t *webclient)
 	DEBUG_ASSERT(!webclient->pipelined_operation, "execute_dns called with pipelined operation");
 	DEBUG_ASSERT(!webclient->dns_lookup, "active dns operation");
 
-	if (operation->url.ip_addr != 0) {
+	if (ip_addr_is_non_zero(&operation->url.ip_addr)) {
 		webclient_execute_connect(webclient);
 		return;
 	}
@@ -759,9 +767,9 @@ static void webclient_execute_dns_or_connect(struct webclient_t *webclient)
 		return;
 	}
 
-	if (!dns_lookup_gethostbyname(webclient->dns_lookup, operation->url.dns_name, webclient_execute_dns_callback, webclient)) {
-		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_DNS_FAILED, 0, "dns failed");
-		return;
+	uint16_t record_type = ip_interface_manager_has_public_ipv6() ? DNS_RECORD_TYPE_AAAA : DNS_RECORD_TYPE_A;
+	if (!dns_lookup_gethostbyname(webclient->dns_lookup, operation->url.dns_name, record_type, webclient_execute_dns_callback, webclient)) {
+		webclient_execute_dns_callback(webclient, record_type, &ip_addr_zero, 0);
 	}
 }
 
@@ -993,17 +1001,19 @@ void webclient_resume_recv(struct webclient_t *webclient)
 	}
 }
 
-ipv4_addr_t webclient_get_local_ip(struct webclient_t *webclient)
+void webclient_get_local_ip(struct webclient_t *webclient, ip_addr_t *result)
 {
 	if (webclient->tcp_conn) {
-		return tcp_connection_get_local_addr(webclient->tcp_conn);
+		tcp_connection_get_local_addr(webclient->tcp_conn, result);
+		return;
 	}
 
 	if (webclient->tls_conn) {
-		return tls_client_connection_get_local_addr(webclient->tls_conn);
+		tls_client_connection_get_local_addr(webclient->tls_conn, result);
+		return;
 	}
 
-	return 0;
+	ip_addr_set_zero(result);
 }
 
 void webclient_set_max_recv_nb_size(struct webclient_t *webclient, size_t max_recv_nb_size)

@@ -9,6 +9,9 @@
  */
 
 #include <os.h>
+#include <linux/netdevice.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
 
 #if defined(DEBUG)
 #define RUNTIME_DEBUG 1
@@ -42,18 +45,19 @@ static uint16_t udp_dhcp_socket_checksum(void *addr, int count)
 	return ~sum;
 }
 
-udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_datalink_instance *link, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
+udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_managed_t *ipm, const ip_addr_t *dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
 {
-	DEBUG_ASSERT(link, "no datalink instance");
+	DEBUG_ASSERT(ipm, "no ipm");
 
-	ipv4_addr_t src_addr = 0;
 	uint16_t src_port = us->port;
 
-	if (ip_datalink_get_ipaddr(link) != 0) {
-		return udp_socket_send_netbuf(us, dest_addr, dest_port, ttl, tos, nb);
+	ip_addr_t local_ip;
+	ip_managed_get_local_ip(ipm, &local_ip);
+	if (ip_addr_is_non_zero(&local_ip)) {
+		return udp_socket_send_netbuf(us, dest_addr, dest_port, 0, ttl, tos, nb);
 	}
 
-	if (dest_addr != 0xffffffff) {
+	if (!ip_addr_is_ipv4_broadcast(dest_addr)) {
 		DEBUG_ERROR("no local ip and not broadcast packet");
 		return UDP_ERROR_FAILED;
 	}
@@ -63,12 +67,12 @@ udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_datalin
 		return UDP_ERROR_FAILED;
 	}
 
-	DEBUG_INFO("send raw %08X:%u -> %08X:%u", src_addr, src_port, dest_addr, dest_port);
+	DEBUG_INFO("send raw %V:%u -> %V:%u", &ip_addr_zero, src_port, dest_addr, dest_port);
 
 	struct sockaddr_ll sock_sll;
 	sock_sll.sll_family = AF_PACKET;
 	sock_sll.sll_protocol = htons(ETH_P_IP);
-	sock_sll.sll_ifindex = ip_datalink_get_ifindex(link);
+	sock_sll.sll_ifindex = ip_managed_get_ifindex(ipm);
 
 	uint8_t dest_mac[6] = { [0 ... 5] = 0xff };
 	memcpy(sock_sll.sll_addr, &dest_mac, 6);
@@ -86,7 +90,6 @@ udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_datalin
 		return UDP_ERROR_FAILED;
 	}
 
-	netbuf_rev_make_space(nb, sizeof(struct ip_udp_t));
 	netbuf_set_pos_to_start(nb);
 	packet = (struct ip_udp_t *)netbuf_get_ptr(nb);
 
@@ -95,8 +98,8 @@ udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_datalin
 	memset(packet, 0, sizeof(struct ip_udp_t));
 
 	packet->ip.protocol = IPPROTO_UDP;
-	packet->ip.saddr = htonl(src_addr);
-	packet->ip.daddr = htonl(dest_addr);
+	packet->ip.saddr = htonl(0);
+	packet->ip.daddr = htonl(ip_addr_get_ipv4(dest_addr));
 	packet->udp.source = htons(src_port);
 	packet->udp.dest = htons(dest_port);
 
@@ -115,30 +118,28 @@ udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_datalin
 
 	int ret = sendto(udp_dhcp_sock_raw, packet, length, 0, (struct sockaddr *) &sock_sll, sizeof(sock_sll));
 	if (ret != length) {
-		if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINPROGRESS)) {
-			DEBUG_INFO("udp send failed (%d)", errno);
-		}
+		DEBUG_INFO("udp send failed (%d)", errno);
 		return UDP_ERROR_FAILED;
 	}
 
 	return UDP_OK;
 }
 
-udp_error_t udp_dhcp_socket_listen(struct udp_socket *us, struct ip_datalink_instance *link, ipv4_addr_t addr, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
+udp_error_t udp_dhcp_socket_listen(struct udp_socket *us, struct ip_managed_t *ipm, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
 {
-	DEBUG_ASSERT(link, "no datalink instance");
+	DEBUG_ASSERT(ipm, "no ipm");
 
-	const char *interface_name = ip_datalink_get_interface_name(link);
+	const char *interface_name = ip_managed_get_interface_name(ipm);
 	if (setsockopt(us->sock, SOL_SOCKET, SO_BINDTODEVICE, interface_name, strlen(interface_name) + 1) < 0) {
 		DEBUG_WARN("setsockopt SO_BINDTODEVICE error %d", errno);
 	}
 
-	return udp_socket_listen(us, addr, port, recv, recv_icmp, inst);
+	return udp_socket_listen(us, port, recv, recv_icmp, inst);
 }
 
 struct udp_socket *udp_dhcp_socket_alloc(void)
 {
-	return udp_socket_alloc();
+	return udp_socket_alloc(IP_MODE_IPV4);
 }
 
 void udp_dhcp_manager_init(void)

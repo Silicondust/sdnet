@@ -18,26 +18,16 @@
 
 struct udp_socket;
 
-struct udp_addr_port_t {
-	ipv4_addr_t addr;
-	uint16_t port;
-};
-
 typedef int8_t udp_error_t;
-typedef void (*udp_recv_callback_t)(void *inst, ipv4_addr_t src_addr, uint16_t src_port, struct netbuf *nb);
-typedef void (*udp_recv_icmp_callback_t)(void *inst, ipv4_addr_t icmp_src_addr, uint8_t icmp_type, ipv4_addr_t dest_addr, uint16_t dest_port);
+typedef void (*udp_recv_callback_t)(void *inst, const ip_addr_t *src_addr, uint16_t src_port, uint32_t ipv6_scope_id, struct netbuf *nb);
+typedef void (*udp_recv_icmp_callback_t)(void *inst, uint8_t icmp_type, const ip_addr_t *dest_addr, uint16_t dest_port, uint32_t ipv6_scope_id);
 
-static inline bool udp_addr_port_compare(struct udp_addr_port_t *a, struct udp_addr_port_t *b)
-{
-	return (a->addr == b->addr) && (a->port == b->port);
-}
-
-extern struct udp_socket *udp_socket_alloc(void);
+extern struct udp_socket *udp_socket_alloc(ip_mode_t ip_mode);
 extern void udp_socket_set_recv_netbuf_size(struct udp_socket *us, size_t recv_netbuf_size);
-extern udp_error_t udp_socket_listen(struct udp_socket *us, ipv4_addr_t addr, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst);
+extern udp_error_t udp_socket_listen(struct udp_socket *us, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst);
 extern void udp_socket_set_icmp_callback(struct udp_socket *us, udp_recv_icmp_callback_t recv_icmp);
-extern udp_error_t udp_socket_send_netbuf(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb);
-extern udp_error_t udp_socket_send_multipath(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint8_t ttl, uint8_t tos, struct netbuf *nb);
+extern udp_error_t udp_socket_send_netbuf(struct udp_socket *us, const ip_addr_t *dest_addr, uint16_t dest_port, uint32_t ipv6_scope_id, uint8_t ttl, uint8_t tos, struct netbuf *nb);
+extern udp_error_t udp_socket_send_multipath(struct udp_socket *us, const ip_addr_t *dest_addr, uint16_t dest_port, struct ip_interface_t *idi, uint8_t ttl, uint8_t tos, struct netbuf *nb);
 extern uint16_t udp_socket_get_port(struct udp_socket *us);
 
 extern void udp_manager_init(void);

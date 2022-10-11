@@ -41,13 +41,15 @@
     <ClCompile Include="..\file\windows\dir_utils.c" />
     <ClCompile Include="..\file\windows\file_utils.c" />
     <ClCompile Include="..\flash\flash_file.c" />
-    <ClCompile Include="..\net\ip_passive_common.c" />
+    <ClCompile Include="..\net\ip_addr.c" />
     <ClCompile Include="..\net\libc\dns_lookup.c" />
+    <ClCompile Include="..\net\libc\ip_interface.c" />
+    <ClCompile Include="..\net\mdns_responder.c" />
     <ClCompile Include="..\net\tls_client_connection.c" />
     <ClCompile Include="..\net\tls_prf.c" />
     <ClCompile Include="..\net\tls_server_socket.c" />
     <ClCompile Include="..\net\windows\igmp.c" />
-    <ClCompile Include="..\net\windows\ip_passive.c" />
+    <ClCompile Include="..\net\windows\ip_interface_detect.c" />
     <ClCompile Include="..\net\windows\tcp_connection.c" />
     <ClCompile Include="..\net\windows\tcp_manager.c" />
     <ClCompile Include="..\net\windows\tcp_socket.c" />
@@ -201,7 +203,7 @@
       <PreprocessorDefinitions>WIN32;DEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <PrecompiledHeaderFile>os.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers;../../../vendor/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers;../../../vendor/zlib;$(SolutionDir)/app</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -216,7 +218,7 @@
       <PreprocessorDefinitions>DEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <PrecompiledHeaderFile>os.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers;../../../vendor/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers;../../../vendor/zlib;$(SolutionDir)/app</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -233,7 +235,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <PrecompiledHeaderFile>os.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers;../../../vendor/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers;../../../vendor/zlib;$(SolutionDir)/app</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -252,7 +254,7 @@
       <PreprocessorDefinitions>NDEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <PrecompiledHeaderFile>os.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers;../../../vendor/zlib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;../../../vendor/libtom/libtommath;../../../vendor/libtom/libtomcrypt/src/headers;../../../vendor/zlib;$(SolutionDir)/app</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

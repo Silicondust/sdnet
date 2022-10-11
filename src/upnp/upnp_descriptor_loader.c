@@ -224,12 +224,13 @@ static xml_parser_error_t upnp_descriptor_loader_xml_text_urlbase(struct upnp_de
 		return XML_PARSER_ESTOP;
 	}
 
-	if (loader->base_url.ip_addr != loader->descriptor_url.ip_addr) {
+	if (!ip_addr_cmp(&loader->base_url.ip_addr, &loader->descriptor_url.ip_addr)) {
 		DEBUG_WARN("baseurl with different ip address");
 		loader->parser_state = UPNP_DESCRIPTOR_LOADER_STATE_ERROR;
 		return XML_PARSER_ESTOP;
 	}
 
+	loader->base_url.ipv6_scope_id = loader->descriptor_url.ipv6_scope_id;
 	return XML_PARSER_OK;
 }
 
@@ -256,12 +257,13 @@ static xml_parser_error_t upnp_descriptor_loader_xml_text_service_control(struct
 		return XML_PARSER_OK;
 	}
 
-	if (loader->current_service.control_url.ip_addr != loader->descriptor_url.ip_addr) {
+	if (!ip_addr_cmp(&loader->current_service.control_url.ip_addr, &loader->descriptor_url.ip_addr)) {
 		DEBUG_WARN("ignoring service control with different ip address");
 		loader->current_service.control_url.uri[0] = 0;
 		return XML_PARSER_OK;
 	}
 
+	loader->current_service.control_url.ipv6_scope_id = loader->descriptor_url.ipv6_scope_id;
 	return XML_PARSER_OK;
 }
 
@@ -485,7 +487,7 @@ static void upnp_descriptor_loader_conn_established(void *arg)
 
 	bool success = true;
 	success &= netbuf_sprintf(header_nb, "GET %s HTTP/1.1\r\n", loader->descriptor_url.uri);
-	success &= netbuf_sprintf(header_nb, "Host: %v:%u\r\n", loader->descriptor_url.ip_addr, loader->descriptor_url.ip_port);
+	success &= netbuf_sprintf(header_nb, "Host: %V:%u\r\n", &loader->descriptor_url.ip_addr, loader->descriptor_url.ip_port);
 	success &= netbuf_sprintf(header_nb, "Connection: close\r\n");
 	success &= netbuf_sprintf(header_nb, "\r\n");
 	if (!success) {
@@ -517,7 +519,7 @@ static void upnp_descriptor_loader_start(void *arg)
 		return;
 	}
 
-	if (tcp_connection_connect(loader->conn, loader->descriptor_url.ip_addr, loader->descriptor_url.ip_port, 0, 0, upnp_descriptor_loader_conn_established, upnp_descriptor_loader_conn_recv, upnp_descriptor_loader_conn_close, loader) != TCP_OK) {
+	if (tcp_connection_connect(loader->conn, &loader->descriptor_url.ip_addr, loader->descriptor_url.ip_port, loader->descriptor_url.ipv6_scope_id, upnp_descriptor_loader_conn_established, upnp_descriptor_loader_conn_recv, upnp_descriptor_loader_conn_close, loader) != TCP_OK) {
 		DEBUG_WARN("connect failed");
 		tcp_connection_deref(loader->conn);
 		loader->conn = NULL;

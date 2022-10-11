@@ -48,16 +48,7 @@
     <ClCompile Include="..\file\windows\dir_utils.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\net\ip_passive_common.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\net\libc\dns_lookup.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\net\windows\udp.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\net\windows\ip_passive.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\net\windows\tcp_connection.c">
@@ -316,6 +307,21 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\web\url_unescape.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\ip_addr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\mdns_responder.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\windows\ip_interface_detect.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\libc\ip_interface.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\libc\dns_lookup.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

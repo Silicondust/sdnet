@@ -1,7 +1,7 @@
 /*
  * dns_lookup.c
  *
- * Copyright © 2012-2013 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2012-2022 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -20,7 +20,6 @@ THIS_FILE("dns_lookup");
 
 #define DNS_SERVER_PORT 53
 
-#define DNS_RECORD_TYPE_A 0x0001
 #define DNS_RECORD_CLASS_IN 0x0001
 
 #define DNS_RESPONSE_CODE_NAME_ERROR 3
@@ -41,18 +40,23 @@ struct dns_entry_t {
 	struct slist_prefix_t slist_prefix;
 	struct slist_t dns_lookup_list;
 	ticks_t expire_time;
-	ipv4_addr_t ip_addr;
+	ip_addr_t ip_addr;
 	char name[128];
-	bool retry_on_failure;
+	uint16_t record_type;
+	uint16_t transaction_id;
+	bool switched_to_secondary;
 	bool report_result;
 };
 
 struct dns_manager_t {
 	struct slist_t dns_list;
 	struct oneshot timer;
-	struct udp_socket *sock;
-	ipv4_addr_t dns_ip_primary;
-	ipv4_addr_t dns_ip_secondary;
+	struct udp_socket *sock_ipv4;
+	struct udp_socket *sock_ipv6;
+	ip_addr_t server_a_primary;
+	ip_addr_t server_a_secondary;
+	ip_addr_t server_aaaa_primary;
+	ip_addr_t server_aaaa_secondary;
 };
 
 static struct dns_manager_t dns_manager;
@@ -76,11 +80,25 @@ int dns_lookup_deref(struct dns_lookup_t *dns_lookup)
 	return 0;
 }
 
-static struct dns_entry_t *dns_manager_find_entry(const char *name)
+static struct dns_entry_t *dns_manager_find_entry_name_type(const char *name, uint16_t record_type)
 {
 	struct dns_entry_t *dns_entry = slist_get_head(struct dns_entry_t, &dns_manager.dns_list);
 	while (dns_entry) {
-		if (strcmp(dns_entry->name, name) == 0) {
+		if ((strcmp(dns_entry->name, name) == 0) && (dns_entry->record_type == record_type)) {
+			return dns_entry;
+		}
+
+		dns_entry = slist_get_next(struct dns_entry_t, dns_entry);
+	}
+
+	return NULL;
+}
+
+static struct dns_entry_t *dns_manager_find_entry_name_id(const char *name, uint16_t transaction_id)
+{
+	struct dns_entry_t *dns_entry = slist_get_head(struct dns_entry_t, &dns_manager.dns_list);
+	while (dns_entry) {
+		if ((strcmp(dns_entry->name, name) == 0) && (dns_entry->transaction_id == transaction_id)) {
 			return dns_entry;
 		}
 
@@ -96,24 +114,24 @@ static void dns_manager_update_timer(void)
 	oneshot_attach(&dns_manager.timer, 0, dns_manager_timer_callback, NULL);
 }
 
-static void dns_manager_send_request(struct dns_entry_t *dns_entry, ipv4_addr_t dns_server_ip)
+static bool dns_manager_send_request(struct dns_entry_t *dns_entry, const ip_addr_t *server_ip)
 {
-	if (dns_server_ip == 0) {
-		return;
+	if (ip_addr_is_zero(server_ip)) {
+		return false;
 	}
 
-	DEBUG_INFO("sending DNS request for %s", dns_entry->name);
+	DEBUG_INFO("sending DNS request for %s type 0x%x", dns_entry->name, dns_entry->record_type);
 	char *ptr = strchr(dns_entry->name, 0);
 	size_t encoded_name_length = 1 + (ptr - dns_entry->name) + 1;
 
 	struct netbuf *txnb = netbuf_alloc_with_rev_space(12 + encoded_name_length + 4);
 	if (!txnb) {
 		DEBUG_ERROR("out of memory");
-		return;
+		return false;
 	}
 
 	netbuf_rev_write_u16(txnb, DNS_RECORD_CLASS_IN); /* Class = IN */
-	netbuf_rev_write_u16(txnb, DNS_RECORD_TYPE_A); /* Type = A record */
+	netbuf_rev_write_u16(txnb, dns_entry->record_type); /* Type = A or AAAA record */
 
 	netbuf_rev_write_u8(txnb, 0x00);
 	char *end = ptr;
@@ -133,16 +151,46 @@ static void dns_manager_send_request(struct dns_entry_t *dns_entry, ipv4_addr_t 
 		netbuf_rev_write_u8(txnb, *ptr);
 	}
 
+	dns_entry->transaction_id = (uint16_t)random_get32();
+
 	netbuf_rev_write_u16(txnb, 0); /* Additional RRs */
 	netbuf_rev_write_u16(txnb, 0); /* Authority RRs */
 	netbuf_rev_write_u16(txnb, 0); /* Answers */
 	netbuf_rev_write_u16(txnb, 1); /* Questions */
 	netbuf_rev_write_u16(txnb, 0x0100); /* Flags */
-	netbuf_rev_write_u16(txnb, (uint16_t)random_get32());
+	netbuf_rev_write_u16(txnb, dns_entry->transaction_id);
 
 	DEBUG_ASSERT(netbuf_get_pos(txnb) == netbuf_get_start(txnb), "not at start");
-	udp_socket_send_netbuf(dns_manager.sock, dns_server_ip, DNS_SERVER_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+
+	struct udp_socket *sock = ip_addr_is_ipv6(server_ip) ? dns_manager.sock_ipv6 : dns_manager.sock_ipv4;
+	if (udp_socket_send_netbuf(sock, server_ip, DNS_SERVER_PORT, 0, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb) != UDP_OK) {
+		netbuf_free(txnb);
+		return false;
+	}
+
 	netbuf_free(txnb);
+	return true;
+}
+
+static void dns_manager_send_request_auto(struct dns_entry_t *dns_entry)
+{
+#if defined(IPV6_SUPPORT)
+	const ip_addr_t *server_ip;
+	if (dns_entry->record_type == DNS_RECORD_TYPE_AAAA) {
+		server_ip = (dns_entry->switched_to_secondary) ? &dns_manager.server_aaaa_secondary : &dns_manager.server_aaaa_primary;
+	} else {
+		server_ip = (dns_entry->switched_to_secondary) ? &dns_manager.server_a_secondary : &dns_manager.server_a_primary;
+	}
+#else
+	const ip_addr_t *server_ip = (dns_entry->switched_to_secondary) ? &dns_manager.server_a_secondary : &dns_manager.server_a_primary;
+#endif
+
+	if (!dns_manager_send_request(dns_entry, server_ip)) {
+		dns_entry->expire_time = timer_get_ticks();
+		return;
+	}
+
+	dns_entry->expire_time = timer_get_ticks() + (ticks_t)DNS_ENTRY_EXPIRE_TIME_PENDING_SEC * TICK_RATE;
 }
 
 /* Only first name (ie the question) is supported because back references are not supported. */
@@ -224,9 +272,9 @@ static bool dns_manager_recv_skip_name(struct netbuf *nb)
 	return true;
 }
 
-static void dns_manager_recv_record_a(struct dns_entry_t *dns_entry, ipv4_addr_t ip_addr, uint32_t time_to_live)
+static void dns_manager_recv_record(struct dns_entry_t *dns_entry, uint32_t time_to_live)
 {
-	DEBUG_INFO("%s = %v", dns_entry->name, ip_addr);
+	DEBUG_INFO("%s = %V", dns_entry->name, &dns_entry->ip_addr);
 
 	if (time_to_live < DNS_ENTRY_EXPIRE_TIME_SUCCESS_MIN_SEC) {
 		time_to_live = DNS_ENTRY_EXPIRE_TIME_SUCCESS_MIN_SEC;
@@ -235,27 +283,42 @@ static void dns_manager_recv_record_a(struct dns_entry_t *dns_entry, ipv4_addr_t
 		time_to_live = DNS_ENTRY_EXPIRE_TIME_SUCCESS_MAX_SEC;
 	}
 
-	dns_entry->ip_addr = ip_addr;
 	dns_entry->report_result = true;
-	dns_entry->retry_on_failure = false;
 	dns_entry->expire_time = timer_get_ticks() + (ticks_t)time_to_live * TICK_RATE;
-
 	dns_manager_update_timer();
 }
 
-static void dns_manager_recv_name_error(struct dns_entry_t *dns_entry)
+static void dns_manager_recv_error(struct dns_entry_t *dns_entry)
 {
-	DEBUG_INFO("%s = error", dns_entry->name);
+	if (!dns_entry->switched_to_secondary) {
+		DEBUG_INFO("%s primary server failed trying secondary", dns_entry->name);
+		dns_entry->switched_to_secondary = true;
+		dns_manager_send_request_auto(dns_entry);
+		dns_manager_update_timer();
+		return;
+	}
 
-	dns_entry->ip_addr = 0;
+	DEBUG_INFO("%s failed", dns_entry->name);
 	dns_entry->report_result = true;
-	dns_entry->retry_on_failure = false;
 	dns_entry->expire_time = timer_get_ticks() + (ticks_t)DNS_ENTRY_EXPIRE_TIME_FAILED_SEC * TICK_RATE;
-
 	dns_manager_update_timer();
 }
 
-static void dns_manager_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port, struct netbuf *nb)
+static void dns_manager_recv_timeout(struct dns_entry_t *dns_entry)
+{
+	if (!dns_entry->switched_to_secondary) {
+		DEBUG_INFO("%s primary server failed trying secondary", dns_entry->name);
+		dns_entry->switched_to_secondary = true;
+		dns_manager_send_request_auto(dns_entry);
+		return;
+	}
+
+	DEBUG_INFO("%s failed", dns_entry->name);
+	dns_entry->report_result = true;
+	dns_entry->expire_time = timer_get_ticks() + (ticks_t)DNS_ENTRY_EXPIRE_TIME_FAILED_SEC * TICK_RATE;
+}
+
+static void dns_manager_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, uint32_t ipv6_scope_id, struct netbuf *nb)
 {
 	if (src_port != DNS_SERVER_PORT) {
 		DEBUG_WARN("unexpected server port");
@@ -267,7 +330,7 @@ static void dns_manager_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 		return;
 	}
 
-	netbuf_advance_pos(nb, 2);
+	uint16_t transaction_id = netbuf_fwd_read_u16(nb);
 	uint16_t flags = netbuf_fwd_read_u16(nb);
 	uint16_t question_count = netbuf_fwd_read_u16(nb);
 	uint16_t answer_count = netbuf_fwd_read_u16(nb);
@@ -290,7 +353,7 @@ static void dns_manager_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 		return;
 	}
 
-	struct dns_entry_t *dns_entry = dns_manager_find_entry(name);
+	struct dns_entry_t *dns_entry = dns_manager_find_entry_name_id(name, transaction_id);
 	if (!dns_entry) {
 		return;
 	}
@@ -306,23 +369,19 @@ static void dns_manager_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 	 * Parse answers.
 	 */
 	uint8_t response_code = flags & 0x000F;
-	if (response_code == DNS_RESPONSE_CODE_NAME_ERROR) {
-		dns_manager_recv_name_error(dns_entry);
-		return;
-	}
 	if (response_code != 0) {
-		DEBUG_INFO("response indicated error");
+		dns_manager_recv_error(dns_entry);
 		return;
 	}
 
 	while (answer_count--) {
 		if (!dns_manager_recv_skip_name(nb)) {
-			return;
+			break;
 		}
 
 		if (!netbuf_fwd_check_space(nb, 10)) {
 			DEBUG_WARN("short packet");
-			return;
+			break;
 		}
 
 		uint16_t record_type = netbuf_fwd_read_u16(nb);
@@ -335,33 +394,60 @@ static void dns_manager_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 		}
 		if (!netbuf_fwd_check_space(nb, data_length)) {
 			DEBUG_WARN("short packet");
-			return;
+			break;
 		}
 
 		addr_t end_bookmark = netbuf_get_pos(nb) + data_length;
 
-		ipv4_addr_t ip_addr;
-		switch(record_type) {
-		case DNS_RECORD_TYPE_A:
-			if (data_length != 4) {
-				break;
+		if (record_type != dns_entry->record_type) {
+			netbuf_set_pos(nb, end_bookmark);
+			continue;
+		}
+
+#if defined(IPV6_SUPPORT)
+		if (record_type == DNS_RECORD_TYPE_AAAA) {
+			if (data_length != 16) {
+				netbuf_set_pos(nb, end_bookmark);
+				continue;
 			}
 
-			ip_addr = netbuf_fwd_read_u32(nb);
-			if (!ip_addr_is_unicast(ip_addr)) {
-				DEBUG_WARN("invalid ip %v", ip_addr);
-				break;
+			ip_addr_t ip_addr;
+			ip_addr_set_ipv6_bytes(&ip_addr, netbuf_get_ptr(nb));
+
+			if (!ip_addr_is_unicast_not_localhost(&ip_addr)) {
+				netbuf_set_pos(nb, end_bookmark);
+				continue;
 			}
 
-			dns_manager_recv_record_a(dns_entry, ip_addr, time_to_live);
+			dns_entry->ip_addr = ip_addr;
+			dns_manager_recv_record(dns_entry, time_to_live);
 			return;
+		}
+#endif
 
-		default:
-			break;
+		if (record_type == DNS_RECORD_TYPE_A) {
+			if (data_length != 4) {
+				netbuf_set_pos(nb, end_bookmark);
+				continue;
+			}
+
+			ip_addr_t ip_addr;
+			ip_addr_set_ipv4(&ip_addr, netbuf_fwd_read_u32(nb));
+
+			if (!ip_addr_is_unicast_not_localhost(&ip_addr)) {
+				netbuf_set_pos(nb, end_bookmark);
+				continue;
+			}
+
+			dns_entry->ip_addr = ip_addr;
+			dns_manager_recv_record(dns_entry, time_to_live);
+			return;
 		}
 
 		netbuf_set_pos(nb, end_bookmark);
 	}
+
+	dns_manager_recv_error(dns_entry);
 }
 
 static void dns_manager_timer_callback(void *arg)
@@ -374,14 +460,7 @@ static void dns_manager_timer_callback(void *arg)
 	struct dns_entry_t *dns_entry = slist_get_head(struct dns_entry_t, &dns_manager.dns_list);
 	while (dns_entry) {
 		if (!dns_entry->report_result && (current_time >= dns_entry->expire_time)) {
-			if (dns_entry->retry_on_failure) {
-				dns_entry->expire_time = current_time + (ticks_t)DNS_ENTRY_EXPIRE_TIME_PENDING_SEC * TICK_RATE;
-				dns_entry->retry_on_failure = false;
-				dns_manager_send_request(dns_entry, dns_manager.dns_ip_secondary);
-			} else {
-				dns_entry->expire_time = current_time + (ticks_t)DNS_ENTRY_EXPIRE_TIME_FAILED_SEC * TICK_RATE;
-				dns_entry->report_result = true;
-			}
+			dns_manager_recv_timeout(dns_entry);
 		}
 
 		if (!dns_lookup_to_signal && dns_entry->report_result) {
@@ -421,16 +500,16 @@ static void dns_manager_timer_callback(void *arg)
 	}
 
 	if (dns_lookup_to_signal->callback) {
-		dns_lookup_to_signal->callback(dns_lookup_to_signal->callback_arg, dns_entry_to_signal->ip_addr, dns_entry_to_signal->expire_time);
+		dns_lookup_to_signal->callback(dns_lookup_to_signal->callback_arg, dns_entry_to_signal->record_type, &dns_entry_to_signal->ip_addr, dns_entry_to_signal->expire_time);
 	}
 }
 
-bool dns_lookup_gethostbyname(struct dns_lookup_t *dns_lookup, const char *name, dns_lookup_gethostbyname_callback_t callback, void *callback_arg)
+bool dns_lookup_gethostbyname(struct dns_lookup_t *dns_lookup, const char *name, uint16_t record_type, dns_lookup_gethostbyname_callback_t callback, void *callback_arg)
 {
 	dns_lookup->callback = callback;
 	dns_lookup->callback_arg = callback_arg;
 
-	struct dns_entry_t *dns_entry = dns_manager_find_entry(name);
+	struct dns_entry_t *dns_entry = dns_manager_find_entry_name_type(name, record_type);
 	if (dns_entry) {
 		dns_lookup_ref(dns_lookup);
 		slist_attach_tail(struct dns_lookup_t, &dns_entry->dns_lookup_list, dns_lookup);
@@ -452,14 +531,13 @@ bool dns_lookup_gethostbyname(struct dns_lookup_t *dns_lookup, const char *name,
 	}
 
 	strncpy(dns_entry->name, name, sizeof(dns_entry->name) - 1);
-	dns_entry->expire_time = timer_get_ticks() + (ticks_t)DNS_ENTRY_EXPIRE_TIME_PENDING_SEC * TICK_RATE;
-	dns_entry->retry_on_failure = true;
+	dns_entry->record_type = record_type;
 
 	dns_lookup_ref(dns_lookup);
 	slist_attach_tail(struct dns_lookup_t, &dns_entry->dns_lookup_list, dns_lookup);
 	slist_attach_tail(struct dns_entry_t, &dns_manager.dns_list, dns_entry);
 
-	dns_manager_send_request(dns_entry, dns_manager.dns_ip_primary);
+	dns_manager_send_request_auto(dns_entry);
 	dns_manager_update_timer();
 	return true;
 }
@@ -475,34 +553,48 @@ struct dns_lookup_t *dns_lookup_alloc(void)
 	return dns_lookup;
 }
 
-void dns_manager_set_server_ip(ipv4_addr_t dns_ip_primary, ipv4_addr_t dns_ip_secondary)
+static void dns_manager_set_server_internal(ip_addr_t *server_primary, ip_addr_t *server_secondary)
 {
-	if (!ip_addr_is_unicast(dns_ip_primary)) {
-		dns_ip_primary = 0;
+	if (!ip_addr_is_unicast(server_primary)) {
+		ip_addr_set_zero(server_primary);
 	}
-	if (!ip_addr_is_unicast(dns_ip_secondary)) {
-		dns_ip_secondary = 0;
-	}
-
-	if (dns_ip_primary == 0) {
-		dns_ip_primary = dns_ip_secondary;
-	}
-	if (dns_ip_secondary == 0) {
-		dns_ip_secondary = dns_ip_primary;
+	if (!ip_addr_is_unicast(server_secondary)) {
+		ip_addr_set_zero(server_secondary);
 	}
 
-	dns_manager.dns_ip_primary = dns_ip_primary;
-	dns_manager.dns_ip_secondary = dns_ip_secondary;
+	if (ip_addr_is_zero(server_primary)) {
+		*server_primary = *server_secondary;
+	}
+	if (ip_addr_is_zero(server_secondary)) {
+		*server_secondary = *server_primary;
+	}
 }
+
+void dns_manager_set_server_a_type(const ip_addr_t *server_primary, const ip_addr_t *server_secondary)
+{
+	dns_manager.server_a_primary = *server_primary;
+	dns_manager.server_a_secondary = *server_secondary;
+	dns_manager_set_server_internal(&dns_manager.server_a_primary, &dns_manager.server_a_secondary);
+}
+
+#if defined(IPV6_SUPPORT)
+void dns_manager_set_server_aaaa_type(const ip_addr_t *server_primary, const ip_addr_t *server_secondary)
+{
+	dns_manager.server_aaaa_primary = *server_primary;
+	dns_manager.server_aaaa_secondary = *server_secondary;
+	dns_manager_set_server_internal(&dns_manager.server_aaaa_primary, &dns_manager.server_aaaa_secondary);
+}
+#endif
 
 void dns_manager_init(void)
 {
-	dns_manager.sock = udp_socket_alloc();
-	if (!dns_manager.sock) {
-		DEBUG_ASSERT(0, "out of memory");
-		return;
-	}
-
 	oneshot_init(&dns_manager.timer);
-	udp_socket_listen(dns_manager.sock, 0, 0, dns_manager_recv, NULL, NULL);
+
+	dns_manager.sock_ipv4 = udp_socket_alloc(IP_MODE_IPV4);
+	udp_socket_listen(dns_manager.sock_ipv4, 0, dns_manager_recv, NULL, NULL);
+
+#if defined(IPV6_SUPPORT)
+	dns_manager.sock_ipv6 = udp_socket_alloc(IP_MODE_IPV6);
+	udp_socket_listen(dns_manager.sock_ipv6, 0, dns_manager_recv, NULL, NULL);
+#endif
 }

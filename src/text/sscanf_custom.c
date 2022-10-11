@@ -97,7 +97,7 @@ static bool vsscanf_custom_parse_u32(const char **pstr, uint32_t *pval)
 	}
 }
 
-static bool vsscanf_custom_parse_ip_addr(const char **pstr, ipv4_addr_t *pipaddr)
+static bool vsscanf_custom_parse_ipv4_addr(const char **pstr, ipv4_addr_t *pipaddr)
 {
 	const char *str = *pstr;
 	*pipaddr = 0;
@@ -126,6 +126,155 @@ static bool vsscanf_custom_parse_ip_addr(const char **pstr, ipv4_addr_t *pipaddr
 
 		shift -= 8;
 	}
+}
+
+static bool vsscanf_custom_parse_ip_addr(const char **pstr, ip_addr_t *ipaddr)
+{
+#if defined(IPV6_SUPPORT)
+	const char *str = *pstr;
+	bool framed_ipv6 = (*str++ == '[');
+
+	if (!framed_ipv6) {
+		str--;
+
+		while (1) {
+			char c = *str++;
+			if (c == 0) {
+				return false;
+			}
+
+			if ((c >= '0') && (c <= '9')) {
+				continue;
+			}
+
+			if ((c >= 'A') && (c <= 'F')) {
+				break;
+			}
+			if ((c >= 'a') && (c <= 'f')) {
+				break;
+			}
+			if (c == ':') {
+				break;
+			}
+
+			if (c == '.') {
+				ipv4_addr_t ipv4;
+				if (!vsscanf_custom_parse_ipv4_addr(pstr, &ipv4)) {
+					return false;
+				}
+
+				ip_addr_set_ipv4(ipaddr, ipv4);
+				return true;
+			}
+
+			return false;
+		}
+
+		str = *pstr;
+	}
+
+	uint16_t words[8];
+	int word_index = 0;
+	int double_colon_index = -1;
+
+	if ((str[0] == ':') && (str[1] == ':')) {
+		double_colon_index = word_index;
+		str += 2;
+
+		char c = *str++;
+
+		if ((c == 0) && !framed_ipv6) {
+			*pstr = str - 1;
+			ip_addr_set_zero(ipaddr);
+			return true;
+		}
+		if ((c == ']') && framed_ipv6) {
+			*pstr = str;
+			ip_addr_set_zero(ipaddr);
+			return true;
+		}
+
+		str--;
+	}
+
+	while (1) {
+		uint32_t val;
+		if (!vsscanf_custom_parse_u32_hex(&str, &val)) {
+			return false;
+		}
+
+		if (val > 0xFFFF) {
+			return false;
+		}
+
+		words[word_index++] = val;
+
+		char c = *str++;
+
+		if ((c == 0) && !framed_ipv6 && ((word_index == 8) || (double_colon_index >= 0))) {
+			*pstr = str - 1;
+			break;
+		}
+		if ((c == ']') && framed_ipv6 && ((word_index == 8) || (double_colon_index >= 0))) {
+			*pstr = str;
+			break;
+		}
+
+		if (word_index >= 8) {
+			return false;
+		}
+		if (c != ':') {
+			return false;
+		}
+
+		c = *str++;
+
+		if (c == ':') {
+			if (double_colon_index >= 0) {
+				return false;
+			}
+
+			double_colon_index = word_index;
+
+			c = *str++;
+
+			if ((c == 0) && !framed_ipv6) {
+				*pstr = str - 1;
+				break;
+			}
+			if ((c == ']') && framed_ipv6) {
+				*pstr = str;
+				break;
+			}
+		}
+
+		str--;
+	}
+
+	if (double_colon_index >= 0) {
+		int dest_index = 7;
+		word_index--;
+
+		while (word_index >= double_colon_index) {
+			words[dest_index--] = words[word_index--];
+		}
+		while (dest_index >= double_colon_index) {
+			words[dest_index--] = 0;
+		}
+	}
+
+	ipaddr->high = (uint64_t)words[0] << 48;
+	ipaddr->high |= (uint64_t)words[1] << 32;
+	ipaddr->high |= (uint64_t)words[2] << 16;
+	ipaddr->high |= (uint64_t)words[3] << 0;
+	ipaddr->low = (uint64_t)words[4] << 48;
+	ipaddr->low |= (uint64_t)words[5] << 32;
+	ipaddr->low |= (uint64_t)words[6] << 16;
+	ipaddr->low |= (uint64_t)words[7] << 0;
+	return true;
+#else
+	return vsscanf_custom_parse_ipv4_addr(pstr, &ipaddr->ipv4);
+#endif
 }
 
 static bool vsscanf_custom_parse_str(const char **pstr, char *pout, size_t size, char terminating)
@@ -214,6 +363,14 @@ bool vsscanf_custom_with_advance(const char **pstr, const char *fmt, va_list ap)
 
 		if (fmtc == 'v') {
 			ipv4_addr_t *pval = va_arg(ap, ipv4_addr_t *);
+			if (!vsscanf_custom_parse_ipv4_addr(&str, pval)) {
+				return false;
+			}
+			continue;
+		}
+
+		if (fmtc == 'V') {
+			ip_addr_t *pval = va_arg(ap, ip_addr_t *);
 			if (!vsscanf_custom_parse_ip_addr(&str, pval)) {
 				return false;
 			}

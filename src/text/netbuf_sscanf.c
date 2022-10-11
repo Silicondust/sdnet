@@ -105,7 +105,7 @@ static bool netbuf_vsscanf_parse_u32(struct netbuf *nb, uint32_t *pval)
 	}
 }
 
-static bool netbuf_vsscanf_parse_ip_addr(struct netbuf *nb, ipv4_addr_t *pipaddr)
+static bool netbuf_vsscanf_parse_ipv4_addr(struct netbuf *nb, ipv4_addr_t *pipaddr)
 {
 	*pipaddr = 0;
 
@@ -136,23 +136,176 @@ static bool netbuf_vsscanf_parse_ip_addr(struct netbuf *nb, ipv4_addr_t *pipaddr
 	}
 }
 
-static bool netbuf_vsscanf_parse_mac_addr(struct netbuf *nb, uint8_t *pmac)
+static bool netbuf_vsscanf_parse_ip_addr(struct netbuf *nb, ip_addr_t *ipaddr)
 {
-	for (int i = 0; i < 6; i++) {
-		uint32_t val;
-		if (!netbuf_vsscanf_parse_hex_char(nb, &val)) {
-			return false;
-		}
-		*pmac = val << 4;
-
-		if (!netbuf_vsscanf_parse_hex_char(nb, &val)) {
-			return false;
-		}
-		*pmac |= val;
-
-		pmac++;
+#if defined(IPV6_SUPPORT)
+	if (!netbuf_fwd_check_space(nb, 1)) {
+		return false;
 	}
+
+	char c = (char)netbuf_fwd_read_u8(nb);
+	bool framed_ipv6 = (c == '[');
+
+	if (!framed_ipv6) {
+		netbuf_retreat_pos(nb, 1);
+		addr_t bookmark = netbuf_get_pos(nb);
+
+		while (1) {
+			if (!netbuf_fwd_check_space(nb, 1)) {
+				return false;
+			}
+
+			char c = (char)netbuf_fwd_read_u8(nb);
+
+			if ((c >= '0') && (c <= '9')) {
+				continue;
+			}
+
+			if ((c >= 'A') && (c <= 'F')) {
+				break;
+			}
+			if ((c >= 'a') && (c <= 'f')) {
+				break;
+			}
+			if (c == ':') {
+				break;
+			}
+
+			if (c == '.') {
+				netbuf_set_pos(nb, bookmark);
+
+				ipv4_addr_t ipv4;
+				if (!netbuf_vsscanf_parse_ipv4_addr(nb, &ipv4)) {
+					return false;
+				}
+
+				ip_addr_set_ipv4(ipaddr, ipv4);
+				return true;
+			}
+
+			return false;
+		}
+
+		netbuf_set_pos(nb, bookmark);
+	}
+
+	uint16_t words[8];
+	int word_index = 0;
+	int double_colon_index = -1;
+
+	if (netbuf_fwd_check_space(nb, 2)) {
+		char c1 = (char)netbuf_fwd_read_u8(nb);
+		char c2 = (char)netbuf_fwd_read_u8(nb);
+		if ((c1 == ':') && (c2 == ':')) {
+			double_colon_index = word_index;
+
+			if (!netbuf_fwd_check_space(nb, 1)) {
+				if (!framed_ipv6) {
+					ip_addr_set_zero(ipaddr);
+					return true;
+				}
+				return false;
+			}
+
+			char c = (char)netbuf_fwd_read_u8(nb);
+
+			if ((c == ']') && framed_ipv6) {
+				ip_addr_set_zero(ipaddr);
+				return true;
+			}
+
+			netbuf_retreat_pos(nb, 1);
+		} else {
+			netbuf_retreat_pos(nb, 2);
+		}
+	}
+
+	while (1) {
+		uint32_t val;
+		if (!netbuf_vsscanf_parse_u32_hex(nb, &val)) {
+			return false;
+		}
+
+		if (val > 0xFFFF) {
+			return false;
+		}
+
+		words[word_index++] = val;
+
+		if (!netbuf_fwd_check_space(nb, 1)) {
+			if (!framed_ipv6 && ((word_index == 8) || (double_colon_index >= 0))) {
+				break;
+			}
+			return false;
+		}
+
+		char c = (char)netbuf_fwd_read_u8(nb);
+
+		if ((c == ']') && framed_ipv6 && ((word_index == 8) || (double_colon_index >= 0))) {
+			break;
+		}
+
+		if (word_index >= 8) {
+			return false;
+		}
+		if (c != ':') {
+			return false;
+		}
+
+		if (!netbuf_fwd_check_space(nb, 1)) {
+			return false;
+		}
+
+		c = (char)netbuf_fwd_read_u8(nb);
+
+		if (c == ':') {
+			if (double_colon_index >= 0) {
+				return false;
+			}
+
+			double_colon_index = word_index;
+
+			if (!netbuf_fwd_check_space(nb, 1)) {
+				if (!framed_ipv6) {
+					break;
+				}
+				return false;
+			}
+
+			char c = (char)netbuf_fwd_read_u8(nb);
+
+			if ((c == ']') && framed_ipv6) {
+				break;
+			}
+		}
+
+		netbuf_retreat_pos(nb, 1);
+	}
+
+	if (double_colon_index >= 0) {
+		int dest_index = 7;
+		word_index--;
+
+		while (word_index >= double_colon_index) {
+			words[dest_index--] = words[word_index--];
+		}
+		while (dest_index >= double_colon_index) {
+			words[dest_index--] = 0;
+		}
+	}
+
+	ipaddr->high = (uint64_t)words[0] << 48;
+	ipaddr->high |= (uint64_t)words[1] << 32;
+	ipaddr->high |= (uint64_t)words[2] << 16;
+	ipaddr->high |= (uint64_t)words[3] << 0;
+	ipaddr->low = (uint64_t)words[4] << 48;
+	ipaddr->low |= (uint64_t)words[5] << 32;
+	ipaddr->low |= (uint64_t)words[6] << 16;
+	ipaddr->low |= (uint64_t)words[7] << 0;
 	return true;
+#else
+	return netbuf_vsscanf_parse_ipv4_addr(nb, &ipaddr->ipv4);
+#endif
 }
 
 static bool netbuf_vsscanf_parse_str(struct netbuf *nb, char *pstr, size_t size, char terminating)
@@ -231,20 +384,23 @@ bool netbuf_vsscanf(struct netbuf *nb, const char *fmt, va_list ap)
 			}
 			continue;
 		}
+
 		if (fmtc == 'v') {
 			ipv4_addr_t *pval = va_arg(ap, ipv4_addr_t *);
+			if (!netbuf_vsscanf_parse_ipv4_addr(nb, pval)) {
+				goto error;
+			}
+			continue;
+		}
+
+		if (fmtc == 'V') {
+			ip_addr_t *pval = va_arg(ap, ip_addr_t *);
 			if (!netbuf_vsscanf_parse_ip_addr(nb, pval)) {
 				goto error;
 			}
 			continue;
 		}
-		if (fmtc == 'm') {
-			uint8_t *pval = va_arg(ap, uint8_t *);
-			if (!netbuf_vsscanf_parse_mac_addr(nb, pval)) {
-				goto error;
-			}
-			continue;
-		}
+
 		if (fmtc == 's') {
 			char terminating = *fmt;
 			char *pstr = va_arg(ap, char *);

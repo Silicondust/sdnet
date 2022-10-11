@@ -245,6 +245,23 @@ bool url_params_nb_get_value(struct netbuf *params_nb, const char *name, char *v
 	}
 }
 
+bool url_params_nb_get_value_s32(struct netbuf *params_nb, const char *name, int32_t *pvalue)
+{
+	char str[32];
+	if (!url_params_nb_get_value(params_nb, name, str, sizeof(str))) {
+		return false;
+	}
+
+	char *end;
+	int32_t value = (int32_t)strtol(str, &end, 10);
+	if (*end) {
+		return false;
+	}
+
+	*pvalue = value;
+	return true;
+}
+
 bool url_params_nb_get_value_u32(struct netbuf *params_nb, const char *name, uint32_t *pvalue, int base)
 {
 	char str[32];

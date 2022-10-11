@@ -25,11 +25,11 @@ const struct http_parser_tag_lookup_t ssdp_client_manager_response_http_tag_list
 	{NULL, NULL}
 };
 
-void ssdp_client_manager_notify_recv_complete(ipv4_addr_t remote_ip, uint16_t remote_port)
+void ssdp_client_manager_notify_recv_complete(const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
 }
 
-void ssdp_client_manager_response_recv_complete(ipv4_addr_t remote_ip, uint16_t remote_port)
+void ssdp_client_manager_response_recv_complete(const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
 }
 

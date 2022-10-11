@@ -50,41 +50,93 @@ uint16_t udp_socket_get_port(struct udp_socket *us)
 	return us->port;
 }
 
-udp_error_t udp_socket_send_netbuf(struct udp_socket *us, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb)
+static void udp_socket_set_ttl_internal(int sock, ip_mode_t ip_mode, uint8_t ttl)
 {
+#if defined(IPV6_SUPPORT)
+	if (ip_mode == IP_MODE_IPV6) {
+		int sock_opt_ttl = (int)(unsigned int)ttl;
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_UNICAST_HOPS, (char *)&sock_opt_ttl, sizeof(sock_opt_ttl)) < 0) {
+			DEBUG_WARN("setsockopt IPV6_UNICAST_HOPS error %d", errno);
+		}
+		return;
+	}
+#endif
+
+	int sock_opt_ttl = (int)(unsigned int)ttl;
+	if (setsockopt(sock, IPPROTO_IP, IP_TTL, (char *)&sock_opt_ttl, sizeof(sock_opt_ttl)) < 0) {
+		DEBUG_WARN("setsockopt IP_TTL error %d", errno);
+	}
+}
+
+static void udp_socket_set_tos_internal(int sock, ip_mode_t ip_mode, uint8_t tos)
+{
+#if defined(IPV6_SUPPORT)
+	if (ip_mode == IP_MODE_IPV6) {
+		int sock_opt_tos = (int)(unsigned int)tos;
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS, (char *)&sock_opt_tos, sizeof(sock_opt_tos)) < 0) {
+			DEBUG_WARN("setsockopt IPV6_TCLASS error %d", errno);
+		}
+		return;
+	}
+#endif
+
+	int sock_opt_tos = (int)(unsigned int)tos;
+	if (setsockopt(sock, IPPROTO_IP, IP_TOS, (char *)&sock_opt_tos, sizeof(sock_opt_tos)) < 0) {
+		DEBUG_WARN("setsockopt IP_TOS error %d", errno);
+	}
+}
+
+udp_error_t udp_socket_send_netbuf(struct udp_socket *us, const ip_addr_t *dest_addr, uint16_t dest_port, uint32_t ipv6_scope_id, uint8_t ttl, uint8_t tos, struct netbuf *nb)
+{
+	if (RUNTIME_DEBUG && !ip_addr_is_ipv6_multicast(dest_addr)) {
+		DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(dest_addr, ipv6_scope_id);
+	}
+
 	if (ttl != us->ttl_set) {
-		int sock_opt = (int)(unsigned int)ttl;
-		if (setsockopt(us->sock, IPPROTO_IP, IP_TTL, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-			DEBUG_WARN("setsockopt IP_TTL error %d", errno);
-		}
-		if (setsockopt(us->sock, IPPROTO_IP, IP_MULTICAST_TTL, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-			DEBUG_WARN("setsockopt IP_MULTICAST_TTL error %d", errno);
-		}
+		udp_socket_set_ttl_internal(us->sock, us->ip_mode, ttl);
 		us->ttl_set = ttl;
 	}
 
 	if (tos != us->tos_set) {
-		int sock_opt = (int)(unsigned int)tos;
-		if (setsockopt(us->sock, IPPROTO_IP, IP_TOS, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-			DEBUG_WARN("setsockopt IP_TOS error %d", errno);
-		}
+		udp_socket_set_tos_internal(us->sock, us->ip_mode, tos);
 		us->tos_set = tos;
 	}
 
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size;
+	if (us->ip_mode == IP_MODE_IPV6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		sock_addr_in->sin6_family = AF_INET6;
+		ip_addr_get_ipv6_bytes(dest_addr, sock_addr_in->sin6_addr.s6_addr);
+		sock_addr_in->sin6_port = htons(dest_port);
+		sock_addr_in->sin6_scope_id = ipv6_scope_id;
+		sock_addr_size = sizeof(struct sockaddr_in6);
+	} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		sock_addr_in->sin_family = AF_INET;
+		sock_addr_in->sin_addr.s_addr = htonl(ip_addr_get_ipv4(dest_addr));
+		sock_addr_in->sin_port = htons(dest_port);
+		sock_addr_size = sizeof(struct sockaddr_in);
+	}
+#else
 	struct sockaddr_in sock_addr;
 	memset(&sock_addr, 0, sizeof(sock_addr));
 	sock_addr.sin_family = AF_INET;
-	sock_addr.sin_addr.s_addr = htonl(dest_addr);
+	sock_addr.sin_addr.s_addr = htonl(ip_addr_get_ipv4(dest_addr));
 	sock_addr.sin_port = htons(dest_port);
+	socklen_t sock_addr_size = sizeof(struct sockaddr_in);
+#endif
 
 	uint8_t *buffer = netbuf_get_ptr(nb);
 	size_t length = netbuf_get_remaining(nb);
 
 	errno = EAGAIN; /* workaround Abilis bug */
-	ssize_t ret = sendto(us->sock, (char *)buffer, length, 0, (struct sockaddr *)&sock_addr, sizeof(sock_addr));
+	ssize_t ret = sendto(us->sock, (char *)buffer, length, 0, (struct sockaddr *)&sock_addr, sock_addr_size);
 	if (ret != (ssize_t)length) {
 		if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINPROGRESS)) {
-			DEBUG_INFO("udp send failed (%d)", errno);
+			DEBUG_INFO("udp send to %V failed error %d", dest_addr, errno);
 		}
 		return UDP_ERROR_FAILED;
 	}
@@ -98,8 +150,14 @@ static void udp_socket_thread_icmp(struct udp_socket *us)
 	struct msghdr msg;
 	memset(&msg, 0, sizeof(msg));
 
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+#else
 	struct sockaddr_in sock_addr;
 	memset(&sock_addr, 0, sizeof(sock_addr));
+#endif
+
 	msg.msg_name = (void *)&sock_addr;
 	msg.msg_namelen = sizeof(sock_addr);
 
@@ -111,11 +169,28 @@ static void udp_socket_thread_icmp(struct udp_socket *us)
 
 	udp_recv_icmp_callback_t recv_icmp_callback = us->recv_icmp_callback;
 	if (recv_icmp_callback) {
-		ipv4_addr_t src_addr = ntohl(sock_addr.sin_addr.s_addr);
+#if defined(IPV6_SUPPORT)
+		ip_addr_t src_addr; uint16_t src_port; uint32_t ipv6_scope_id;
+		if (sock_addr.ss_family == AF_INET6) {
+			struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+			ip_addr_set_ipv6_bytes(&src_addr, sock_addr_in->sin6_addr.s6_addr);
+			src_port = ntohs(sock_addr_in->sin6_port);
+			ipv6_scope_id = sock_addr_in->sin6_scope_id;
+		} else {
+			struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+			ip_addr_set_ipv4(&src_addr, ntohl(sock_addr_in->sin_addr.s_addr));
+			src_port = ntohs(sock_addr_in->sin_port);
+			ipv6_scope_id = 0;
+		}
+#else
+		ip_addr_t src_addr;
+		ip_addr_set_ipv4(&src_addr, ntohl(sock_addr.sin_addr.s_addr));
 		uint16_t src_port = ntohs(sock_addr.sin_port);
-
+		uint32_t ipv6_scope_id = 0;
+#endif
 		thread_main_enter();
-		recv_icmp_callback(us->callback_inst, src_addr, ICMP_TYPE_ERR_DEST_UNREACHABLE, src_addr, src_port);
+		DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&src_addr, ipv6_scope_id);
+		recv_icmp_callback(us->callback_inst, ICMP_TYPE_ERR_DEST_UNREACHABLE, &src_addr, src_port, ipv6_scope_id);
 		thread_main_exit();
 	}
 #endif
@@ -133,11 +208,17 @@ static void udp_socket_thread_recv(struct udp_socket *us)
 	uint8_t *buffer = netbuf_get_ptr(nb);
 	size_t buffer_length = netbuf_get_remaining(nb);
 
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#else
 	struct sockaddr_in sock_addr;
 	memset(&sock_addr, 0, sizeof(sock_addr));
-	socklen_t sockaddr_size = sizeof(sock_addr);
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#endif
 
-	ssize_t length = recvfrom(us->sock, (char *)buffer, buffer_length, 0, (struct sockaddr *)&sock_addr, &sockaddr_size);
+	ssize_t length = recvfrom(us->sock, (char *)buffer, buffer_length, 0, (struct sockaddr *)&sock_addr, &sock_addr_size);
 	if (length <= 0) {
 		DEBUG_ERROR("recvfrom returned %d errno %d", (int)length, errno);
 		netbuf_free(nb);
@@ -145,51 +226,127 @@ static void udp_socket_thread_recv(struct udp_socket *us)
 		return;
 	}
 
-	ipv4_addr_t src_addr = ntohl(sock_addr.sin_addr.s_addr);
+#if defined(IPV6_SUPPORT)
+	ip_addr_t src_addr; uint16_t src_port; uint32_t ipv6_scope_id;
+	if (sock_addr.ss_family == AF_INET6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		ip_addr_set_ipv6_bytes(&src_addr, sock_addr_in->sin6_addr.s6_addr);
+		src_port = ntohs(sock_addr_in->sin6_port);
+		ipv6_scope_id = sock_addr_in->sin6_scope_id;
+	} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		ip_addr_set_ipv4(&src_addr, ntohl(sock_addr_in->sin_addr.s_addr));
+		src_port = ntohs(sock_addr_in->sin_port);
+		ipv6_scope_id = 0;
+}
+#else
+	ip_addr_t src_addr;
+	ip_addr_set_ipv4(&src_addr, ntohl(sock_addr.sin_addr.s_addr));
 	uint16_t src_port = ntohs(sock_addr.sin_port);
+	uint32_t ipv6_scope_id = 0;
+#endif
+
 	netbuf_set_end(nb, netbuf_get_pos(nb) + (size_t)length);
 
 	thread_main_enter();
-	us->recv_callback(us->callback_inst, src_addr, src_port, nb);
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&src_addr, ipv6_scope_id);
+	us->recv_callback(us->callback_inst, &src_addr, src_port, ipv6_scope_id, nb);
 	thread_main_exit();
 
 	netbuf_free(nb);
 }
 
-udp_error_t udp_socket_listen(struct udp_socket *us, ipv4_addr_t addr, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
+udp_error_t udp_socket_listen_internal(struct udp_socket *us, struct ip_interface_t *idi, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
 {
 	DEBUG_ASSERT(recv, "no recv callback specified");
 
 	us->recv_callback = recv;
 	us->recv_icmp_callback = recv_icmp;
 	us->callback_inst = inst;
-	us->addr = addr;
 	us->port = port;
 
 	/* Listen for ICMP messages. */
 #if defined(IP_RECVERR)
-	int sock_opt = 1;
-	if (setsockopt(us->sock, IPPROTO_IP, IP_RECVERR, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
+	int sock_opt_ip_recverr = 1;
+	if (setsockopt(us->sock, IPPROTO_IP, IP_RECVERR, (char *)&sock_opt_ip_recverr, sizeof(sock_opt_ip_recverr)) < 0) {
 		DEBUG_WARN("setsockopt IP_RECVERR error %d", errno);
 	}
 #endif
 
 	/* Bind. */
+	ip_addr_t local_ip;
+	uint32_t ifindex;
+	uint32_t ipv6_scope_id;
+	if (idi) {
+		ip_interface_get_local_ip(idi, &local_ip);
+		ifindex = ip_interface_get_ifindex(idi);
+		ipv6_scope_id = ip_interface_get_ipv6_scope_id(idi);
+	} else {
+		ip_addr_set_zero(&local_ip);
+		ifindex = 0;
+		ipv6_scope_id = 0;
+	}
+
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size;
+	if (us->ip_mode == IP_MODE_IPV6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		sock_addr_in->sin6_family = AF_INET6;
+		ip_addr_get_ipv6_bytes(&local_ip, sock_addr_in->sin6_addr.s6_addr);
+		sock_addr_in->sin6_port = htons(port);
+		sock_addr_in->sin6_scope_id = ipv6_scope_id;
+		sock_addr_size = sizeof(struct sockaddr_in6);
+	} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		sock_addr_in->sin_family = AF_INET;
+		sock_addr_in->sin_addr.s_addr = htonl(ip_addr_get_ipv4(&local_ip));
+		sock_addr_in->sin_port = htons(port);
+		sock_addr_size = sizeof(struct sockaddr_in);
+	}
+#else
 	struct sockaddr_in sock_addr;
 	memset(&sock_addr, 0, sizeof(sock_addr));
 	sock_addr.sin_family = AF_INET;
-	sock_addr.sin_addr.s_addr = htonl(addr);
+	sock_addr.sin_addr.s_addr = htonl(ip_addr_get_ipv4(&local_ip));
 	sock_addr.sin_port = htons(port);
-	if (bind(us->sock, (struct sockaddr *)&sock_addr, sizeof(sock_addr)) != 0) {
-		DEBUG_WARN("failed to bind socket to %08X:%u", addr, port);
+	socklen_t sock_addr_size = sizeof(struct sockaddr_in);
+#endif
+
+	if (bind(us->sock, (struct sockaddr *)&sock_addr, sock_addr_size) != 0) {
+		DEBUG_WARN("failed to bind socket to %V:%u error %d", &local_ip, port, errno);
 		return UDP_ERROR_SOCKET_BUSY;
+	}
+
+	if (idi) {
+#if defined(IPV6_SUPPORT)
+		if (us->ip_mode == IP_MODE_IPV6) {
+			setsockopt(us->sock, IPPROTO_IPV6, IPV6_MULTICAST_IF, (char *)&ifindex, sizeof(ifindex));
+		} else {
+			setsockopt(us->sock, IPPROTO_IP, IP_MULTICAST_IF, (char *)&ifindex, sizeof(ifindex));
+		}
+#else
+		setsockopt(us->sock, IPPROTO_IP, IP_MULTICAST_IF, (char *)&ifindex, sizeof(ifindex));
+#endif
 	}
 
 	if (port == 0) {
 		memset(&sock_addr, 0, sizeof(sock_addr));
 		socklen_t addr_len = sizeof(sock_addr);
 		getsockname(us->sock, (struct sockaddr *)&sock_addr, &addr_len);
+
+#if defined(IPV6_SUPPORT)
+		if (sock_addr.ss_family == AF_INET6) {
+			struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+			us->port = ntohs(sock_addr_in->sin6_port);
+		} else {
+			struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+			us->port = ntohs(sock_addr_in->sin_port);
+		}
+#else
 		us->port = ntohs(sock_addr.sin_port);
+#endif
 	}
 
 	spinlock_lock(&udp_manager.socket_new_lock);
@@ -198,6 +355,11 @@ udp_error_t udp_socket_listen(struct udp_socket *us, ipv4_addr_t addr, uint16_t 
 
 	udp_socket_trigger_poll();
 	return UDP_OK;
+}
+
+udp_error_t udp_socket_listen(struct udp_socket *us, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
+{
+	return udp_socket_listen_internal(us, NULL, port, recv, recv_icmp, inst);
 }
 
 void udp_socket_set_icmp_callback(struct udp_socket *us, udp_recv_icmp_callback_t recv_icmp)
@@ -210,19 +372,21 @@ void udp_socket_set_recv_netbuf_size(struct udp_socket *us, size_t recv_netbuf_s
 	us->recv_netbuf_size = recv_netbuf_size;
 }
 
-struct udp_socket *udp_socket_alloc(void)
+struct udp_socket *udp_socket_alloc(ip_mode_t ip_mode)
 {
 	struct udp_socket *us = (struct udp_socket *)heap_alloc_and_zero(sizeof(struct udp_socket), PKG_OS, MEM_TYPE_OS_UDP_SOCKET);
 	if (!us) {
 		return NULL;
 	}
 
+	us->ip_mode = ip_mode;
 	us->recv_netbuf_size = UDP_DEFAULT_RECV_NETBUF_SIZE;
 
 	/* Create socket. */
-	us->sock = (int)socket(AF_INET, SOCK_DGRAM, 0);
+	int af_inet = (ip_mode == IP_MODE_IPV6) ? AF_INET6 : AF_INET;
+	us->sock = (int)socket(af_inet, SOCK_DGRAM, 0);
 	if (us->sock == -1) {
-		DEBUG_ERROR("failed to allocate socket (%d)", errno);
+		DEBUG_ERROR("failed to allocate socket error %d", errno);
 		heap_free(us);
 		return NULL;
 	}
@@ -239,16 +403,31 @@ struct udp_socket *udp_socket_alloc(void)
 	udp_set_sock_send_buffer_size(us->sock, 128 * 1024);
 
 	/* Allow broadcast. */
-	int sock_opt = 1;
-	if (setsockopt(us->sock, SOL_SOCKET, SO_BROADCAST, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
+	int sock_opt_broadcast = 1;
+	if (setsockopt(us->sock, SOL_SOCKET, SO_BROADCAST, (char *)&sock_opt_broadcast, sizeof(sock_opt_broadcast)) < 0) {
 		DEBUG_WARN("setsockopt SO_BROADCAST error %d", errno);
 	}
 
 	/* Allow port reuse - required for SSDP. */
-	sock_opt = 1;
-	if (setsockopt(us->sock, SOL_SOCKET, SO_REUSEADDR, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
+	int sock_opt_reuseaddr = 1;
+	if (setsockopt(us->sock, SOL_SOCKET, SO_REUSEADDR, (char *)&sock_opt_reuseaddr, sizeof(sock_opt_reuseaddr)) < 0) {
 		DEBUG_WARN("setsockopt SO_REUSEADDR error %d", errno);
 	}
+
+#if defined(SO_REUSEPORT)
+	int sock_opt_reuseport = 1;
+	if (setsockopt(us->sock, SOL_SOCKET, SO_REUSEPORT, (char *)&sock_opt_reuseport, sizeof(sock_opt_reuseport)) < 0) {
+		DEBUG_WARN("setsockopt SO_REUSEPORT error %d", errno);
+	}
+#endif
+
+	/* Set IPV6 only */
+#if defined(IPV6_SUPPORT)
+	if (ip_mode == IP_MODE_IPV6) {
+		int sock_opt_ipv6only = 1;
+		setsockopt(us->sock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&sock_opt_ipv6only, sizeof(sock_opt_ipv6only));
+	}
+#endif
 
 	return us;
 }

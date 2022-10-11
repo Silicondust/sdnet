@@ -12,6 +12,7 @@ extern const char http_result_continue[];
 extern const char http_result_web_socket_protocol_handshake[];
 extern const char http_result_ok[];
 extern const char http_result_partial_content[];
+extern const char http_result_not_modified[];
 extern const char http_result_temporary_redirect[];
 extern const char http_result_permanent_redirect[];
 extern const char http_result_bad_request[];
@@ -37,6 +38,7 @@ struct http_header_content_range_t {
 extern bool http_header_write_cache_control(struct netbuf *header_nb, uint32_t duration);
 extern bool http_header_write_content_range(struct netbuf *header_nb, struct http_header_content_range_t *content_range);
 extern bool http_header_write_date_tag(struct netbuf *header_nb);
+extern bool http_header_write_etag_sha1_base64(struct netbuf *header_nb, sha1_digest_t *hash);
 
 extern bool http_response_encode_chunked(struct netbuf *nb);
 extern bool http_response_encode_chunked_end(struct netbuf *nb);

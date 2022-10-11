@@ -10,7 +10,7 @@
 
 
 extern struct udp_socket *udp_dhcp_socket_alloc(void);
-extern udp_error_t udp_dhcp_socket_listen(struct udp_socket *us, struct ip_datalink_instance *link, ipv4_addr_t addr, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst);
-extern udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_datalink_instance *link, ipv4_addr_t dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb);
+extern udp_error_t udp_dhcp_socket_listen(struct udp_socket *us, struct ip_managed_t *ipm, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst);
+extern udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_managed_t *ipm, const ip_addr_t *dest_addr, uint16_t dest_port, uint8_t ttl, uint8_t tos, struct netbuf *nb);
 
 extern void udp_dhcp_manager_init(void);

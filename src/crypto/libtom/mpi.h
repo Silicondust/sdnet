@@ -31,15 +31,17 @@ static inline int mpi_exptmod(struct mpi_int *a, struct mpi_int *b, struct mpi_i
 
 static inline size_t mpi_unsigned_bin_size(struct mpi_int *a)
 {
-	return (size_t)mp_unsigned_bin_size(&a->v);
+	return mp_ubin_size(&a->v);
 }
 
 static inline int mpi_read_unsigned_bin(struct mpi_int *a, uint8_t *b, size_t c)
 {
-	return mp_read_unsigned_bin(&a->v, b, (int)c);
+	return mp_from_ubin(&a->v, b, c);
 }
 
 static inline int mpi_to_unsigned_bin(struct mpi_int *a, uint8_t *b)
 {
-	return mp_to_unsigned_bin(&a->v, b);
+	size_t len = mp_ubin_size(&a->v);
+	size_t written;
+	return mp_to_ubin(&a->v, b, len, &written);
 }

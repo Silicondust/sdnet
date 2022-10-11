@@ -49,11 +49,11 @@ void gena_service_enqueue_message(struct gena_service_t *service, uint8_t queue_
 	}
 }
 
-void gena_service_enqueue_message_specific_ip(struct gena_service_t *service, ipv4_addr_t specific_ip, uint8_t queue_policy, struct netbuf *notify_nb)
+void gena_service_enqueue_message_specific_ip(struct gena_service_t *service, const ip_addr_t *specific_ip, uint8_t queue_policy, struct netbuf *notify_nb)
 {
 	struct gena_subscription_t *subscription = slist_get_head(struct gena_subscription_t, &service->subscription_list);
 	while (subscription) {
-		if (subscription->callback_ip == specific_ip) {
+		if (ip_addr_cmp(&subscription->callback_ip, specific_ip)) {
 			gena_subscription_enqueue_message(subscription, queue_policy, notify_nb);
 		}
 		subscription = slist_get_next(struct gena_subscription_t, subscription);
@@ -95,11 +95,11 @@ struct gena_subscription_t *gena_service_find_subscription_by_sid(struct gena_se
 	return NULL;
 }
 
-struct gena_subscription_t *gena_service_find_subscription_by_callback(struct gena_service_t *service, ipv4_addr_t callback_ip, uint16_t callback_port, char *callback_uri)
+struct gena_subscription_t *gena_service_find_subscription_by_callback(struct gena_service_t *service, const ip_addr_t *callback_ip, uint16_t callback_port, uint32_t callback_ipv6_scope_id, char *callback_uri)
 {
 	struct gena_subscription_t *subscription = slist_get_head(struct gena_subscription_t, &service->subscription_list);
 	while (subscription) {
-		if ((subscription->callback_ip == callback_ip) && (subscription->callback_port == callback_port) && (strcmp(subscription->callback_uri, callback_uri) == 0)) {
+		if (ip_addr_cmp(&subscription->callback_ip, callback_ip) && (subscription->callback_port == callback_port) && (subscription->callback_ipv6_scope_id == callback_ipv6_scope_id) && (strcmp(subscription->callback_uri, callback_uri) == 0)) {
 			return subscription;
 		}
 

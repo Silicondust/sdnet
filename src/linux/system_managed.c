@@ -11,6 +11,7 @@
 #include <os.h>
 #include <sys/reboot.h>
 #include <sys/wait.h>
+#include <linux/capability.h>
 
 #if defined(DEBUG)
 #define RUNTIME_DEBUG 1

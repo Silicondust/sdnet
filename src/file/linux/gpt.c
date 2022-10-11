@@ -303,6 +303,12 @@ bool gpt_create_with_one_partition(struct file_t *dev_file)
 	gpt_state.partition_begin = 2048;
 	gpt_state.partition_end = (gpt_state.usable_end / 2048) * 2048;
 
+#if defined(GPT_MAX_PARTITION_SIZE_SECTORS)
+	if (gpt_state.partition_end - gpt_state.partition_begin > GPT_MAX_PARTITION_SIZE_SECTORS) {
+		gpt_state.partition_end = gpt_state.partition_begin + GPT_MAX_PARTITION_SIZE_SECTORS;
+	}
+#endif
+
 	/* Write GPT partition array */
 	uint32_t partition_array_crc;
 	if (!gpt_write_partition_array(dev_file, &gpt_state, &partition_array_crc)) {

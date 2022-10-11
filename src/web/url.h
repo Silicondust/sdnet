@@ -19,7 +19,8 @@ typedef enum {
 
 struct url_t {
 	url_protocol_t protocol;
-	ipv4_addr_t ip_addr;
+	uint32_t ipv6_scope_id;
+	ip_addr_t ip_addr;
 	uint16_t ip_port;
 	uint16_t flags;
 	char dns_name[64];

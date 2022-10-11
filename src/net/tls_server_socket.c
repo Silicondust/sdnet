@@ -46,19 +46,19 @@ uint16_t tls_server_socket_get_port(struct tls_server_socket_t *tls_sock)
 	return tcp_socket_get_port(tls_sock->sock);
 }
 
-bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, ipv4_addr_t addr, uint16_t port, tls_server_connect_callback_t connect, void *callback_arg)
+bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, uint16_t port, tls_server_connect_callback_t connect, void *callback_arg)
 {
 	tls_sock->connect_callback = connect;
 	tls_sock->callback_arg = callback_arg;
 
-	if (tcp_socket_listen(tls_sock->sock, addr, port, tls_server_socket_tcp_connect_callback, tls_sock) != TCP_OK) {
+	if (tcp_socket_listen(tls_sock->sock, port, tls_server_socket_tcp_connect_callback, tls_sock) != TCP_OK) {
 		return false;
 	}
 
 	return true;
 }
 
-struct tls_server_socket_t *tls_server_socket_alloc(void)
+struct tls_server_socket_t *tls_server_socket_alloc(ip_mode_t ip_mode)
 {
 	struct tls_server_socket_t *tls_sock = (struct tls_server_socket_t *)heap_alloc_and_zero(sizeof(struct tls_server_socket_t), PKG_OS, MEM_TYPE_OS_TLS_SERVER_SOCKET);
 	if (!tls_sock) {
@@ -66,7 +66,7 @@ struct tls_server_socket_t *tls_server_socket_alloc(void)
 		return NULL;
 	}
 
-	tls_sock->sock = tcp_socket_alloc();
+	tls_sock->sock = tcp_socket_alloc(ip_mode);
 	if (!tls_sock->sock) {
 		heap_free(tls_sock);
 		return NULL;

@@ -44,10 +44,6 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/prctl.h>
-#include <linux/capability.h>
-#include <linux/netdevice.h>
-#include <linux/ip.h>
-#include <linux/udp.h>
 
 #define LTC_NO_PROTOTYPES
 #include <tomcrypt.h>

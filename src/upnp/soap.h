@@ -49,8 +49,8 @@ extern struct soap_service_t *soap_service_manager_add_service(const char *uri, 
 extern struct soap_service_connection_t *soap_service_connection_ref(struct soap_service_connection_t *connection);
 extern ref_t soap_service_connection_deref(struct soap_service_connection_t *connection);
 extern bool soap_service_connection_can_send(struct soap_service_connection_t *connection);
-extern ipv4_addr_t soap_service_connection_get_local_ip(struct soap_service_connection_t *connection);
-extern ipv4_addr_t soap_service_connection_get_remote_ip(struct soap_service_connection_t *connection);
+extern void soap_service_connection_get_local_ip(struct soap_service_connection_t *connection, ip_addr_t *result);
+extern void soap_service_connection_get_remote_ip(struct soap_service_connection_t *connection, ip_addr_t *result);
 extern void *soap_service_connection_get_action_callback_arg(struct soap_service_connection_t *connection);
 
 extern bool soap_action_args_get_bool(struct soap_action_args_t *action_args, const char *name, bool *psuccess);

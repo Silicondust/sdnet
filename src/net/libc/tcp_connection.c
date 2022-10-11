@@ -24,6 +24,10 @@ THIS_FILE("tcp_connection");
  *  callbacks sent from main thread.
  */
 
+#if !defined(TCP_CONNECTION_KEEPALIVE_SECONDS)
+#define TCP_CONNECTION_KEEPALIVE_SECONDS 60
+#endif
+
 void tcp_connection_trigger_poll(void)
 {
 	uint8_t v = 0;
@@ -92,6 +96,42 @@ void tcp_connection_set_max_recv_nb_size(struct tcp_connection *tc, size_t max_r
 	tc->max_recv_nb_size = max_recv_nb_size;
 }
 
+static void tcp_connection_set_ttl_internal(int sock, ip_mode_t ip_mode, uint8_t ttl)
+{
+#if defined(IPV6_SUPPORT)
+	if (ip_mode == IP_MODE_IPV6) {
+		int sock_opt_ttl = (int)(unsigned int)ttl;
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_UNICAST_HOPS, (char *)&sock_opt_ttl, sizeof(sock_opt_ttl)) < 0) {
+			DEBUG_WARN("setsockopt IPV6_UNICAST_HOPS error %d", errno);
+		}
+		return;
+	}
+#endif
+
+	int sock_opt_ttl = (int)(unsigned int)ttl;
+	if (setsockopt(sock, IPPROTO_IP, IP_TTL, (char *)&sock_opt_ttl, sizeof(sock_opt_ttl)) < 0) {
+		DEBUG_WARN("setsockopt IP_TTL error %d", errno);
+	}
+}
+
+static void tcp_connection_set_tos_internal(int sock, ip_mode_t ip_mode, uint8_t tos)
+{
+#if defined(IPV6_SUPPORT)
+	if (ip_mode == IP_MODE_IPV6) {
+		int sock_opt_tos = (int)(unsigned int)tos;
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS, (char *)&sock_opt_tos, sizeof(sock_opt_tos)) < 0) {
+			DEBUG_WARN("setsockopt IPV6_TCLASS error %d", errno);
+		}
+		return;
+	}
+#endif
+
+	int sock_opt_tos = (int)(unsigned int)tos;
+	if (setsockopt(sock, IPPROTO_IP, IP_TOS, (char *)&sock_opt_tos, sizeof(sock_opt_tos)) < 0) {
+		DEBUG_WARN("setsockopt IP_TOS error %d", errno);
+	}
+}
+
 void tcp_connection_set_ttl(struct tcp_connection *tc, uint8_t ttl)
 {
 	tc->ttl = ttl;
@@ -100,10 +140,7 @@ void tcp_connection_set_ttl(struct tcp_connection *tc, uint8_t ttl)
 		return;
 	}
 
-	int sock_opt = (int)(unsigned int)ttl;
-	if (setsockopt(tc->sock, IPPROTO_IP, IP_TTL, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-		DEBUG_WARN("setsockopt IP_TTL error %d", errno);
-	}
+	tcp_connection_set_ttl_internal(tc->sock, tc->ip_mode, ttl);
 }
 
 void tcp_connection_set_tos(struct tcp_connection *tc, uint8_t tos)
@@ -114,37 +151,110 @@ void tcp_connection_set_tos(struct tcp_connection *tc, uint8_t tos)
 		return;
 	}
 
-	int sock_opt = (int)(unsigned int)tos;
-	if (setsockopt(tc->sock, IPPROTO_IP, IP_TOS, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-		DEBUG_WARN("setsockopt IP_TOS error %d", errno);
+	tcp_connection_set_tos_internal(tc->sock, tc->ip_mode, tos);
+}
+
+uint32_t tcp_connection_get_local_addr(struct tcp_connection *tc, ip_addr_t *result)
+{
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#else
+	struct sockaddr_in sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#endif
+
+	if (getsockname(tc->sock, (struct sockaddr *)&sock_addr, &sock_addr_size) != 0) {
+		ip_addr_set_zero(result);
+		return 0;
 	}
+
+#if defined(IPV6_SUPPORT)
+	uint32_t ipv6_scope_id = 0;
+	if (sock_addr.ss_family == AF_INET6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		ip_addr_set_ipv6_bytes(result, sock_addr_in->sin6_addr.s6_addr);
+		ipv6_scope_id = sock_addr_in->sin6_scope_id;
+	} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		ip_addr_set_ipv4(result, ntohl(sock_addr_in->sin_addr.s_addr));
+		ipv6_scope_id = 0;
+	}
+#else
+	ip_addr_set_ipv4(result, ntohl(sock_addr.sin_addr.s_addr));
+	uint32_t ipv6_scope_id = 0;
+#endif
+
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(result, ipv6_scope_id);
+	return ipv6_scope_id;
 }
 
-ipv4_addr_t tcp_connection_get_local_addr(struct tcp_connection *tc)
+uint32_t tcp_connection_get_remote_addr(struct tcp_connection *tc, ip_addr_t *result)
 {
-	struct sockaddr_in local_addr;
-	memset(&local_addr, 0, sizeof(local_addr));
-	socklen_t addr_len = sizeof(local_addr);
-	getsockname(tc->sock, (struct sockaddr *)&local_addr, &addr_len);
-	return ntohl(local_addr.sin_addr.s_addr);
-}
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#else
+	struct sockaddr_in sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#endif
 
-ipv4_addr_t tcp_connection_get_remote_addr(struct tcp_connection *tc)
-{
-	struct sockaddr_in remote_addr;
-	memset(&remote_addr, 0, sizeof(remote_addr));
-	socklen_t addr_len = sizeof(remote_addr);
-	getpeername(tc->sock, (struct sockaddr *)&remote_addr, &addr_len);
-	return ntohl(remote_addr.sin_addr.s_addr);
+	if (getpeername(tc->sock, (struct sockaddr *)&sock_addr, &sock_addr_size) != 0) {
+		ip_addr_set_zero(result);
+		return 0;
+	}
+
+#if defined(IPV6_SUPPORT)
+	uint32_t ipv6_scope_id = 0;
+	if (sock_addr.ss_family == AF_INET6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		ip_addr_set_ipv6_bytes(result, sock_addr_in->sin6_addr.s6_addr);
+		ipv6_scope_id = sock_addr_in->sin6_scope_id;
+	} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		ip_addr_set_ipv4(result, ntohl(sock_addr_in->sin_addr.s_addr));
+		ipv6_scope_id = 0;
+	}
+#else
+	ip_addr_set_ipv4(result, ntohl(sock_addr.sin_addr.s_addr));
+	uint32_t ipv6_scope_id = 0;
+#endif
+
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(result, ipv6_scope_id);
+	return ipv6_scope_id;
 }
 
 uint16_t tcp_connection_get_remote_port(struct tcp_connection *tc)
 {
-	struct sockaddr_in remote_addr;
-	memset(&remote_addr, 0, sizeof(remote_addr));
-	socklen_t addr_len = sizeof(remote_addr);
-	getpeername(tc->sock, (struct sockaddr *)&remote_addr, &addr_len);
-	return ntohs(remote_addr.sin_port);
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#else
+	struct sockaddr_in sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#endif
+
+	if (getpeername(tc->sock, (struct sockaddr *)&sock_addr, &sock_addr_size) != 0) {
+		return 0;
+	}
+
+#if defined(IPV6_SUPPORT)
+	if (sock_addr.ss_family == AF_INET6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		return ntohs(sock_addr_in->sin6_port);
+	} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		return ntohs(sock_addr_in->sin_port);
+	}
+#else
+	return ntohs(sock_addr.sin_port);
+#endif
 }
 
 void tcp_connection_pause_recv(struct tcp_connection *tc)
@@ -357,17 +467,21 @@ static void tcp_connection_notify_established(struct tcp_connection *tc)
 	tc->est_callback(tc->callback_inst);
 }
 
-tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_addr, uint16_t dest_port, ipv4_addr_t src_addr, uint16_t src_port, tcp_establish_callback_t est_callback, tcp_recv_callback_t recv_callback, tcp_close_callback_t close_callback, void *inst)
+tcp_error_t tcp_connection_connect(struct tcp_connection *tc, const ip_addr_t *dest_addr, uint16_t dest_port, uint32_t ipv6_scope_id, tcp_establish_callback_t est_callback, tcp_recv_callback_t recv_callback, tcp_close_callback_t close_callback, void *inst)
 {
 	DEBUG_ASSERT(tc->sock == -1, "already connected");
 	DEBUG_ASSERT(recv_callback, "no recv callback specified");
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(dest_addr, ipv6_scope_id);
 
 	tc->est_callback = est_callback;
 	tc->recv_callback = recv_callback;
 	tc->close_callback = close_callback;
 	tc->callback_inst = inst;
 
-	int sock = (int)socket(AF_INET, SOCK_STREAM, 0);
+	tc->ip_mode = ip_addr_is_ipv6(dest_addr) ? IP_MODE_IPV6 : IP_MODE_IPV4;
+
+	int af_inet = (tc->ip_mode == IP_MODE_IPV6) ? AF_INET6 : AF_INET;
+	int sock = (int)socket(af_inet, SOCK_STREAM, 0);
 	if (sock == -1) {
 		DEBUG_ERROR("failed to allocate socket");
 		return TCP_ERROR_FAILED;
@@ -381,8 +495,8 @@ tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_a
 	}
 
 	/* Set no-delay. */
-	int flag = 1;
-	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(flag)) < 0) {
+	int sock_opt_nodelay = 1;
+	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *)&sock_opt_nodelay, sizeof(sock_opt_nodelay)) < 0) {
 		DEBUG_WARN("setsockopt TCP_NODELAY error %d", errno);
 	}
 
@@ -393,29 +507,44 @@ tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_a
 	tcp_set_sock_send_buffer_size(sock, tc->send_buffer_size);
 
 	/* Set ttl */
-	int sock_opt = (int)(unsigned int)tc->ttl;
-	if (setsockopt(sock, IPPROTO_IP, IP_TTL, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-		DEBUG_WARN("setsockopt IP_TTL error %d", errno);
-	}
+	tcp_connection_set_ttl_internal(sock, tc->ip_mode, tc->ttl);
 
 	/* Set tos */
-	sock_opt = (int)(unsigned int)tc->tos;
-	if (setsockopt(sock, IPPROTO_IP, IP_TOS, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-		DEBUG_WARN("setsockopt IP_TOS error %d", errno);
-	}
+	tcp_connection_set_tos_internal(sock, tc->ip_mode, tc->tos);
 
 	/* Connect. */
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size;
+	if (tc->ip_mode == IP_MODE_IPV6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		sock_addr_in->sin6_family = AF_INET6;
+		ip_addr_get_ipv6_bytes(dest_addr, sock_addr_in->sin6_addr.s6_addr);
+		sock_addr_in->sin6_port = htons(dest_port);
+		sock_addr_in->sin6_scope_id = ipv6_scope_id;
+		sock_addr_size = sizeof(struct sockaddr_in6);
+} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		sock_addr_in->sin_family = AF_INET;
+		sock_addr_in->sin_addr.s_addr = htonl(ip_addr_get_ipv4(dest_addr));
+		sock_addr_in->sin_port = htons(dest_port);
+		sock_addr_size = sizeof(struct sockaddr_in);
+	}
+#else
 	struct sockaddr_in sock_addr;
 	memset(&sock_addr, 0, sizeof(sock_addr));
 	sock_addr.sin_family = AF_INET;
-	sock_addr.sin_addr.s_addr = htonl(dest_addr);
+	sock_addr.sin_addr.s_addr = htonl(ip_addr_get_ipv4(dest_addr));
 	sock_addr.sin_port = htons(dest_port);
+	socklen_t sock_addr_size = sizeof(struct sockaddr_in);
+#endif
 
 	errno = EAGAIN; /* workaround Abilis bug */
-	if (connect(sock, (struct sockaddr *)&sock_addr, sizeof(sock_addr)) != 0) {
+	if (connect(sock, (struct sockaddr *)&sock_addr, sock_addr_size) != 0) {
 		if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINPROGRESS)) {
 			DEBUG_WARN("connect failed (%d)", errno);
-			close(sock);		
+			close(sock);
 			return TCP_ERROR_FAILED;
 		}
 	}
@@ -433,24 +562,22 @@ tcp_error_t tcp_connection_connect(struct tcp_connection *tc, ipv4_addr_t dest_a
 	return TCP_OK;
 }
 
-void tcp_connection_accept(struct tcp_connection *tc, int sock, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst)
+void tcp_connection_accept(struct tcp_connection *tc, int sock, ip_mode_t ip_mode, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst)
 {
 	/* Set send buffer size. */
 	tcp_set_sock_send_buffer_size(sock, tc->send_buffer_size);
 
+	/* Set keepalive time */
+	tcp_set_sock_keepalive(sock, TCP_CONNECTION_KEEPALIVE_SECONDS);
+
 	/* Set ttl */
-	int sock_opt = (int)(unsigned int)tc->ttl;
-	if (setsockopt(sock, IPPROTO_IP, IP_TTL, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-		DEBUG_WARN("setsockopt IP_TTL error %d", errno);
-	}
+	tcp_connection_set_ttl_internal(sock, ip_mode, tc->ttl);
 
 	/* Set tos */
-	sock_opt = (int)(unsigned int)tc->tos;
-	if (setsockopt(sock, IPPROTO_IP, IP_TOS, (char *)&sock_opt, sizeof(sock_opt)) < 0) {
-		DEBUG_WARN("setsockopt IP_TOS error %d", errno);
-	}
+	tcp_connection_set_tos_internal(sock, ip_mode, tc->tos);
 
 	tc->sock = sock;
+	tc->ip_mode = ip_mode;
 	tc->est_callback = est;
 	tc->recv_callback = recv;
 	tc->close_callback = close;

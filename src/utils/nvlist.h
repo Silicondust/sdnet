@@ -15,6 +15,7 @@ struct nvlist_entry_t {
 	int64_t value_int64;
 };
 
+extern void nvlist_debug_print(struct slist_t *list);
 extern void nvlist_clear_all(struct slist_t *list);
 extern struct nvlist_entry_t *nvlist_lookup(struct slist_t *list, const char *name);
 extern const char *nvlist_lookup_str(struct slist_t *list, const char *name);
@@ -26,3 +27,9 @@ extern const char *nvlist_set_str_nb(struct slist_t *list, const char *name, str
 extern void nvlist_set_int64(struct slist_t *list, const char *name, int64_t value);
 extern bool nvlist_unset(struct slist_t *list, const char *name);
 extern void nvlist_copy(struct slist_t *dst_list, struct slist_t *src_list, const char *name);
+
+#if defined(DEBUG)
+#define NVLIST_DEBUG_PRINT(list) nvlist_debug_print(list)
+#else
+#define NVLIST_DEBUG_PRINT(list)
+#endif

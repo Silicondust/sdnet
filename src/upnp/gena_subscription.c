@@ -172,7 +172,7 @@ static void gena_subscription_conn_established(void *arg)
 
 	bool success = true;
 	success &= netbuf_sprintf(header_nb, "NOTIFY %s HTTP/1.1\r\n", subscription->callback_uri);
-	success &= netbuf_sprintf(header_nb, "Host: %v:%u\r\n", subscription->callback_ip, subscription->callback_port);
+	success &= netbuf_sprintf(header_nb, "Host: %V:%u\r\n", &subscription->callback_ip, subscription->callback_port);
 	success &= netbuf_sprintf(header_nb, "NT: upnp:event\r\n");
 	success &= netbuf_sprintf(header_nb, "NTS: upnp:propchange\r\n");
 	success &= netbuf_sprintf(header_nb, "SID: uuid:%s\r\n", sid_str);
@@ -227,7 +227,7 @@ static void gena_subscription_connect(void *arg)
 		return;
 	}
 
-	if (tcp_connection_connect(subscription->conn, subscription->callback_ip, subscription->callback_port, 0, 0, gena_subscription_conn_established, gena_subscription_conn_recv, gena_subscription_conn_close, subscription) != TCP_OK) {
+	if (tcp_connection_connect(subscription->conn, &subscription->callback_ip, subscription->callback_port, subscription->callback_ipv6_scope_id, gena_subscription_conn_established, gena_subscription_conn_recv, gena_subscription_conn_close, subscription) != TCP_OK) {
 		DEBUG_WARN("connect failed");
 		tcp_connection_deref(subscription->conn);
 		subscription->conn = NULL;
@@ -305,14 +305,16 @@ static bool gena_subscription_start(struct gena_subscription_t *subscription)
 	return true;
 }
 
-ipv4_addr_t gena_subscription_get_local_ip(struct gena_subscription_t *subscription)
+uint32_t gena_subscription_get_local_ip(struct gena_subscription_t *subscription, ip_addr_t *result)
 {
-	return subscription->local_ip;
+	*result = subscription->local_ip;
+	return subscription->callback_ipv6_scope_id;
 }
 
-ipv4_addr_t gena_subscription_get_callback_ip(struct gena_subscription_t *subscription)
+uint32_t gena_subscription_get_callback_ip(struct gena_subscription_t *subscription, ip_addr_t *result)
 {
-	return subscription->callback_ip;
+	*result = subscription->callback_ip;
+	return subscription->callback_ipv6_scope_id;
 }
 
 void gena_subscription_unsubscribe(struct gena_subscription_t *subscription)
@@ -334,12 +336,12 @@ void gena_subscription_renew(struct gena_subscription_t *subscription, uint32_t 
 	gena_service_add_subscription(subscription->service, subscription);
 }
 
-struct gena_subscription_t *gena_subscription_accept(struct gena_service_t *service, ipv4_addr_t local_ip, ipv4_addr_t callback_ip, uint16_t callback_port, char *callback_uri, uint32_t subscription_period)
+struct gena_subscription_t *gena_subscription_accept(struct gena_service_t *service, const ip_addr_t *local_ip, const ip_addr_t *callback_ip, uint16_t callback_port, uint32_t callback_ipv6_scope_id, char *callback_uri, uint32_t subscription_period)
 {
 	/*
 	 * Create connection.
 	 */
-	struct gena_subscription_t *subscription = gena_service_find_subscription_by_callback(service, callback_ip, callback_port, callback_uri);
+	struct gena_subscription_t *subscription = gena_service_find_subscription_by_callback(service, callback_ip, callback_port, callback_ipv6_scope_id, callback_uri);
 	if (subscription) {
 		DEBUG_INFO("deleting old subscription to the same callback target");
 		gena_subscription_unsubscribe(subscription);
@@ -368,9 +370,10 @@ struct gena_subscription_t *gena_subscription_accept(struct gena_service_t *serv
 
 	subscription->service = service;
 	guid_create_random(&subscription->sid);
-	subscription->local_ip = local_ip;
-	subscription->callback_ip = callback_ip;
+	subscription->local_ip = *local_ip;
+	subscription->callback_ip = *callback_ip;
 	subscription->callback_port = callback_port;
+	subscription->callback_ipv6_scope_id = callback_ipv6_scope_id;
 	subscription->subscription_timeout = timer_get_ticks() + (ticks_t)subscription_period * TICK_RATE;
 	oneshot_init(&subscription->connection_timer);
 

@@ -9,8 +9,8 @@
  */
 
 #include <os_config.h>
-#include <osx/os_include.h>
-#include <osx/system.h>
+#include <macos/os_include.h>
+#include <macos/system.h>
 #include <default/netbuf.h>
 
 #include <os_enums.h>
@@ -21,6 +21,7 @@
 #include <utils/base36.h>
 #include <utils/base64.h>
 #include <utils/guid.h>
+#include <net/ip_addr.h>
 #include <text/doprint_custom.h>
 #include <text/sprintf_custom.h>
 #include <text/sscanf_custom.h>
@@ -48,7 +49,8 @@
 #include <crypto/x509.h>
 #include <crypto/bsd/random.h>
 #include <crypto/libtom/mpi.h>
-#include <net/ip_datalink.h>
+#include <net/ip_interface.h>
+#include <net/libc/ip_interface.h>
 #include <net/igmp.h>
 #include <net/dhcp_client.h>
 #include <net/dns_lookup.h>
@@ -93,9 +95,9 @@
 #include <daemon/daemon.h>
 
 #include <thread/pthread/spinlock.h>
-#include <thread/osx/thread.h>
-#include <timer/osx/timer.h>
+#include <thread/macos/thread.h>
+#include <timer/macos/timer.h>
 #include <net/libc/tcp.h>
 #include <net/libc/udp.h>
 
-#define OS_NAME "OSX"
+#define OS_NAME "MacOS"

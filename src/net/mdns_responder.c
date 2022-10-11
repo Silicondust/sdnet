@@ -18,10 +18,10 @@
 
 THIS_FILE("mdns_responder");
 
-#define MDNS_MULTICAST_IP 0xE00000FB
 #define MDNS_PORT 5353
 
 #define DNS_RECORD_TYPE_A 0x0001
+#define DNS_RECORD_TYPE_AAAA 0x001C
 #define DNS_RECORD_CLASS_IN 0x0001
 
 struct mdns_responder_name_t {
@@ -29,10 +29,21 @@ struct mdns_responder_name_t {
 	char *name;
 };
 
+struct mdns_respodnder_transport_t {
+	struct udp_socket *sock;
+	const ip_addr_t *multicast_ip;
+};
+
 struct mdns_responder_t {
 	struct slist_t name_list;
-	struct udp_socket *sock;
+	struct mdns_respodnder_transport_t ipv4;
+	struct mdns_respodnder_transport_t ipv6;
 };
+
+static const ip_addr_t mdns_multicast_ipv4 = IP_ADDR_INIT_IPV4(0xE00000FB);
+#if defined(IPV6_SUPPORT)
+static const ip_addr_t mdns_multicast_ipv6 = IP_ADDR_INIT_IPV6(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB);
+#endif
 
 static struct mdns_responder_t mdns_responder;
 
@@ -123,47 +134,35 @@ static bool mdns_responder_parse_name(struct netbuf *nb, char *out, char *out_en
 	return true;
 }
 
-static bool mdns_responser_lookup_name(char *name)
-{
-	struct mdns_responder_name_t *entry = slist_get_head(struct mdns_responder_name_t, &mdns_responder.name_list);
-	while (entry) {
-		if (strcasecmp(entry->name, name) == 0) {
-			return true;
-		}
-
-		entry = slist_get_next(struct mdns_responder_name_t, entry);
-	}
-
-	return false;
-}
-
 struct mdns_responder_output_state {
+	struct mdns_respodnder_transport_t *transport;
+	struct ip_interface_t *idi;
+	uint32_t ipv6_scope_id;
 	struct netbuf *txnb;
-	ipv4_addr_t local_ip;
 	uint16_t answer_count;
+	bool success;
 };
 
-static bool mdns_responder_output_answer(struct mdns_responder_output_state *state, ipv4_addr_t src_addr, char *name)
+static void mdns_responder_output_answer(struct mdns_responder_output_state *state, const ip_addr_t *answer_ip, const char *name)
 {
 	if (!state->txnb) {
-		state->local_ip = ip_get_local_ip_for_remote_ip(src_addr);
-		if (!state->local_ip) {
-			DEBUG_ERROR("no local ip");
-			return false;
-		}
-
 		state->txnb = netbuf_alloc();
 		if (!state->txnb) {
 			DEBUG_ERROR("out of memory");
-			return false;
+			state->success = false;
+			return;
 		}
 	}
 
-	size_t encoded_name_length = 1 + strlen(name) + 1;
+	uint16_t record_type = ip_addr_is_ipv6(answer_ip) ? DNS_RECORD_TYPE_AAAA : DNS_RECORD_TYPE_A;
 
-	if (!netbuf_fwd_make_space(state->txnb, encoded_name_length + 14)) {
+	size_t encoded_name_length = 1 + strlen(name) + 1;
+	size_t ip_addr_len = (record_type == DNS_RECORD_TYPE_AAAA) ? 16 : 4;
+
+	if (!netbuf_fwd_make_space(state->txnb, encoded_name_length + 10 + ip_addr_len)) {
 		DEBUG_ERROR("out of memory");
-		return false;
+		state->success = false;
+		return;
 	}
 
 	while (1) {
@@ -175,7 +174,8 @@ static bool mdns_responder_output_answer(struct mdns_responder_output_state *sta
 		size_t length = ptr - name;
 		if ((length == 0) || (length > 63)) {
 			DEBUG_ERROR("invalid name");
-			return false;
+			state->success = false;
+			return;
 		}
 
 		netbuf_fwd_write_u8(state->txnb, (uint8_t)length);
@@ -189,18 +189,96 @@ static bool mdns_responder_output_answer(struct mdns_responder_output_state *sta
 	}
 
 	netbuf_fwd_write_u8(state->txnb, 0);
-	netbuf_fwd_write_u16(state->txnb, DNS_RECORD_TYPE_A);
-	netbuf_fwd_write_u16(state->txnb, DNS_RECORD_CLASS_IN);
-	netbuf_fwd_write_u32(state->txnb, 600); /* time to live */
-	netbuf_fwd_write_u16(state->txnb, 4); /* data length */
-	netbuf_fwd_write_u32(state->txnb, state->local_ip);
+
+	if (record_type == DNS_RECORD_TYPE_AAAA) {
+		uint8_t ip_addr_bytes[16];
+		ip_addr_get_ipv6_bytes(answer_ip, ip_addr_bytes);
+		netbuf_fwd_write_u16(state->txnb, record_type);
+		netbuf_fwd_write_u16(state->txnb, DNS_RECORD_CLASS_IN);
+		netbuf_fwd_write_u32(state->txnb, 600); /* time to live */
+		netbuf_fwd_write_u16(state->txnb, 16); /* data length */
+		netbuf_fwd_write(state->txnb, ip_addr_bytes, 16);
+	} else {
+		netbuf_fwd_write_u16(state->txnb, record_type);
+		netbuf_fwd_write_u16(state->txnb, DNS_RECORD_CLASS_IN);
+		netbuf_fwd_write_u32(state->txnb, 600); /* time to live */
+		netbuf_fwd_write_u16(state->txnb, 4); /* data length */
+		netbuf_fwd_write_u32(state->txnb, ip_addr_get_ipv4(answer_ip));
+	}
 
 	state->answer_count++;
+}
+
+#if defined(IPV6_SUPPORT)
+static bool mdns_responder_handle_name_ipv6_ip(struct mdns_responder_output_state *state, const char *name)
+{
+	if (strlen(name) != 32 + 6) {
+		return false;
+	}
+
+	const char *ptr = name;
+
+	uint8_t ipv6_addr_bytes[16];
+	for (unsigned int i = 0; i < 16; i++) {
+		char tmp[4];
+		tmp[0] = *ptr++;
+		tmp[1] = *ptr++;
+		tmp[2] = 0;
+
+		char *end;
+		ipv6_addr_bytes[i] = (uint8_t)strtoul(tmp, &end, 16);
+		if (end != tmp + 2) {
+			return false;
+		}
+	}
+
+	if (strcmp(ptr, ".local") != 0) {
+		return false;
+	}
+
+	ip_addr_t answer_ip;
+	ip_addr_set_ipv6_bytes(&answer_ip, ipv6_addr_bytes);
+
+	if (!ip_addr_is_ipv6_link_local(&answer_ip)) {
+		return false;
+	}
+
+	struct ip_interface_t *idi = ip_interface_manager_get_by_local_ip(&answer_ip, state->ipv6_scope_id);
+	if (!idi) {
+		return false;
+	}
+
+	mdns_responder_output_answer(state, &answer_ip, name);
+	return true;
+}
+#endif
+
+static bool mdns_responser_lookup_name(struct mdns_responder_output_state *state, const char *name)
+{
+	struct mdns_responder_name_t *entry = slist_get_head(struct mdns_responder_name_t, &mdns_responder.name_list);
+	while (1) {
+		if (!entry) {
+			return false;
+		}
+
+		if (strcasecmp(entry->name, name) == 0) {
+			break;
+		}
+
+		entry = slist_get_next(struct mdns_responder_name_t, entry);
+	}
+
+	ip_addr_t answer_ip;
+	ip_interface_get_local_ip(state->idi, &answer_ip);
+
+	mdns_responder_output_answer(state, &answer_ip, name);
 	return true;
 }
 
-static void mdns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port, struct netbuf *nb)
+static void mdns_responder_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, uint32_t ipv6_scope_id, struct netbuf *nb)
 {
+	struct mdns_respodnder_transport_t *transport = (struct mdns_respodnder_transport_t *)inst;
+
 	if (!netbuf_fwd_check_space(nb, 12)) {
 		DEBUG_WARN("short packet");
 		return;
@@ -217,38 +295,63 @@ static void mdns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_p
 
 	struct mdns_responder_output_state state;
 	memset(&state, 0, sizeof(state));
-	bool success = true;
+	state.transport = transport;
+	state.ipv6_scope_id = ipv6_scope_id;
+	state.success = true;
+
+	state.idi = ip_interface_manager_get_by_remote_ip(src_addr, ipv6_scope_id);
+	if (!state.idi) {
+		return;
+	}
 
 	while (question_count--) {
+		if (!state.success) {
+			break;
+		}
+
 		char name[128];
 		if (!mdns_responder_parse_name(nb, name, name + sizeof(name))) {
 			DEBUG_WARN("bad name data");
-			success = false;
+			state.success = false;
 			break;
 		}
 
 		if (!netbuf_fwd_check_space(nb, 4)) {
 			DEBUG_WARN("short packet");
-			success = false;
+			state.success = false;
 			break;
 		}
 
-		uint16_t dns_type = netbuf_fwd_read_u16(nb);
-		uint16_t dns_class = netbuf_fwd_read_u16(nb);
-		if (dns_type != DNS_RECORD_TYPE_A) {
-			continue;
-		}
-		if (dns_class != DNS_RECORD_CLASS_IN) {
+		uint16_t record_type = netbuf_fwd_read_u16(nb);
+		uint16_t record_class = netbuf_fwd_read_u16(nb);
+		if (record_class != DNS_RECORD_CLASS_IN) {
 			continue;
 		}
 
-		if (!mdns_responser_lookup_name(name)) {
-			continue;
-		}
+#if defined(IPV6_SUPPORT)
+		if (record_type == DNS_RECORD_TYPE_AAAA) {
+			if (mdns_responder_handle_name_ipv6_ip(&state, name)) {
+				continue;
+			}
 
-		if (!mdns_responder_output_answer(&state, src_addr, name)) {
-			success = false;
-			break;
+			if (!ip_interface_is_ipv6(state.idi)) {
+				continue;
+			}
+
+			if (mdns_responser_lookup_name(&state, name)) {
+				continue;
+			}
+		}
+#endif
+
+		if (record_type == DNS_RECORD_TYPE_A) {
+			if (ip_interface_is_ipv6(state.idi)) {
+				continue;
+			}
+
+			if (mdns_responser_lookup_name(&state, name)) {
+				continue;
+			}
 		}
 	}
 
@@ -256,7 +359,7 @@ static void mdns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_p
 		return;
 	}
 
-	if (!success) {
+	if (!state.success) {
 		netbuf_free(state.txnb);
 		return;
 	}
@@ -277,9 +380,9 @@ static void mdns_responder_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_p
 	netbuf_rev_write_u16(state.txnb, transaction_id);
 
 	if (src_port == MDNS_PORT) {
-		udp_socket_send_multipath(mdns_responder.sock, MDNS_MULTICAST_IP, MDNS_PORT, state.local_ip, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, state.txnb);
+		udp_socket_send_multipath(transport->sock, transport->multicast_ip, MDNS_PORT, state.idi, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, state.txnb);
 	} else {
-		udp_socket_send_multipath(mdns_responder.sock, src_addr, src_port, state.local_ip, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, state.txnb);
+		udp_socket_send_netbuf(transport->sock, src_addr, src_port, ipv6_scope_id, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, state.txnb);
 	}
 
 	netbuf_free(state.txnb);
@@ -303,8 +406,15 @@ bool mdns_responder_register_name(const char *name)
 
 void mdns_responder_init(void)
 {
-	mdns_responder.sock = udp_socket_alloc();
-	udp_socket_listen(mdns_responder.sock, 0, MDNS_PORT, mdns_responder_recv, NULL, NULL);
+	mdns_responder.ipv4.multicast_ip = &mdns_multicast_ipv4;
+	mdns_responder.ipv4.sock = udp_socket_alloc(IP_MODE_IPV4);
+	udp_socket_listen(mdns_responder.ipv4.sock, MDNS_PORT, mdns_responder_recv, NULL, &mdns_responder.ipv4);
+	igmp_manager_join_group(mdns_responder.ipv4.sock, &mdns_multicast_ipv4);
 
-	igmp_manager_join_group(mdns_responder.sock, MDNS_MULTICAST_IP);
+#if defined(IPV6_SUPPORT)
+	mdns_responder.ipv6.multicast_ip = &mdns_multicast_ipv6;
+	mdns_responder.ipv6.sock = udp_socket_alloc(IP_MODE_IPV6);
+	udp_socket_listen(mdns_responder.ipv6.sock, MDNS_PORT, mdns_responder_recv, NULL, &mdns_responder.ipv6);
+	igmp_manager_join_group(mdns_responder.ipv6.sock, &mdns_multicast_ipv6);
+#endif
 }

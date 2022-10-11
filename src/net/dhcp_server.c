@@ -69,7 +69,7 @@ struct dhcp_server_client_t {
 
 struct dhcp_server_t {
 	struct udp_socket *sock;
-	struct ip_datalink_instance *link;
+	struct ip_interface_t *idi;
 	ipv4_addr_t local_ip_addr;
 	ipv4_addr_t client_ip_first;
 	ipv4_addr_t client_ip_last;
@@ -271,7 +271,7 @@ static void dhcp_server_store_state(void)
 	netbuf_free(nb);
 }
 
-static void dhcp_server_send(ipv4_addr_t dest_addr, uint8_t message_type, uint32_t transaction_id, ipv4_addr_t chosen_ip_addr, uint64_t client_mac_addr)
+static void dhcp_server_send(const ip_addr_t *dest_addr, uint8_t message_type, uint32_t transaction_id, ipv4_addr_t chosen_ip_addr, uint64_t client_mac_addr)
 {
 	DEBUG_ASSERT((message_type != DHCP_MESSAGE_TYPE_NACK) || (chosen_ip_addr == 0), "chosen_ip_addr must be zero when sending NACK");
 
@@ -356,11 +356,11 @@ static void dhcp_server_send(ipv4_addr_t dest_addr, uint8_t message_type, uint32
 
 	netbuf_set_end_to_pos(txnb);
 	netbuf_set_pos_to_start(txnb);
-	udp_dhcp_socket_send_netbuf(dhcp_server.sock, dhcp_server.link, dest_addr, DHCP_CLIENT_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+	udp_dhcp_socket_send_netbuf(dhcp_server.sock, dhcp_server.idi, dest_addr, DHCP_CLIENT_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 
-static void dhcp_server_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port, struct netbuf *nb)
+static void dhcp_server_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, struct netbuf *nb)
 {
 	if (src_port != DHCP_CLIENT_PORT) {
 		DEBUG_WARN("unexpected client port");
@@ -466,9 +466,11 @@ static void dhcp_server_recv(void *inst, ipv4_addr_t src_addr, uint16_t src_port
 		netbuf_set_pos(nb, end_bookmark);
 	}
 
-	ipv4_addr_t dest_addr = src_addr;
-	if (dest_addr == 0) {
-		dest_addr = 0xFFFFFFFF;
+	ip_addr_t dest_addr;
+	if (ip_addr_is_non_zero(src_addr)) {
+		dest_addr = src_addr;
+	} else {
+		dest_addr = ip_addr_ipv4_broadcast;
 	}
 
 	if (requested_ip_addr == 0) {
@@ -514,14 +516,14 @@ void dhcp_server_load_state(uint8_t *ptr, uint8_t *end)
 	}
 }
 
-void dhcp_server_init(struct ip_datalink_instance *link, ipv4_addr_t local_ip_addr, ipv4_addr_t client_ip_first, ipv4_addr_t client_ip_last, ipv4_addr_t subnet_mask)
+void dhcp_server_init(struct ip_interface_t *idi, ipv4_addr_t local_ip_addr, ipv4_addr_t client_ip_first, ipv4_addr_t client_ip_last, ipv4_addr_t subnet_mask)
 {
-	dhcp_server.link = link;
+	dhcp_server.idi = idi;
 	dhcp_server.local_ip_addr = local_ip_addr;
 	dhcp_server.client_ip_first = client_ip_first;
 	dhcp_server.client_ip_last = client_ip_last;
 	dhcp_server.subnet_mask = subnet_mask;
 
 	dhcp_server.sock = udp_dhcp_socket_alloc();
-	udp_dhcp_socket_listen(dhcp_server.sock, link, 0, DHCP_SERVER_PORT, dhcp_server_recv, NULL, NULL);
+	udp_dhcp_socket_listen(dhcp_server.sock, idi, DHCP_SERVER_PORT, dhcp_server_recv, NULL, NULL);
 }

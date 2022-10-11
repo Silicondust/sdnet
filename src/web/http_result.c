@@ -21,6 +21,7 @@ const char http_result_continue[] = "100 Continue";
 const char http_result_web_socket_protocol_handshake[] = "101 Web Socket Protocol Handshake";
 const char http_result_ok[] = "200 OK";
 const char http_result_partial_content[] = "206 Partial Content";
+const char http_result_not_modified[] = "304 Not Modified";
 const char http_result_temporary_redirect[] = "307 Temporary Redirect";
 const char http_result_permanent_redirect[] = "308 Permanent Redirect";
 const char http_result_bad_request[] = "400 Bad Request";
@@ -85,6 +86,15 @@ bool http_header_write_date_tag(struct netbuf *header_nb)
 		current_tm.tm_mday, month_lookup[current_tm.tm_mon], current_tm.tm_year + 1900,
 		current_tm.tm_hour, current_tm.tm_min, current_tm.tm_sec
 	);
+}
+
+bool http_header_write_etag_sha1_base64(struct netbuf *header_nb, sha1_digest_t *hash)
+{
+	bool success = true;
+	success &= netbuf_sprintf(header_nb, "ETag: \"");
+	success &= base64_encode_mem_to_netbuf(hash->u8, 20, header_nb, base64_encode_table);
+	success &= netbuf_sprintf(header_nb, "\"\r\n");
+	return success;
 }
 
 bool http_response_encode_chunked(struct netbuf *nb)
