@@ -127,6 +127,78 @@ static bool doprint_custom_sprintf(doprint_custom_write_func_t write_func, void 
 	return write_func(write_arg, str, len);
 }
 
+static bool doprint_custom_ipv4(doprint_custom_write_func_t write_func, void *write_arg, ipv4_addr_t val)
+{
+	return doprint_custom_sprintf(write_func, write_arg, "%u.%u.%u.%u", (val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, (val >> 0) & 0xFF);
+}
+
+#if defined(IPV6_SUPPORT)
+static bool doprint_custom_ipv6(doprint_custom_write_func_t write_func, void *write_arg, const ip_addr_t *val)
+{
+	uint16_t words[8];
+	words[0] = (uint16_t)(val->high >> 48);
+	words[1] = (uint16_t)(val->high >> 32);
+	words[2] = (uint16_t)(val->high >> 16);
+	words[3] = (uint16_t)(val->high >> 0);
+	words[4] = (uint16_t)(val->low >> 48);
+	words[5] = (uint16_t)(val->low >> 32);
+	words[6] = (uint16_t)(val->low >> 16);
+	words[7] = (uint16_t)(val->low >> 0);
+
+	if (!write_func(write_arg, "[", 1)) {
+		return false;
+	}
+
+	uint16_t *word_ptr = words;
+	uint16_t *word_end = words + 8;
+
+	if (*word_ptr != 0) {
+		uint16_t v = *word_ptr++;
+		if (!doprint_custom_sprintf(write_func, write_arg, "%x", v)) {
+			return false;
+		}
+	}
+
+	while (1) {
+		uint16_t v = *word_ptr++;
+		if (v == 0) {
+			break;
+		}
+		if (!doprint_custom_sprintf(write_func, write_arg, ":%x", v)) {
+			return false;
+		}
+		if (word_ptr >= word_end) {
+			return write_func(write_arg, "]", 1);
+		}
+	}
+
+	if (!write_func(write_arg, ":", 1)) {
+		return false;
+	}
+
+	while (1) {
+		if (word_ptr >= word_end) {
+			return write_func(write_arg, ":]", 2);
+		}
+		uint16_t v = *word_ptr;
+		if (v != 0) {
+			break;
+		}
+		word_ptr++;
+	}
+
+	while (1) {
+		uint16_t v = *word_ptr++;
+		if (!doprint_custom_sprintf(write_func, write_arg, ":%x", v)) {
+			return false;
+		}
+		if (word_ptr >= word_end) {
+			return write_func(write_arg, "]", 1);
+		}
+	}
+}
+#endif
+
 static bool doprint_custom_str(doprint_custom_write_func_t write_func, void *write_arg, const char *str)
 {
 	size_t len = strlen(str);
@@ -364,8 +436,8 @@ bool doprint_custom(doprint_custom_write_func_t write_func, void *write_arg, uin
 		}
 
 		if (element_type == ELEMENT_TYPE_IPV4_ADDR) {
-			ipv4_addr_t val = va_arg(ap, ipv4_addr_t);
-			if (!doprint_custom_sprintf(write_func, write_arg, "%u.%u.%u.%u", (val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, (val >> 0) & 0xFF)) {
+			ipv4_addr_t v = va_arg(ap, ipv4_addr_t);
+			if (!doprint_custom_ipv4(write_func, write_arg, v)) {
 				return false;
 			}
 
@@ -376,22 +448,16 @@ bool doprint_custom(doprint_custom_write_func_t write_func, void *write_arg, uin
 			const ip_addr_t *val = va_arg(ap, const ip_addr_t *);
 #if defined(IPV6_SUPPORT)
 			if (ip_addr_is_ipv4(val) || ip_addr_is_zero(val)) {
-				uint32_t v = (uint32_t)val->low;
-				if (!doprint_custom_sprintf(write_func, write_arg, "%u.%u.%u.%u", (v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, (v >> 0) & 0xFF)) {
+				if (!doprint_custom_ipv4(write_func, write_arg, (ipv4_addr_t)val->low)) {
 					return false;
 				}
 			} else {
-				uint32_t va = (uint32_t)(val->high >> 32);
-				uint32_t vb = (uint32_t)(val->high >> 0);
-				uint32_t vc = (uint32_t)(val->low >> 32);
-				uint32_t vd = (uint32_t)(val->low >> 0);
-				if (!doprint_custom_sprintf(write_func, write_arg, "[%x:%x:%x:%x:%x:%x:%x:%x]", va >> 16, va & 0xFFFF, vb >> 16, vb & 0xFFFF, vc >> 16, vc & 0xFFFF, vd >> 16, vd & 0xFFFF)) {
+				if (!doprint_custom_ipv6(write_func, write_arg, val)) {
 					return false;
 				}
 			}
 #else
-			uint32_t v = (uint32_t)val->ipv4;
-			if (!doprint_custom_sprintf(write_func, write_arg, "%u.%u.%u.%u", (v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, (v >> 0) & 0xFF)) {
+			if (!doprint_custom_ipv4(write_func, write_arg, val->ipv4)) {
 				return false;
 			}
 #endif

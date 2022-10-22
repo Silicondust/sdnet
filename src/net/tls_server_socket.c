@@ -21,7 +21,7 @@ THIS_FILE("tls_server_socket");
 struct tls_server_socket_t {
 	struct tcp_socket *sock;
 
-	tls_server_connect_callback_t connect_callback;
+	tls_server_accept_callback_t accept_callback;
 	void *callback_arg;
 };
 
@@ -35,10 +35,10 @@ void tls_server_socket_accept(struct tls_server_socket_t *tls_sock, struct tls_s
 	//tls_server_connection_accept(tls_conn, tls_sock->sock, est, recv, close, callback_arg);
 }
 
-static void tls_server_socket_tcp_connect_callback(void *arg)
+static void tls_server_socket_tcp_accept_callback(void *arg, const ip_addr_t *remote_addr, uint32_t ipv6_scope_id)
 {
 	struct tls_server_socket_t *tls_sock = (struct tls_server_socket_t *)arg;
-	tls_sock->connect_callback(tls_sock->callback_arg);
+	tls_sock->accept_callback(tls_sock->callback_arg, remote_addr, ipv6_scope_id);
 }
 
 uint16_t tls_server_socket_get_port(struct tls_server_socket_t *tls_sock)
@@ -46,12 +46,12 @@ uint16_t tls_server_socket_get_port(struct tls_server_socket_t *tls_sock)
 	return tcp_socket_get_port(tls_sock->sock);
 }
 
-bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, uint16_t port, tls_server_connect_callback_t connect, void *callback_arg)
+bool tls_server_socket_listen(struct tls_server_socket_t *tls_sock, uint16_t port, tls_server_accept_callback_t accept_callback, void *callback_arg)
 {
-	tls_sock->connect_callback = connect;
+	tls_sock->accept_callback = accept_callback;
 	tls_sock->callback_arg = callback_arg;
 
-	if (tcp_socket_listen(tls_sock->sock, port, tls_server_socket_tcp_connect_callback, tls_sock) != TCP_OK) {
+	if (tcp_socket_listen(tls_sock->sock, port, tls_server_socket_tcp_accept_callback, tls_sock) != TCP_OK) {
 		return false;
 	}
 

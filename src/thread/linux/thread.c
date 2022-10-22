@@ -18,6 +18,8 @@
 
 THIS_FILE("thread");
 
+#define THREAD_SIGNAL_MAX_WAIT_TICKS 0x00000000FFFFFFFEULL
+
 void thread_public_context_init(struct thread_public_context_t *context)
 {
 	context->random_fp = fopen("/dev/urandom", "rb");
@@ -26,6 +28,10 @@ void thread_public_context_init(struct thread_public_context_t *context)
 
 void thread_pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, ticks_t timeout_duration)
 {
+	if (timeout_duration > THREAD_SIGNAL_MAX_WAIT_TICKS) {
+		timeout_duration = THREAD_SIGNAL_MAX_WAIT_TICKS;
+	}
+
 	struct timespec ts;
 	clock_gettime(CLOCK_REALTIME, &ts);
 

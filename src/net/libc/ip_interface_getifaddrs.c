@@ -58,6 +58,10 @@ void ip_interface_manager_detect_execute(void)
 		 * ifindex
 		 */
 		uint32_t ifindex = if_nametoindex(ifa->ifa_name);
+		if (ifindex == 0) {
+			ifa = ifa->ifa_next;
+			continue;
+		}
 
 		/*
 		 * filter out ipv6 temporary addresses
@@ -71,13 +75,14 @@ void ip_interface_manager_detect_execute(void)
 			strcpy(ifr6.ifr_name, ifa->ifa_name);
 			ifr6.ifr_addr = *addr_in;
 
-			if (ioctl(af6_sock, SIOCGIFALIFETIME_IN6, &ifr6) < 0) {
-				DEBUG_ERROR("ioctl SIOCGIFALIFETIME_IN6 failed");
+			if (ioctl(af6_sock, SIOCGIFAFLAG_IN6, &ifr6) < 0) {
+				DEBUG_ERROR("ioctl SIOCGIFAFLAG_IN6 failed");
 				ifa = ifa->ifa_next;
 				continue;
 			}
 
-			if (ifr6.ifr_ifru.ifru_lifetime.ia6t_vltime != 0xFFFFFFFF) {
+			uint32_t flags6 = ifr6.ifr_ifru.ifru_flags6;
+			if (flags6 & (IN6_IFF_ANYCAST | IN6_IFF_TENTATIVE | IN6_IFF_DETACHED | IN6_IFF_TEMPORARY | IN6_IFF_DEPRECATED)) {
 				ifa = ifa->ifa_next;
 				continue;
 			}
@@ -99,6 +104,12 @@ void ip_interface_manager_detect_execute(void)
 
 			struct sockaddr_in6 *netmask_in = (struct sockaddr_in6 *)ifa->ifa_netmask;
 			ip_addr_set_ipv6_bytes(&subnet_mask, netmask_in->sin6_addr.s6_addr);
+
+			uint8_t cidr = ip_addr_get_cidr_from_subnet_mask(&subnet_mask);
+			if ((cidr == 0) || (cidr >= 128)) {
+				ifa = ifa->ifa_next;
+				continue;
+			}
 		}
 #endif
 		if (ifa->ifa_addr->sa_family == AF_INET) {
@@ -107,6 +118,12 @@ void ip_interface_manager_detect_execute(void)
 
 			struct sockaddr_in *netmask_in = (struct sockaddr_in *)ifa->ifa_netmask;
 			ip_addr_set_ipv4(&subnet_mask, ntohl(netmask_in->sin_addr.s_addr));
+
+			uint8_t cidr = ip_addr_get_cidr_from_subnet_mask(&subnet_mask);
+			if ((cidr == 0) || (cidr >= 32)) {
+				ifa = ifa->ifa_next;
+				continue;
+			}
 		}
 
 		if (!ip_addr_is_unicast_not_localhost(&ip_addr) || ip_addr_is_zero(&subnet_mask)) {
@@ -136,6 +153,7 @@ void ip_interface_manager_detect_execute(void)
 		idi->ifindex = ifindex;
 		idi->ip_addr = ip_addr;
 		idi->subnet_mask = subnet_mask;
+		idi->ip_score = ip_addr_compute_score(&ip_addr);
 		ip_interface_manager_detect_add(idi);
 	}
 

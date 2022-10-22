@@ -24,9 +24,46 @@ struct tcp_socket {
 	int sock;
 	int accept_connection_sock;
 	HANDLE event_handle;
-	tcp_connect_callback_t connect_callback;
+	tcp_accept_callback_t accept_callback;
 	void *callback_inst;
 };
+
+static uint32_t tcp_socket_get_remote_addr_internal(int connection_sock, ip_addr_t *result)
+{
+#if defined(IPV6_SUPPORT)
+	struct sockaddr_storage sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#else
+	struct sockaddr_in sock_addr;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	socklen_t sock_addr_size = sizeof(sock_addr);
+#endif
+
+	if (getpeername(connection_sock, (struct sockaddr *)&sock_addr, &sock_addr_size) != 0) {
+		ip_addr_set_zero(result);
+		return 0;
+	}
+
+#if defined(IPV6_SUPPORT)
+	uint32_t ipv6_scope_id = 0;
+	if (sock_addr.ss_family == AF_INET6) {
+		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
+		ip_addr_set_ipv6_bytes(result, sock_addr_in->sin6_addr.s6_addr);
+		ipv6_scope_id = sock_addr_in->sin6_scope_id;
+	} else {
+		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
+		ip_addr_set_ipv4(result, ntohl(sock_addr_in->sin_addr.s_addr));
+		ipv6_scope_id = 0;
+	}
+#else
+	ip_addr_set_ipv4(result, ntohl(sock_addr.sin_addr.s_addr));
+	uint32_t ipv6_scope_id = 0;
+#endif
+
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(result, ipv6_scope_id);
+	return ipv6_scope_id;
+}
 
 uint16_t tcp_socket_get_port(struct tcp_socket *ts)
 {
@@ -88,21 +125,31 @@ static void tcp_socket_thread_accept(struct tcp_socket *ts)
 		return;
 	}
 
+	/* Santiy check */
+	ip_addr_t remote_addr;
+	uint32_t ipv6_scope_id = tcp_socket_get_remote_addr_internal(connection_sock, &remote_addr);
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&remote_addr, ipv6_scope_id);
+
+	if (!ip_addr_is_unicast(&remote_addr)) {
+		closesocket(connection_sock);
+		return;
+	}
+
 	/* Notify connect. */
 	ts->accept_connection_sock = connection_sock;
 
 	thread_main_enter();
-	ts->connect_callback(ts->callback_inst);
+	ts->accept_callback(ts->callback_inst, &remote_addr, ipv6_scope_id);
 	thread_main_exit();
 
 	DEBUG_ASSERT(ts->accept_connection_sock == -1, "tcp accept/reject not called");
 }
 
-tcp_error_t tcp_socket_listen(struct tcp_socket *ts, uint16_t port, tcp_connect_callback_t connect, void *inst)
+tcp_error_t tcp_socket_listen(struct tcp_socket *ts, uint16_t port, tcp_accept_callback_t accept_callback, void *inst)
 {
-	DEBUG_ASSERT(connect, "no connect callback specified");
+	DEBUG_ASSERT(accept_callback, "no accept callback specified");
 
-	ts->connect_callback = connect;
+	ts->accept_callback = accept_callback;
 	ts->callback_inst = inst;
 
 	/* Bind socket. */

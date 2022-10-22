@@ -18,19 +18,31 @@
 
 THIS_FILE("unix_time");
 
-static time64_t unix_time_ticks_sec_to_gmt_time = 0;
+struct unix_time_manager_t {
+	time64_t ticks_sec_to_gmt_time;
+	time64_t last_set;
+	unix_time_source_t source;
+};
+
+static struct unix_time_manager_t unix_time_manager;
 
 time64_t unix_time(void)
 {
-	if (unix_time_ticks_sec_to_gmt_time == 0) {
+	if (unix_time_manager.ticks_sec_to_gmt_time == 0) {
 		return (time64_t)time(NULL);
 	}
 
-	struct thread_public_context_t *context = thread_get_public_context();
-
 	struct mach_timespec t;
+	struct thread_public_context_t *context = thread_get_public_context();
 	clock_get_time(context->system_clock_serv, &t);
-	return (time64_t)t.tv_sec + unix_time_ticks_sec_to_gmt_time;
+	time64_t local_ref = (time64_t)t.tv_sec;
+
+	return local_ref + unix_time_manager.ticks_sec_to_gmt_time;
+}
+
+time64_t unix_time_last_set(void)
+{
+	return unix_time_manager.last_set;
 }
 
 time64_t unix_time_get_offset_from_native(void)
@@ -40,21 +52,32 @@ time64_t unix_time_get_offset_from_native(void)
 
 void unit_time_get_timespec(struct timespec64 *tp)
 {
-	struct thread_public_context_t *context = thread_get_public_context();
-
 	struct mach_timespec native_tp;
+	struct thread_public_context_t *context = thread_get_public_context();
 	clock_get_time(context->system_clock_serv, &native_tp);
-	tp->tv_sec = (time64_t)native_tp.tv_sec + unix_time_ticks_sec_to_gmt_time;;
+
+	tp->tv_sec = (time64_t)native_tp.tv_sec + unix_time_manager.ticks_sec_to_gmt_time;
 	tp->tv_nsec = native_tp.tv_nsec;
 }
 
-void unix_time_set(time64_t new_time)
+void unix_time_set(time64_t new_time, unix_time_source_t source)
 {
-	struct thread_public_context_t *context = thread_get_public_context();
+	if ((new_time < UNIX_TIME_MIN_VALID) || (new_time > UNIX_TIME_MAX_VALID)) {
+		return;
+	}
 
 	struct mach_timespec t;
+	struct thread_public_context_t *context = thread_get_public_context();
 	clock_get_time(context->system_clock_serv, &t);
-	unix_time_ticks_sec_to_gmt_time = new_time - (time64_t)t.tv_sec;
+	time64_t local_ref = (time64_t)t.tv_sec;
+
+	if ((source < unix_time_manager.source) && (unix_time_manager.last_set + UNIX_TIME_SOURCE_EXPIRE > local_ref + unix_time_manager.ticks_sec_to_gmt_time)) {
+		return;
+	}
+
+	unix_time_manager.ticks_sec_to_gmt_time = new_time - local_ref;
+	unix_time_manager.last_set = new_time;
+	unix_time_manager.source = source;
 }
 
 char *unix_time_to_str(time64_t time_v, char *buf)

@@ -46,6 +46,7 @@ extern uint16_t webserver_get_port(struct webserver_t *webserver);
 
 extern void webserver_connection_get_local_ip(struct webserver_connection_t *connection, ip_addr_t *result);
 extern void webserver_connection_get_remote_ip(struct webserver_connection_t *connection, ip_addr_t *result);
+extern const char *webserver_connection_get_host_name(struct webserver_connection_t *connection);
 extern void *webserver_connection_get_page_callback_state(struct webserver_connection_t *connection);
 extern void webserver_connection_set_additional_response_header(struct webserver_connection_t *connection, const char *additional_response_header);
 extern void webserver_connection_send_error(struct webserver_connection_t *connection, const char *http_result);
@@ -81,10 +82,10 @@ struct webserver_connection_t {
 	http_server_connection_method_t method;
 	struct netbuf *uri_nb;
 	struct netbuf *params_nb;
+	char *host_name;
 	uint64_t range_start;
 	uint64_t range_last;
 	uint32_t host_required:1;
-	uint32_t host_detected:1;
 	uint32_t range_detected:1;
 	uint32_t range_error:1;
 	uint32_t language_header:1;

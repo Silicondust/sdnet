@@ -84,12 +84,14 @@ void ip_interface_manager_detect_execute(void)
 			continue;
 		}
 
-		ip_addr_t subnet_mask;
 		struct sockaddr_in *subnet_mask_in = (struct sockaddr_in *)&ifr->ifr_netmask;
-		ip_addr_set_ipv4(&subnet_mask, ntohl(subnet_mask_in->sin_addr.s_addr));
-		if (ip_addr_is_zero(&subnet_mask)) {
+		uint32_t subnet_mask_u32 = ntohl(subnet_mask_in->sin_addr.s_addr);
+		if ((subnet_mask_u32 == 0) || (subnet_mask_u32 == 0xFFFFFFFF)) {
 			continue;
 		}
+
+		ip_addr_t subnet_mask;
+		ip_addr_set_ipv4(&subnet_mask, subnet_mask_u32);
 
 		/*
 		 * ifindex
@@ -99,6 +101,9 @@ void ip_interface_manager_detect_execute(void)
 		}
 
 		uint32_t ifindex = ifr->ifr_ifindex;
+		if (ifindex == 0) {
+			continue;
+		}
 
 		/*
 		 * record
@@ -120,6 +125,7 @@ void ip_interface_manager_detect_execute(void)
 		idi->ifindex = ifindex;
 		idi->ip_addr = ip_addr;
 		idi->subnet_mask = subnet_mask;
+		idi->ip_score = ip_addr_compute_score(&ip_addr);
 		ip_interface_manager_detect_add(idi);
 	}
 

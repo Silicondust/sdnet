@@ -47,6 +47,9 @@ void webserver_connection_free(struct webserver_connection_t *connection)
 	if (connection->params_nb) {
 		netbuf_free(connection->params_nb);
 	}
+	if (connection->host_name) {
+		heap_free(connection->host_name);
+	}
 
 	if (connection->additional_response_header) {
 		heap_free(connection->additional_response_header);
@@ -200,7 +203,11 @@ static webserver_page_result_t webserver_connection_execute(struct webserver_con
 static http_parser_error_t webserver_connection_http_tag_host(void *arg, const char *header, struct netbuf *nb)
 {
 	struct webserver_connection_t *connection = (struct webserver_connection_t *)arg;
-	connection->host_detected = true;
+	if (connection->host_name) {
+		return HTTP_PARSER_OK;
+	}
+
+	connection->host_name = heap_netbuf_strdup(nb, PKG_OS, MEM_TYPE_OS_WEBSERVER_CONNECTION_HOST_NAME);
 	return HTTP_PARSER_OK;
 }
 
@@ -290,7 +297,7 @@ static http_parser_error_t webserver_connection_http_event(void *arg, http_parse
 		return HTTP_PARSER_OK;
 
 	case HTTP_PARSER_EVENT_HEADER_COMPLETE:
-		if (connection->host_required && !connection->host_detected) {
+		if (connection->host_required && !connection->host_name) {
 			DEBUG_WARN("no host field");
 			webserver_connection_send_error(connection, http_result_bad_request);
 			webserver_connection_free(connection);
@@ -374,6 +381,11 @@ void webserver_connection_get_local_ip(struct webserver_connection_t *connection
 void webserver_connection_get_remote_ip(struct webserver_connection_t *connection, ip_addr_t *result)
 {
 	tcp_connection_get_remote_addr(connection->conn, result);
+}
+
+const char *webserver_connection_get_host_name(struct webserver_connection_t *connection)
+{
+	return connection->host_name;
 }
 
 void *webserver_connection_get_page_callback_state(struct webserver_connection_t *connection)

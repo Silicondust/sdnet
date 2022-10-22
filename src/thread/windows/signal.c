@@ -18,6 +18,8 @@
 
 THIS_FILE("signal");
 
+#define THREAD_SIGNAL_MAX_WAIT_TICKS 0x00000000FFFFFFFEULL
+
 struct thread_signal_t {
 	HANDLE event_handle;
 };
@@ -33,6 +35,15 @@ void thread_suspend_wait_for_signal_or_ticks(struct thread_signal_t *signal, tic
 {
 	thread_yield();
 
+	if (ticks == TICKS_INFINITE) {
+		WaitForSingleObject(signal->event_handle, INFINITE);
+		return;
+	}
+
+	if (ticks > THREAD_SIGNAL_MAX_WAIT_TICKS) {
+		ticks = THREAD_SIGNAL_MAX_WAIT_TICKS;
+	}
+
 	WaitForSingleObject(signal->event_handle, (DWORD)ticks);
 }
 
@@ -40,12 +51,23 @@ void thread_suspend_wait_for_signal_or_timestamp(struct thread_signal_t *signal,
 {
 	thread_yield();
 
+	if (timestamp == TICKS_INFINITE) {
+		WaitForSingleObject(signal->event_handle, INFINITE);
+		return;
+	}
+
 	ticks_t current_time = timer_get_ticks();
 	if (current_time >= timestamp) {
 		WaitForSingleObject(signal->event_handle, 0);
-	} else {
-		WaitForSingleObject(signal->event_handle, (DWORD)(timestamp - current_time));
+		return;
 	}
+
+	ticks_t ticks = timestamp - current_time;
+	if (ticks > THREAD_SIGNAL_MAX_WAIT_TICKS) {
+		ticks = THREAD_SIGNAL_MAX_WAIT_TICKS;
+	}
+
+	WaitForSingleObject(signal->event_handle, (DWORD)ticks);
 }
 
 void thread_signal_set(struct thread_signal_t *signal)

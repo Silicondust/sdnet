@@ -22,6 +22,7 @@ struct file_t;
 
 typedef int8_t tcp_error_t;
 typedef uint8_t tcp_close_reason_t;
+typedef void (*tcp_accept_callback_t)(void *inst, const ip_addr_t *remote_addr, uint32_t ipv6_scope_id);
 typedef void (*tcp_connect_callback_t)(void *inst);
 typedef void (*tcp_establish_callback_t)(void *inst);
 typedef void (*tcp_recv_callback_t)(void *inst, struct netbuf *nb);
@@ -47,7 +48,7 @@ extern uint32_t tcp_connection_get_remote_addr(struct tcp_connection *tc, ip_add
 extern uint16_t tcp_connection_get_remote_port(struct tcp_connection *tc);
 
 extern struct tcp_socket *tcp_socket_alloc(ip_mode_t ip_mode);
-extern tcp_error_t tcp_socket_listen(struct tcp_socket *ts, uint16_t port, tcp_connect_callback_t connect, void *inst);
+extern tcp_error_t tcp_socket_listen(struct tcp_socket *ts, uint16_t port, tcp_accept_callback_t accept_callback, void *inst);
 extern void tcp_socket_accept(struct tcp_socket *ts, struct tcp_connection *tc, tcp_establish_callback_t est, tcp_recv_callback_t recv, tcp_close_callback_t close, void *inst);
 extern void tcp_socket_reject(struct tcp_socket *ts);
 extern uint16_t tcp_socket_get_port(struct tcp_socket *ts);

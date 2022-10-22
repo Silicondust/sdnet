@@ -67,14 +67,14 @@ static void ip_managed_get_ifflags(struct ip_managed_t *ipm, struct ifreq *ifr)
 	memset(ifr, 0, sizeof(struct ifreq));
 	strncpy(ifr->ifr_name, ipm->interface_name, IFNAMSIZ);
 	if (ioctl(ipm->ioctl_sock, SIOCGIFFLAGS, ifr)) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 	}
 }
 
 static void ip_managed_set_ifflags(struct ip_managed_t *ipm, struct ifreq *ifr)
 {
 	if (ioctl(ipm->ioctl_sock, SIOCSIFFLAGS, ifr)) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 	}
 }
 
@@ -104,7 +104,7 @@ static void ip_managed_add_route(struct ip_managed_t *ipm, ipv4_addr_t dst_ip, i
 	rt_gateway->sin_addr.s_addr = htonl(gateway);
 
 	if (ioctl(ipm->ioctl_sock, SIOCADDRT, &rte) < 0) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 	}
 }
 
@@ -125,7 +125,7 @@ void ip_managed_set_mac_addr(struct ip_managed_t *ipm, uint8_t mac_addr[6])
 	ifr.ifr_hwaddr.sa_family = 1;
 	memcpy(ifr.ifr_hwaddr.sa_data, mac_addr, 6);
 	if (ioctl(ipm->ioctl_sock, SIOCSIFHWADDR, &ifr) < 0) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 	}
 
 	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
@@ -159,18 +159,18 @@ void ip_managed_set_ipv4_addr(struct ip_managed_t *ipm, ipv4_addr_t ip_addr, ipv
 
 	ifraddr->sin_addr.s_addr = htonl(ip_addr);
 	if (ioctl(ipm->ioctl_sock, SIOCSIFADDR, &ifr)) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 	}
 
 	if (ip_addr != 0) {
 		ifraddr->sin_addr.s_addr = htonl(subnet_mask);
 		if (ioctl(ipm->ioctl_sock, SIOCSIFNETMASK, &ifr)) {
-			DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+			DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 		}
 
 		ifraddr->sin_addr.s_addr = htonl(ip_addr | ~subnet_mask);
 		if (ioctl(ipm->ioctl_sock, SIOCSIFBRDADDR, &ifr)) {
-			DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+			DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 		}
 	}
 
@@ -211,7 +211,7 @@ void ip_managed_set_wifi_ap(struct ip_managed_t *ipm)
 
 	iwr.u.mode = IW_MODE_MASTER;
 	if (ioctl(ipm->ioctl_sock, SIOCSIWMODE, &iwr)) {
-		DEBUG_ERROR("ioctl SIOCSIWMODE failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl SIOCSIWMODE failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 	}
 
 	ip_interface_manager_redetect_required();
@@ -231,12 +231,12 @@ void ip_managed_set_loopback(struct ip_managed_t *ipm)
 
 	ifraddr->sin_addr.s_addr = htonl(ip_addr_get_ipv4(&ipm->ip_addr));
 	if (ioctl(ipm->ioctl_sock, SIOCSIFADDR, &ifr)) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 	}
 
 	ifraddr->sin_addr.s_addr = htonl(ip_addr_get_ipv4(&ipm->subnet_mask));
 	if (ioctl(ipm->ioctl_sock, SIOCSIFNETMASK, &ifr)) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 	}
 
 	struct ifreq ifflags;
@@ -257,13 +257,13 @@ bool ip_managed_read_ethernet_mii_register(struct ip_managed_t *ipm, uint8_t reg
 	mii->reg_num = reg_addr;
 
 	if (ioctl(ipm->ioctl_sock, SIOCGMIIPHY, &ifr) < 0) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 		*presult = 0;
 		return false;
 	}
 
 	if (ioctl(ipm->ioctl_sock, SIOCGMIIREG, &ifr) < 0) {
-		DEBUG_ERROR("ioctl failed %d %s", errno, strerror(errno));
+		DEBUG_ERROR("ioctl failed %s %d %s", ipm->interface_name, errno, strerror(errno));
 		*presult = 0;
 		return false;
 	}

@@ -18,6 +18,7 @@
 
 THIS_FILE("webclient");
 
+static void webclient_execute_dns_or_connect(struct webclient_t *webclient, bool force_ipv4);
 static void webclient_execute_future(void *arg);
 static http_parser_error_t webclient_http_tag_webclient(void *arg, const char *header, struct netbuf *nb);
 static http_parser_error_t webclient_http_tag_location(void *arg, const char *header, struct netbuf *nb);
@@ -266,6 +267,12 @@ static void webclient_conn_close(void *arg, tcp_close_reason_t reason)
 	if (webclient->tls_conn) {
 		tls_client_connection_deref(webclient->tls_conn);
 		webclient->tls_conn = NULL;
+	}
+
+	if (webclient->fast_retry_ipv4) {
+		webclient->fast_retry_ipv4 = false;
+		webclient_execute_dns_or_connect(webclient, true);
+		return;
 	}
 
 	if (!http_parser_is_valid_complete(webclient->http_parser)) {
@@ -583,6 +590,8 @@ static bool webclient_send_header(struct webclient_t *webclient, struct webclien
 static void webclient_conn_established(void *arg)
 {
 	struct webclient_t *webclient = (struct webclient_t *)arg;
+	webclient->fast_retry_ipv4 = false;
+
 	struct webclient_operation_t *operation = webclient->current_operation;
 	if (!operation) {
 		webclient_schedule_execute(webclient);
@@ -657,7 +666,7 @@ static bool webclient_build_and_set_http_tag_list(struct webclient_t *webclient)
 	return true;
 }
 
-static void webclient_execute_connect(struct webclient_t *webclient)
+static void webclient_execute_connect(struct webclient_t *webclient, ip_addr_t *ip_addr)
 {
 	struct webclient_operation_t *operation = webclient->current_operation;
 	DEBUG_ASSERT(webclient->current_operation, "execute_connect called without operation");
@@ -683,10 +692,17 @@ static void webclient_execute_connect(struct webclient_t *webclient)
 			tcp_connection_set_max_recv_nb_size(webclient->tcp_conn, webclient->max_recv_nb_size);
 		}
 
-		if (tcp_connection_connect(webclient->tcp_conn, &operation->url.ip_addr, operation->url.ip_port, operation->url.ipv6_scope_id, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient) != TCP_OK) {
+		if (tcp_connection_connect(webclient->tcp_conn, ip_addr, operation->url.ip_port, operation->url.ipv6_scope_id, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient) != TCP_OK) {
 			DEBUG_WARN("connect failed");
 			tcp_connection_deref(webclient->tcp_conn);
 			webclient->tcp_conn = NULL;
+
+			if (webclient->fast_retry_ipv4) {
+				webclient->fast_retry_ipv4 = false;
+				webclient_execute_dns_or_connect(webclient, true);
+				return;
+			}
+
 			webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_CONNECT_FAILED, 0, "connect failed");
 			return;
 		}
@@ -702,10 +718,17 @@ static void webclient_execute_connect(struct webclient_t *webclient)
 			return;
 		}
 
-		if (!tls_client_connection_connect(webclient->tls_conn, &operation->url.ip_addr, operation->url.ip_port, operation->url.ipv6_scope_id, operation->url.dns_name, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient)) {
+		if (!tls_client_connection_connect(webclient->tls_conn, ip_addr, operation->url.ip_port, operation->url.ipv6_scope_id, operation->url.dns_name, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient)) {
 			DEBUG_WARN("connect failed");
 			tls_client_connection_deref(webclient->tls_conn);
 			webclient->tls_conn = NULL;
+
+			if (webclient->fast_retry_ipv4) {
+				webclient->fast_retry_ipv4 = false;
+				webclient_execute_dns_or_connect(webclient, true);
+				return;
+			}
+
 			webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_CONNECT_FAILED, 0, "connect failed");
 			return;
 		}
@@ -728,28 +751,31 @@ static void webclient_execute_dns_callback(void *arg, uint16_t record_type, cons
 	}
 
 	if (ip_addr_is_zero(ip) && (record_type == DNS_RECORD_TYPE_AAAA)) {
-		if (dns_lookup_gethostbyname(webclient->dns_lookup, operation->url.dns_name, DNS_RECORD_TYPE_A, webclient_execute_dns_callback, webclient)) {
-			return;
+		if (!dns_lookup_gethostbyname(webclient->dns_lookup, operation->url.dns_name, DNS_RECORD_TYPE_A, webclient_execute_dns_callback, webclient)) {
+			/* fallthrough */
+		} else {
+			return; /* wait for A-record dns callback */
 		}
 	}
 
-	operation->url.ip_addr = *ip;
+	ip_addr_t ip_addr = *ip;
 	operation->stats.dns_time = timer_get_ticks();
 
 	dns_lookup_deref(webclient->dns_lookup);
 	webclient->dns_lookup = NULL;
 
-	if (ip_addr_is_zero(&operation->url.ip_addr)) {
+	if (ip_addr_is_zero(&ip_addr)) {
 		DEBUG_WARN("dns failed");
 		webclient_operation_complete_close_webclient(webclient, WEBCLIENT_RESULT_DNS_FAILED, 0, "dns failed");
 		return;
 	}
 
-	DEBUG_INFO("%s ip = %V", operation->url.dns_name, &operation->url.ip_addr);
-	webclient_execute_connect(webclient);
+	DEBUG_INFO("%s ip = %V", operation->url.dns_name, &ip_addr);
+	webclient->fast_retry_ipv4 = ip_addr_is_ipv6(&ip_addr);
+	webclient_execute_connect(webclient, &ip_addr);
 }
 
-static void webclient_execute_dns_or_connect(struct webclient_t *webclient)
+static void webclient_execute_dns_or_connect(struct webclient_t *webclient, bool force_ipv4)
 {
 	struct webclient_operation_t *operation = webclient->current_operation;
 	DEBUG_ASSERT(webclient->current_operation, "execute_dns called without operation");
@@ -757,7 +783,7 @@ static void webclient_execute_dns_or_connect(struct webclient_t *webclient)
 	DEBUG_ASSERT(!webclient->dns_lookup, "active dns operation");
 
 	if (ip_addr_is_non_zero(&operation->url.ip_addr)) {
-		webclient_execute_connect(webclient);
+		webclient_execute_connect(webclient, &operation->url.ip_addr);
 		return;
 	}
 
@@ -767,7 +793,7 @@ static void webclient_execute_dns_or_connect(struct webclient_t *webclient)
 		return;
 	}
 
-	uint16_t record_type = ip_interface_manager_has_public_ipv6() ? DNS_RECORD_TYPE_AAAA : DNS_RECORD_TYPE_A;
+	uint16_t record_type = (!force_ipv4 && ip_interface_manager_has_public_ipv6()) ? DNS_RECORD_TYPE_AAAA : DNS_RECORD_TYPE_A;
 	if (!dns_lookup_gethostbyname(webclient->dns_lookup, operation->url.dns_name, record_type, webclient_execute_dns_callback, webclient)) {
 		webclient_execute_dns_callback(webclient, record_type, &ip_addr_zero, 0);
 	}
@@ -817,7 +843,7 @@ static void webclient_execute_start(struct webclient_t *webclient, struct webcli
 
 	if (!webclient->tcp_conn && !webclient->tls_conn) {
 		sprintf_custom(webclient->dns_name, webclient->dns_name + sizeof(webclient->dns_name), "%s", operation->url.dns_name);
-		webclient_execute_dns_or_connect(webclient);
+		webclient_execute_dns_or_connect(webclient, false);
 		return;
 	}
 
@@ -832,7 +858,7 @@ static void webclient_execute_start(struct webclient_t *webclient, struct webcli
 
 		DEBUG_INFO("failed to send using existing webclient, starting new webclient");
 		webclient_close_internal(webclient);
-		webclient_execute_dns_or_connect(webclient);
+		webclient_execute_dns_or_connect(webclient, false);
 		return;
 	}
 

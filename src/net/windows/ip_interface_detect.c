@@ -56,6 +56,11 @@ void ip_interface_manager_detect_execute(void)
 	IP_ADAPTER_ADDRESSES *adapter = adapter_addresses;
 
 	while (adapter) {
+		if (adapter->OperStatus != 1) {
+			adapter = adapter->Next;
+			continue;
+		}
+
 		if ((adapter->IfType != MIB_IF_TYPE_ETHERNET) && (adapter->IfType != IF_TYPE_IEEE80211)) {
 			adapter = adapter->Next;
 			continue;
@@ -67,6 +72,10 @@ void ip_interface_manager_detect_execute(void)
 		}
 
 		uint32_t ifindex = adapter->IfIndex;
+		if (ifindex == 0) {
+			adapter = adapter->Next;
+			continue;
+		}
 
 		IP_ADAPTER_UNICAST_ADDRESS *adapter_address = adapter->FirstUnicastAddress;
 		while (adapter_address) {
@@ -81,9 +90,9 @@ void ip_interface_manager_detect_execute(void)
 			struct sockaddr *sock_addr = adapter_address->Address.lpSockaddr;
 #if defined(IPV6_SUPPORT)
 			if (sock_addr->sa_family == AF_INET6) {
-				if (adapter_address->ValidLifetime != 0xFFFFFFFF) {
+				if ((adapter_address->OnLinkPrefixLength == 0) || (adapter_address->OnLinkPrefixLength >= 128)) {
 					adapter_address = adapter_address->Next;
-					continue; /* skip temporary IPv6 addresses */
+					continue;
 				}
 
 				struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)sock_addr;
@@ -91,6 +100,11 @@ void ip_interface_manager_detect_execute(void)
 			}
 #endif
 			if (sock_addr->sa_family == AF_INET) {
+				if ((adapter_address->OnLinkPrefixLength == 0) || (adapter_address->OnLinkPrefixLength >= 32)) {
+					adapter_address = adapter_address->Next;
+					continue;
+				}
+
 				struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)sock_addr;
 				ip_addr_set_ipv4(&ip_addr, ntohl(sock_addr_in->sin_addr.s_addr));
 			}
@@ -128,6 +142,7 @@ void ip_interface_manager_detect_execute(void)
 			idi->ifindex = ifindex;
 			idi->ip_addr = ip_addr;
 			idi->subnet_mask = subnet_mask;
+			idi->ip_score = ip_addr_compute_score(&ip_addr);
 			ip_interface_manager_detect_add(idi);
 
 			adapter_address = adapter_address->Next;

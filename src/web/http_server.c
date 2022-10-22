@@ -234,7 +234,7 @@ static void http_server_add_connection(struct http_server_t *http_server, struct
 	}
 }
 
-static void http_server_sock_accept(void *arg)
+static void http_server_sock_accept(void *arg, const ip_addr_t *remote_addr, uint32_t ipv6_scope_id)
 {
 	struct http_server_listen_t *listen = (struct http_server_listen_t *)arg;
 	struct http_server_t *http_server = listen->http_server;
@@ -254,7 +254,8 @@ static void http_server_sock_accept(void *arg)
 		return;
 	}
 
-	tcp_connection_set_ttl(connection->conn, http_server->default_ttl);
+	uint8_t ttl = ip_addr_is_public(remote_addr) ? http_server->public_ttl : http_server->default_ttl;
+	tcp_connection_set_ttl(connection->conn, ttl);
 
 	connection->http_parser = http_parser_alloc(http_server_connection_http_event, connection);
 	if (!connection->http_parser) {
@@ -277,9 +278,10 @@ uint16_t http_server_get_port(struct http_server_t *http_server)
 	return tcp_socket_get_port(http_server->ipv4.listen_sock);
 }
 
-void http_server_set_default_ttl(struct http_server_t *http_server, uint8_t default_ttl)
+void http_server_set_default_ttl(struct http_server_t *http_server, uint8_t default_ttl, uint8_t public_ttl)
 {
 	http_server->default_ttl = default_ttl;
+	http_server->public_ttl = public_ttl;
 }
 
 void http_server_network_reset(struct http_server_t *http_server)
@@ -321,6 +323,7 @@ struct http_server_t *http_server_instance_alloc(uint16_t port)
 
 	oneshot_init(&http_server->connection_timer);
 	http_server->default_ttl = 64;
+	http_server->public_ttl = 64;
 
 	http_server->ipv4.http_server = http_server;
 	http_server->ipv4.listen_sock = tcp_socket_alloc(IP_MODE_IPV4);

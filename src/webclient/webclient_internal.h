@@ -49,6 +49,7 @@ struct webclient_t {
 	uint16_t http_result;
 	uint8_t pipeline_state;
 	uint64_t data_on_dead_operation;
+	bool fast_retry_ipv4;
 	bool redirect_url_updated;
 	bool expect_100_continue;
 	bool keep_alive_accepted;

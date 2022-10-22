@@ -24,4 +24,3 @@ struct udp_socket {
 };
 
 extern void udp_set_sock_send_buffer_size(int sock, size_t size);
-extern udp_error_t udp_socket_listen_internal(struct udp_socket *us, struct ip_interface_t *idi, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst);

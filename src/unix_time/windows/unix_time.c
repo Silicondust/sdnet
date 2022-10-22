@@ -18,15 +18,27 @@
 
 THIS_FILE("unix_time");
 
-static time64_t unix_time_ticks_sec_to_gmt_time = 0;
+struct unix_time_manager_t {
+	time64_t ticks_sec_to_gmt_time;
+	time64_t last_set;
+	unix_time_source_t source;
+};
+
+static struct unix_time_manager_t unix_time_manager;
 
 time64_t unix_time(void)
 {
-	if (unix_time_ticks_sec_to_gmt_time == 0) {
+	if (unix_time_manager.ticks_sec_to_gmt_time == 0) {
 		return _time64(NULL);
 	}
 
-	return (GetTickCount64() / 1000) + unix_time_ticks_sec_to_gmt_time;
+	time64_t local_ref = GetTickCount64() / 1000;
+	return local_ref + unix_time_manager.ticks_sec_to_gmt_time;
+}
+
+time64_t unix_time_last_set(void)
+{
+	return unix_time_manager.last_set;
 }
 
 time64_t unix_time_get_offset_from_native(void)
@@ -43,9 +55,21 @@ void unit_time_get_timespec(struct timespec64 *tp)
 	tp->tv_nsec = native_tp.tv_nsec;
 }
 
-void unix_time_set(time64_t new_time)
+void unix_time_set(time64_t new_time, unix_time_source_t source)
 {
-	unix_time_ticks_sec_to_gmt_time = new_time - (GetTickCount64() / 1000);
+	if ((new_time < UNIX_TIME_MIN_VALID) || (new_time > UNIX_TIME_MAX_VALID)) {
+		return;
+	}
+
+	time64_t local_ref = GetTickCount64() / 1000;
+
+	if ((source < unix_time_manager.source) && (unix_time_manager.last_set + UNIX_TIME_SOURCE_EXPIRE > local_ref + unix_time_manager.ticks_sec_to_gmt_time)) {
+		return;
+	}
+
+	unix_time_manager.ticks_sec_to_gmt_time = new_time - local_ref;
+	unix_time_manager.last_set = new_time;
+	unix_time_manager.source = source;
 }
 
 char *unix_time_to_str(time64_t time_v, char *buf)

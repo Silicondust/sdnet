@@ -21,5 +21,3 @@ struct udp_socket {
 	volatile udp_recv_icmp_callback_t recv_icmp_callback;
 	void *callback_inst;
 };
-
-extern udp_error_t udp_socket_listen_internal(struct udp_socket *us, struct ip_interface_t *idi, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst);

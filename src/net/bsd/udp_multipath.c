@@ -60,7 +60,7 @@ static struct udp_multipath_t *udp_socket_multipath_find_create(struct udp_socke
 	ump->addr = local_ip;
 	ump->ifindex = ifindex;
 	ump->ipv6_scope_id = ip_interface_get_ipv6_scope_id(idi);
-	ump->bind_ok = (udp_socket_listen_internal(ump->us, idi, us->port, us->recv_callback, us->recv_icmp_callback, us->callback_inst) == UDP_OK);
+	ump->bind_ok = (udp_socket_listen_idi(ump->us, idi, us->port, us->recv_callback, us->recv_icmp_callback, us->callback_inst) == UDP_OK);
 
 	slist_attach_head(struct udp_multipath_t, &us->multipath_list, ump);
 	return ump;

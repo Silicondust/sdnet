@@ -14,6 +14,7 @@ struct ip_interface_t {
 	uint32_t ifindex;
 	ip_addr_t ip_addr;
 	ip_addr_t subnet_mask;
+	uint8_t ip_score;
 	bool notified_new;
 };
 

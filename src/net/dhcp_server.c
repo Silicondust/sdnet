@@ -338,6 +338,14 @@ static void dhcp_server_send(const ip_addr_t *dest_addr, uint8_t message_type, u
 		netbuf_fwd_write_u8(txnb, 4);
 		netbuf_fwd_write_u32(txnb, dhcp_server.local_ip_addr);
 
+#if defined(DHCP_SERVER_DOMAIN_NAME)
+		static const char dhcp_domain_name[] = DHCP_SERVER_DOMAIN_NAME;
+		size_t dhcp_domain_name_len = strlen(dhcp_domain_name);
+		netbuf_fwd_write_u8(txnb, DHCP_TAG_DOMAIN_NAME);
+		netbuf_fwd_write_u8(txnb, dhcp_domain_name_len);
+		netbuf_fwd_write(txnb, dhcp_domain_name, dhcp_domain_name_len);
+#endif
+
 #if defined(DHCP_SERVER_CAPTIVE_PORTAL_URL)
 		static const char dhcp_captive_portal_url[] = DHCP_SERVER_CAPTIVE_PORTAL_URL;
 		size_t dhcp_captive_portal_len = strlen(dhcp_captive_portal_url);
@@ -356,11 +364,11 @@ static void dhcp_server_send(const ip_addr_t *dest_addr, uint8_t message_type, u
 
 	netbuf_set_end_to_pos(txnb);
 	netbuf_set_pos_to_start(txnb);
-	udp_dhcp_socket_send_netbuf(dhcp_server.sock, dhcp_server.idi, dest_addr, DHCP_CLIENT_PORT, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+	udp_socket_send_netbuf(dhcp_server.sock, dest_addr, DHCP_CLIENT_PORT, 0, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
 	netbuf_free(txnb);
 }
 
-static void dhcp_server_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, struct netbuf *nb)
+static void dhcp_server_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_port, uint32_t ipv6_scope_id, struct netbuf *nb)
 {
 	if (src_port != DHCP_CLIENT_PORT) {
 		DEBUG_WARN("unexpected client port");
@@ -468,7 +476,7 @@ static void dhcp_server_recv(void *inst, const ip_addr_t *src_addr, uint16_t src
 
 	ip_addr_t dest_addr;
 	if (ip_addr_is_non_zero(src_addr)) {
-		dest_addr = src_addr;
+		dest_addr = *src_addr;
 	} else {
 		dest_addr = ip_addr_ipv4_broadcast;
 	}
@@ -483,7 +491,7 @@ static void dhcp_server_recv(void *inst, const ip_addr_t *src_addr, uint16_t src
 			return;
 		}
 
-		dhcp_server_send(dest_addr, DHCP_MESSAGE_TYPE_OFFER, transaction_id, chosen_ip_addr, client_mac_addr);
+		dhcp_server_send(&dest_addr, DHCP_MESSAGE_TYPE_OFFER, transaction_id, chosen_ip_addr, client_mac_addr);
 		return;
 	}
 
@@ -494,11 +502,11 @@ static void dhcp_server_recv(void *inst, const ip_addr_t *src_addr, uint16_t src
 		}
 
 		if (!dhcp_server_client_list_check_addr(requested_ip_addr, client_mac_addr)) {
-			dhcp_server_send(dest_addr, DHCP_MESSAGE_TYPE_NACK, transaction_id, 0, client_mac_addr);
+			dhcp_server_send(&dest_addr, DHCP_MESSAGE_TYPE_NACK, transaction_id, 0, client_mac_addr);
 			return;
 		}
 
-		dhcp_server_send(dest_addr, DHCP_MESSAGE_TYPE_ACK, transaction_id, requested_ip_addr, client_mac_addr);
+		dhcp_server_send(&dest_addr, DHCP_MESSAGE_TYPE_ACK, transaction_id, requested_ip_addr, client_mac_addr);
 		dhcp_server_store_state();
 		return;
 	}
@@ -524,6 +532,6 @@ void dhcp_server_init(struct ip_interface_t *idi, ipv4_addr_t local_ip_addr, ipv
 	dhcp_server.client_ip_last = client_ip_last;
 	dhcp_server.subnet_mask = subnet_mask;
 
-	dhcp_server.sock = udp_dhcp_socket_alloc();
-	udp_dhcp_socket_listen(dhcp_server.sock, idi, DHCP_SERVER_PORT, dhcp_server_recv, NULL, NULL);
+	dhcp_server.sock = udp_socket_alloc(IP_MODE_IPV4);
+	udp_socket_listen_idi(dhcp_server.sock, idi, DHCP_SERVER_PORT, dhcp_server_recv, NULL, NULL);
 }

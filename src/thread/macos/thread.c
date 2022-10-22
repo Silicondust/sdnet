@@ -18,6 +18,8 @@
 
 THIS_FILE("thread");
 
+#define THREAD_SIGNAL_MAX_WAIT_TICKS 0x00000000FFFFFFFEULL
+
 void thread_public_context_init(struct thread_public_context_t *context)
 {
 	host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &context->system_clock_serv);
@@ -25,6 +27,10 @@ void thread_public_context_init(struct thread_public_context_t *context)
 
 void thread_pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, ticks_t timeout_duration)
 {
+	if (timeout_duration > THREAD_SIGNAL_MAX_WAIT_TICKS) {
+		timeout_duration = THREAD_SIGNAL_MAX_WAIT_TICKS;
+	}
+
 	struct timespec ts;
 	ts.tv_nsec = (long)(timeout_duration % 1000) * 1000000;
 	ts.tv_sec = (time_t)(timeout_duration / 1000);

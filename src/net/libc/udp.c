@@ -88,9 +88,7 @@ static void udp_socket_set_tos_internal(int sock, ip_mode_t ip_mode, uint8_t tos
 
 udp_error_t udp_socket_send_netbuf(struct udp_socket *us, const ip_addr_t *dest_addr, uint16_t dest_port, uint32_t ipv6_scope_id, uint8_t ttl, uint8_t tos, struct netbuf *nb)
 {
-	if (RUNTIME_DEBUG && !ip_addr_is_ipv6_multicast(dest_addr)) {
-		DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(dest_addr, ipv6_scope_id);
-	}
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(dest_addr, ipv6_scope_id);
 
 	if (ttl != us->ttl_set) {
 		udp_socket_set_ttl_internal(us->sock, us->ip_mode, ttl);
@@ -246,17 +244,23 @@ static void udp_socket_thread_recv(struct udp_socket *us)
 	uint32_t ipv6_scope_id = 0;
 #endif
 
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&src_addr, ipv6_scope_id);
+
+	if (!ip_addr_is_zero(&src_addr) && !ip_addr_is_unicast(&src_addr)) {
+		netbuf_free(nb);
+		return;
+	}
+
 	netbuf_set_end(nb, netbuf_get_pos(nb) + (size_t)length);
 
 	thread_main_enter();
-	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&src_addr, ipv6_scope_id);
 	us->recv_callback(us->callback_inst, &src_addr, src_port, ipv6_scope_id, nb);
 	thread_main_exit();
 
 	netbuf_free(nb);
 }
 
-udp_error_t udp_socket_listen_internal(struct udp_socket *us, struct ip_interface_t *idi, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
+udp_error_t udp_socket_listen_idi(struct udp_socket *us, struct ip_interface_t *idi, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
 {
 	DEBUG_ASSERT(recv, "no recv callback specified");
 
@@ -276,7 +280,7 @@ udp_error_t udp_socket_listen_internal(struct udp_socket *us, struct ip_interfac
 	/* Bind. */
 	ip_addr_t local_ip;
 	uint32_t ifindex;
-	uint32_t ipv6_scope_id;
+	uint32_t ipv6_scope_id __unused;
 	if (idi) {
 		ip_interface_get_local_ip(idi, &local_ip);
 		ifindex = ip_interface_get_ifindex(idi);
@@ -359,7 +363,7 @@ udp_error_t udp_socket_listen_internal(struct udp_socket *us, struct ip_interfac
 
 udp_error_t udp_socket_listen(struct udp_socket *us, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
 {
-	return udp_socket_listen_internal(us, NULL, port, recv, recv_icmp, inst);
+	return udp_socket_listen_idi(us, NULL, port, recv, recv_icmp, inst);
 }
 
 void udp_socket_set_icmp_callback(struct udp_socket *us, udp_recv_icmp_callback_t recv_icmp)

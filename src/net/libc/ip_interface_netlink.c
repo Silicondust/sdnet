@@ -57,6 +57,9 @@ static void ip_interface_manager_detect_execute_newaddr(int af_sock, struct nlms
 	 * ifindex
 	 */
 	uint32_t ifindex = addrmsg->ifa_index;
+	if (ifindex == 0) {
+		return;
+	}
 
 	/*
 	 * interface flags
@@ -115,6 +118,12 @@ static void ip_interface_manager_detect_execute_newaddr(int af_sock, struct nlms
 		/*
 		 * subnet mask
 		 */
+		uint8_t cidr_fail = (addrmsg->ifa_family == AF_INET6) ? 128 : 32;
+		if ((addrmsg->ifa_prefixlen == 0) || (addrmsg->ifa_prefixlen >= cidr_fail)) {
+			rta = RTA_NEXT(rta, ifa_payload_length);
+			continue;
+		}
+
 		ip_addr_t subnet_mask;
 		ip_addr_set_subnet_mask_from_cidr(&subnet_mask, &ip_addr, (uint8_t)addrmsg->ifa_prefixlen);
 		if (ip_addr_is_zero(&subnet_mask)) {
@@ -145,6 +154,7 @@ static void ip_interface_manager_detect_execute_newaddr(int af_sock, struct nlms
 		idi->ifindex = ifindex;
 		idi->ip_addr = ip_addr;
 		idi->subnet_mask = subnet_mask;
+		idi->ip_score = ip_addr_compute_score(&ip_addr);
 		ip_interface_manager_detect_add(idi);
 	}
 }

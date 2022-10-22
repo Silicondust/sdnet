@@ -60,6 +60,7 @@
 #include <net/dns_lookup.h>
 #include <net/dns_responder.h>
 #include <net/mdns_responder.h>
+#include <net/ntp_server.h>
 #include <net/udp.h>
 #include <net/udp_dhcp.h>
 #include <net/tcp.h>

@@ -32,7 +32,8 @@ extern uint32_t hmap_hash_create_str(const char *ptr);
 extern uint32_t hmap_hash_append(uint32_t hash, const void *ptr, size_t length);
 extern uint32_t hmap_hash_append_str(uint32_t hash, const char *ptr);
 
-extern uint32_t hamp_get_count(struct hmap_t *map);
+extern bool hmap_initialized(struct hmap_t *map);
+extern uint32_t hmap_get_count(struct hmap_t *map);
 
 #define hmap_find(type, map, hash) (type *)(void *)hmap_find_impl(map, hash)
 #define hmap_next(type, map, hash) (type *)(void *)hmap_next_impl(map, hash)

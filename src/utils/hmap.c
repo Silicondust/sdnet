@@ -18,7 +18,12 @@
 
 THIS_FILE("hmap");
 
-uint32_t hamp_get_count(struct hmap_t *map)
+bool hmap_initialized(struct hmap_t *map)
+{
+	return (map->hash_array != NULL);
+}
+
+uint32_t hmap_get_count(struct hmap_t *map)
 {
 	uint32_t count = 0;
 

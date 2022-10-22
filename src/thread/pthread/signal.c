@@ -31,10 +31,13 @@ void thread_suspend_wait_for_signal(struct thread_signal_t *signal)
 
 	pthread_mutex_lock(&signal->mutex);
 
-	if (!signal->signaled) {
-		pthread_cond_wait(&signal->cond, &signal->mutex);
+	if (signal->signaled) {
+		signal->signaled = false;
+		pthread_mutex_unlock(&signal->mutex);
+		return;
 	}
 
+	pthread_cond_wait(&signal->cond, &signal->mutex);
 	signal->signaled = false;
 	pthread_mutex_unlock(&signal->mutex);
 }
@@ -45,10 +48,20 @@ void thread_suspend_wait_for_signal_or_ticks(struct thread_signal_t *signal, tic
 
 	pthread_mutex_lock(&signal->mutex);
 
-	if (!signal->signaled) {
-		thread_pthread_cond_timedwait(&signal->cond, &signal->mutex, ticks);
+	if (signal->signaled) {
+		signal->signaled = false;
+		pthread_mutex_unlock(&signal->mutex);
+		return;
 	}
 
+	if (ticks == TICKS_INFINITE) {
+		pthread_cond_wait(&signal->cond, &signal->mutex);
+		signal->signaled = false;
+		pthread_mutex_unlock(&signal->mutex);
+		return;
+	}
+
+	thread_pthread_cond_timedwait(&signal->cond, &signal->mutex, ticks);
 	signal->signaled = false;
 	pthread_mutex_unlock(&signal->mutex);
 }
@@ -59,13 +72,28 @@ void thread_suspend_wait_for_signal_or_timestamp(struct thread_signal_t *signal,
 
 	pthread_mutex_lock(&signal->mutex);
 
-	if (!signal->signaled) {
-		ticks_t current_time = timer_get_ticks();
-		if (current_time < timestamp) {
-			thread_pthread_cond_timedwait(&signal->cond, &signal->mutex, timestamp - current_time);
-		}
+	if (signal->signaled) {
+		signal->signaled = false;
+		pthread_mutex_unlock(&signal->mutex);
+		return;
 	}
 
+	if (timestamp == TICKS_INFINITE) {
+		pthread_cond_wait(&signal->cond, &signal->mutex);
+		signal->signaled = false;
+		pthread_mutex_unlock(&signal->mutex);
+		return;
+	}
+
+	ticks_t current_time = timer_get_ticks();
+	if (current_time >= timestamp) {
+		signal->signaled = false;
+		pthread_mutex_unlock(&signal->mutex);
+		return;
+	}
+
+	ticks_t ticks = timestamp - current_time;
+	thread_pthread_cond_timedwait(&signal->cond, &signal->mutex, ticks);
 	signal->signaled = false;
 	pthread_mutex_unlock(&signal->mutex);
 }

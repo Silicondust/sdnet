@@ -29,20 +29,20 @@ struct dir_change_notification_t {
 	dir_change_notification_callback_func_t change_callback;
 	dir_change_notification_callback_func_t error_callback;
 	void *callback_arg;
+	bool callback_main_thread;
 };
 
 struct dir_change_notification_manager_t {
 	struct slist_t dcn_list;
+	struct spinlock manager_lock;
 	int kqueue_fd;
-	bool thread_running;
 };
 
 static struct dir_change_notification_manager_t dir_change_notification_manager;
 
+/* manager lock held */
 static void dir_change_notification_close(struct dir_change_notification_t *dcn)
 {
-	DEBUG_ASSERT(thread_is_main_thread(), "dir_change_notification_close called from unsupported thread");
-
 	if (dcn->dir_fd == 0) {
 		return;
 	}
@@ -60,6 +60,7 @@ static void dir_change_notification_close(struct dir_change_notification_t *dcn)
 	dcn->dir_fd = 0;
 }
 
+/* manager lock held */
 static struct dir_change_notification_t *dir_change_notification_find_by_dir_fd(int dir_fd)
 {
 	struct dir_change_notification_t *dcn = slist_get_head(struct dir_change_notification_t, &dir_change_notification_manager.dcn_list);
@@ -76,32 +77,55 @@ static struct dir_change_notification_t *dir_change_notification_find_by_dir_fd(
 
 static void dir_change_notification_execute_event(struct kevent *event)
 {
+	spinlock_lock(&dir_change_notification_manager.manager_lock);
+
 	struct dir_change_notification_t *dcn = dir_change_notification_find_by_dir_fd((int)event->ident);
 	if (!dcn) {
+		spinlock_unlock(&dir_change_notification_manager.manager_lock);
 		return;
 	}
 
 	if (event->filter != EVFILT_VNODE) {
 		DEBUG_INFO("dir_change_notification_thread_execute: kevent not EVFILT_VNODE");
+		spinlock_unlock(&dir_change_notification_manager.manager_lock);
 		return;
 	}
 
 	if (event->fflags & (NOTE_DELETE | NOTE_RENAME | NOTE_REVOKE)) {
 		DEBUG_INFO("dir_change_notification_thread_execute: watched directory deleted or moved");
-
 		dir_change_notification_close(dcn);
+		spinlock_unlock(&dir_change_notification_manager.manager_lock);
 
-		if (dcn->error_callback) {
-			dcn->error_callback(dcn->callback_arg);
+		if (!dcn->error_callback) {
+			return;
 		}
 
+		if (!dcn->callback_main_thread) {
+			dcn->error_callback(dcn->callback_arg);
+			return;
+		}
+
+		thread_main_enter();
+		dcn->error_callback(dcn->callback_arg);
+		thread_main_exit();
 		return;
 	}
 
 	DEBUG_INFO("dir_change_notification_execute_event: watched directory change notification");
-	if (dcn->change_callback) {
-		dcn->change_callback(dcn->callback_arg);
+	spinlock_unlock(&dir_change_notification_manager.manager_lock);
+
+	if (!dcn->change_callback) {
+		return;
 	}
+
+	if (!dcn->callback_main_thread) {
+		dcn->change_callback(dcn->callback_arg);
+		return;
+	}
+
+	thread_main_enter();
+	dcn->change_callback(dcn->callback_arg);
+	thread_main_exit();
 }
 
 static void dir_change_notification_thread_execute(void *arg)
@@ -119,41 +143,21 @@ static void dir_change_notification_thread_execute(void *arg)
 			continue;
 		}
 
-		thread_main_enter();
 		dir_change_notification_execute_event(&event);
-		thread_main_exit();
 	}
 }
 
 void dir_change_notification_free(struct dir_change_notification_t *dcn)
 {
+	spinlock_lock(&dir_change_notification_manager.manager_lock);
 	dir_change_notification_close(dcn);
+	spinlock_unlock(&dir_change_notification_manager.manager_lock);
+
 	heap_free(dcn);
 }
 
-static bool dir_change_notification_init(void)
+struct dir_change_notification_t *dir_change_notification_register(const char *dirname, dir_change_notification_callback_func_t change_callback, dir_change_notification_callback_func_t error_callback, void *callback_arg, bool callback_main_thread)
 {
-	if (dir_change_notification_manager.kqueue_fd == 0) {
-		int kqueue_fd = kqueue();
-		if (kqueue_fd <= 0) {
-			int errno_preserve = errno;
-			DEBUG_ERROR("kqueue failed");
-			errno = errno_preserve;
-			return false;
-		}
-
-		dir_change_notification_manager.kqueue_fd = kqueue_fd;
-	}
-
-	return true;
-}
-
-struct dir_change_notification_t *dir_change_notification_register(const char *dirname, dir_change_notification_callback_func_t change_callback, dir_change_notification_callback_func_t error_callback, void *callback_arg)
-{
-	if (!dir_change_notification_init()) {
-		return NULL;
-	}
-
 	struct dir_change_notification_t *dcn = (struct dir_change_notification_t *)heap_alloc_and_zero(sizeof(struct dir_change_notification_t), PKG_OS, MEM_TYPE_OS_DIR_CHANGE_NOTIFICATION);
 	if (!dcn) {
 		DEBUG_ERROR("out of memory");
@@ -180,13 +184,26 @@ struct dir_change_notification_t *dir_change_notification_register(const char *d
 	dcn->change_callback = change_callback;
 	dcn->error_callback = error_callback;
 	dcn->callback_arg = callback_arg;
+	dcn->callback_main_thread = callback_main_thread;
 
+	spinlock_lock(&dir_change_notification_manager.manager_lock);
 	slist_attach_head(struct dir_change_notification_t, &dir_change_notification_manager.dcn_list, dcn);
-
-	if (!dir_change_notification_manager.thread_running) {
-		dir_change_notification_manager.thread_running = true;
-		thread_start(dir_change_notification_thread_execute, NULL);
-	}
+	spinlock_unlock(&dir_change_notification_manager.manager_lock);
 
 	return dcn;
+}
+
+void dir_change_notification_manager_start(void)
+{
+	thread_start(dir_change_notification_thread_execute, NULL);
+}
+
+void dir_change_notification_manager_init(void)
+{
+	spinlock_init(&dir_change_notification_manager.manager_lock, 0);
+
+	dir_change_notification_manager.kqueue_fd = kqueue();
+	if (dir_change_notification_manager.kqueue_fd <= 0) {
+		DEBUG_ERROR("kqueue failed");
+	}
 }
