@@ -275,7 +275,7 @@ static void http_server_sock_accept(void *arg, const ip_addr_t *remote_addr, uin
 
 uint16_t http_server_get_port(struct http_server_t *http_server)
 {
-	return tcp_socket_get_port(http_server->ipv4.listen_sock);
+	return http_server->listen_port;
 }
 
 void http_server_set_default_ttl(struct http_server_t *http_server, uint8_t default_ttl, uint8_t public_ttl)
@@ -327,13 +327,25 @@ struct http_server_t *http_server_instance_alloc(uint16_t port)
 
 	http_server->ipv4.http_server = http_server;
 	http_server->ipv4.listen_sock = tcp_socket_alloc(IP_MODE_IPV4);
-	tcp_socket_listen(http_server->ipv4.listen_sock, port, http_server_sock_accept, &http_server->ipv4);
+	if (http_server->ipv4.listen_sock) {
+		tcp_socket_listen(http_server->ipv4.listen_sock, port, http_server_sock_accept, &http_server->ipv4);
+		if (port == 0) {
+			port = tcp_socket_get_port(http_server->ipv4.listen_sock);
+		}
+	}
 
 #if defined(IPV6_SUPPORT)
 	http_server->ipv6.http_server = http_server;
 	http_server->ipv6.listen_sock = tcp_socket_alloc(IP_MODE_IPV6);
-	tcp_socket_listen(http_server->ipv6.listen_sock, port, http_server_sock_accept, &http_server->ipv6);
+	if (http_server->ipv6.listen_sock) {
+		tcp_socket_listen(http_server->ipv6.listen_sock, port, http_server_sock_accept, &http_server->ipv6);
+		if (port == 0) {
+			port = tcp_socket_get_port(http_server->ipv6.listen_sock);
+		}
+	}
 #endif
+
+	http_server->listen_port = port;
 
 	return http_server;
 }

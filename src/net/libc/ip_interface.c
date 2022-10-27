@@ -84,7 +84,37 @@ bool ip_interface_is_ipv6_linklocal(struct ip_interface_t *idi)
 
 void ip_interface_manager_detect_add(struct ip_interface_t *idi)
 {
-	slist_attach_head(struct ip_interface_t, &ip_interface_manager.active_list, idi);
+	struct ip_interface_t **pprev = slist_get_phead(struct ip_interface_t, &ip_interface_manager.active_list);
+	struct ip_interface_t *p = slist_get_head(struct ip_interface_t, &ip_interface_manager.active_list);
+	while (p) {
+		if (p->ifindex < idi->ifindex) {
+			pprev = slist_get_pnext(struct ip_interface_t, p);
+			p = slist_get_next(struct ip_interface_t, p);
+			continue;
+		}
+		if (p->ifindex > idi->ifindex) {
+			break;
+		}
+
+		if (p->ip_score < idi->ip_score) {
+			pprev = slist_get_pnext(struct ip_interface_t, p);
+			p = slist_get_next(struct ip_interface_t, p);
+			continue;
+		}
+		if (p->ip_score > idi->ip_score) {
+			break;
+		}
+
+		if (ip_addr_cmp_less_than(&p->ip_addr, &idi->ip_addr)) {
+			pprev = slist_get_pnext(struct ip_interface_t, p);
+			p = slist_get_next(struct ip_interface_t, p);
+			continue;
+		}
+
+		break;
+	}
+
+	slist_insert_pprev(struct ip_interface_t, pprev, idi);
 }
 
 bool ip_interface_manager_detect_reactivate(uint32_t detect_hash)
@@ -94,7 +124,7 @@ bool ip_interface_manager_detect_reactivate(uint32_t detect_hash)
 	while (p) {
 		if (p->detect_hash == detect_hash) {
 			(void)slist_detach_pprev(struct ip_interface_t, pprev, p);
-			slist_attach_tail(struct ip_interface_t, &ip_interface_manager.active_list, p);
+			ip_interface_manager_detect_add(p);
 			return true;
 		}
 
@@ -200,30 +230,25 @@ struct ip_interface_t *ip_interface_manager_get_by_ifindex_best_ipv6(uint32_t if
 		ip_interface_manager_detect();
 	}
 
-	struct ip_interface_t *best_idi = NULL;
 	struct ip_interface_t *idi = slist_get_head(struct ip_interface_t, &ip_interface_manager.active_list);
 	while (idi) {
-		if (idi->ifindex != ifindex) {
+		if (idi->ifindex < ifindex) {
 			idi = slist_get_next(struct ip_interface_t, idi);
 			continue;
 		}
-
-		if (!ip_addr_is_ipv6(&idi->ip_addr)) {
-			idi = slist_get_next(struct ip_interface_t, idi);
-			continue;
+		if (idi->ifindex > ifindex) {
+			return NULL;
 		}
 
-		if (!best_idi || (idi->ip_score < best_idi->ip_score)) { /* lower is better */
-			best_idi = idi;
+		if (ip_addr_is_ipv6(&idi->ip_addr)) {
+			return idi;
 		}
-
+		
 		idi = slist_get_next(struct ip_interface_t, idi);
 	}
-
-	return best_idi;
-#else
-	return NULL;
 #endif
+
+	return NULL;
 }
 
 struct ip_interface_t *ip_interface_manager_get_by_ifindex_best_ipv4(uint32_t ifindex)
@@ -232,27 +257,24 @@ struct ip_interface_t *ip_interface_manager_get_by_ifindex_best_ipv4(uint32_t if
 		ip_interface_manager_detect();
 	}
 
-	struct ip_interface_t *best_idi = NULL;
 	struct ip_interface_t *idi = slist_get_head(struct ip_interface_t, &ip_interface_manager.active_list);
 	while (idi) {
-		if (idi->ifindex != ifindex) {
+		if (idi->ifindex < ifindex) {
 			idi = slist_get_next(struct ip_interface_t, idi);
 			continue;
 		}
-
-		if (!ip_addr_is_ipv4(&idi->ip_addr)) {
-			idi = slist_get_next(struct ip_interface_t, idi);
-			continue;
+		if (idi->ifindex > ifindex) {
+			return NULL;
 		}
 
-		if (!best_idi || (idi->ip_score < best_idi->ip_score)) { /* lower is better */
-			best_idi = idi;
+		if (ip_addr_is_ipv4(&idi->ip_addr)) {
+			return idi;
 		}
-
+		
 		idi = slist_get_next(struct ip_interface_t, idi);
 	}
 
-	return best_idi;
+	return NULL;
 }
 
 struct ip_interface_t *ip_interface_manager_get_by_local_ip(const ip_addr_t *local_ip, uint32_t ipv6_scope_id)
@@ -270,7 +292,15 @@ struct ip_interface_t *ip_interface_manager_get_by_local_ip(const ip_addr_t *loc
 
 		struct ip_interface_t *idi = slist_get_head(struct ip_interface_t, &ip_interface_manager.active_list);
 		while (idi) {
-			if (ip_addr_cmp(&idi->ip_addr, local_ip) && (idi->ifindex == ipv6_scope_id)) {
+			if (idi->ifindex < ipv6_scope_id) {
+				idi = slist_get_next(struct ip_interface_t, idi);
+				continue;
+			}
+			if (idi->ifindex > ipv6_scope_id) {
+				return NULL;
+			}
+
+			if (ip_addr_cmp(&idi->ip_addr, local_ip)) {
 				return idi;
 			}
 
@@ -316,7 +346,15 @@ struct ip_interface_t *ip_interface_manager_get_by_remote_ip(const ip_addr_t *re
 			
 		struct ip_interface_t *idi = slist_get_head(struct ip_interface_t, &ip_interface_manager.active_list);
 		while (idi) {
-			if (ip_addr_is_ipv6_linklocal(&idi->ip_addr) && (idi->ifindex == ipv6_scope_id)) {
+			if (idi->ifindex < ipv6_scope_id) {
+				idi = slist_get_next(struct ip_interface_t, idi);
+				continue;
+			}
+			if (idi->ifindex > ipv6_scope_id) {
+				return NULL;
+			}
+
+			if (ip_addr_is_ipv6_linklocal(&idi->ip_addr)) {
 				return idi;
 			}
 
@@ -372,11 +410,6 @@ struct ip_interface_t *ip_interface_manager_get_by_remote_ip(const ip_addr_t *re
 	idi = slist_get_head(struct ip_interface_t, &ip_interface_manager.active_list);
 	while (idi) {
 		if (ip_addr_is_ipv6(&idi->ip_addr) != ipv6) {
-			idi = slist_get_next(struct ip_interface_t, idi);
-			continue;
-		}
-
-		if (ip_addr_is_localhost(&idi->ip_addr)) {
 			idi = slist_get_next(struct ip_interface_t, idi);
 			continue;
 		}

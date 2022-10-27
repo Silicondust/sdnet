@@ -25,3 +25,5 @@ extern void str_to_upper(char *str);
 extern char *str_trim_whitespace(char *str);
 extern int strprefixcmp(const char *str, const char *prefix);
 extern int strprefixcasecmp(const char *str, const char *prefix);
+extern int strsuffixcmp(const char *str, const char *suffix);
+extern int strsuffixcasecmp(const char *str, const char *suffix);

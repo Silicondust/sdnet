@@ -120,6 +120,11 @@ static bool dns_manager_send_request(struct dns_entry_t *dns_entry, const ip_add
 		return false;
 	}
 
+	struct udp_socket *sock = ip_addr_is_ipv6(server_ip) ? dns_manager.sock_ipv6 : dns_manager.sock_ipv4;
+	if (!sock) {
+		return false;
+	}
+
 	DEBUG_INFO("sending DNS request for %s type 0x%x", dns_entry->name, dns_entry->record_type);
 	char *ptr = strchr(dns_entry->name, 0);
 	size_t encoded_name_length = 1 + (ptr - dns_entry->name) + 1;
@@ -162,7 +167,6 @@ static bool dns_manager_send_request(struct dns_entry_t *dns_entry, const ip_add
 
 	DEBUG_ASSERT(netbuf_get_pos(txnb) == netbuf_get_start(txnb), "not at start");
 
-	struct udp_socket *sock = ip_addr_is_ipv6(server_ip) ? dns_manager.sock_ipv6 : dns_manager.sock_ipv4;
 	if (udp_socket_send_netbuf(sock, server_ip, DNS_SERVER_PORT, 0, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb) != UDP_OK) {
 		netbuf_free(txnb);
 		return false;
@@ -591,10 +595,14 @@ void dns_manager_init(void)
 	oneshot_init(&dns_manager.timer);
 
 	dns_manager.sock_ipv4 = udp_socket_alloc(IP_MODE_IPV4);
-	udp_socket_listen(dns_manager.sock_ipv4, 0, dns_manager_recv, NULL, NULL);
+	if (dns_manager.sock_ipv4) {
+		udp_socket_listen(dns_manager.sock_ipv4, 0, dns_manager_recv, NULL, NULL);
+	}
 
 #if defined(IPV6_SUPPORT)
 	dns_manager.sock_ipv6 = udp_socket_alloc(IP_MODE_IPV6);
-	udp_socket_listen(dns_manager.sock_ipv6, 0, dns_manager_recv, NULL, NULL);
+	if (dns_manager.sock_ipv6) {
+		udp_socket_listen(dns_manager.sock_ipv6, 0, dns_manager_recv, NULL, NULL);
+	}
 #endif
 }

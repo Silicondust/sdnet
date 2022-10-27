@@ -157,3 +157,25 @@ int strprefixcasecmp(const char *str, const char *prefix)
 		}
 	}
 }
+
+int strsuffixcmp(const char *str, const char *suffix)
+{
+	size_t str_len = strlen(str);
+	size_t suffix_len = strlen(suffix);
+	if (str_len < suffix_len) {
+		return -1;
+	}
+
+	return strcmp(str + str_len - suffix_len, suffix);
+}
+
+int strsuffixcasecmp(const char *str, const char *suffix)
+{
+	size_t str_len = strlen(str);
+	size_t suffix_len = strlen(suffix);
+	if (str_len < suffix_len) {
+		return -1;
+	}
+
+	return strcasecmp(str + str_len - suffix_len, suffix);
+}

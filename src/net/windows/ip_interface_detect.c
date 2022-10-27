@@ -61,11 +61,6 @@ void ip_interface_manager_detect_execute(void)
 			continue;
 		}
 
-		if ((adapter->IfType != MIB_IF_TYPE_ETHERNET) && (adapter->IfType != IF_TYPE_IEEE80211)) {
-			adapter = adapter->Next;
-			continue;
-		}
-
 		if (adapter->PhysicalAddressLength != 6) {
 			adapter = adapter->Next;
 			continue;

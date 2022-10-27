@@ -94,10 +94,14 @@ static void ntp_server_recv(void *inst, const ip_addr_t *src_addr, uint16_t src_
 void ntp_server_init(void)
 {
 	ntp_server.ipv4.sock = udp_socket_alloc(IP_MODE_IPV4);
-	udp_socket_listen(ntp_server.ipv4.sock, NTP_PORT, ntp_server_recv, NULL, &ntp_server.ipv4);
+	if (ntp_server.ipv4.sock) {
+		udp_socket_listen(ntp_server.ipv4.sock, NTP_PORT, ntp_server_recv, NULL, &ntp_server.ipv4);
+	}
 
 #if defined(IPV6_SUPPORT)
 	ntp_server.ipv6.sock = udp_socket_alloc(IP_MODE_IPV6);
-	udp_socket_listen(ntp_server.ipv6.sock, NTP_PORT, ntp_server_recv, NULL, &ntp_server.ipv6);
+	if (ntp_server.ipv6.sock) {
+		udp_socket_listen(ntp_server.ipv6.sock, NTP_PORT, ntp_server_recv, NULL, &ntp_server.ipv6);
+	}
 #endif
 }

@@ -75,6 +75,7 @@ struct http_server_t {
 	struct oneshot connection_timer;
 	struct http_server_listen_t ipv4;
 	struct http_server_listen_t ipv6;
+	uint16_t listen_port;
 	uint8_t default_ttl;
 	uint8_t public_ttl;
 };

@@ -39,8 +39,13 @@ const struct http_parser_tag_lookup_t ssdp_client_manager_response_http_tag_list
 	{NULL, NULL}
 };
 
-static void ssdp_client_send_msearch_internal(struct ssdp_client_t *client, struct ssdp_manager_transport_t *transport, struct ip_interface_t *idi)
+static void ssdp_client_send_msearch_internal(struct ssdp_client_t *client, struct ip_interface_t *idi)
 {
+	struct ssdp_manager_transport_t *transport = ip_interface_is_ipv6(idi) ? &ssdp_manager.ipv6 : &ssdp_manager.ipv4;
+	if (!transport->sock) {
+		return;
+	}
+
 	DEBUG_INFO("sending M-SEARCH for %s", client->st);
 
 	struct netbuf *txnb = netbuf_alloc();
@@ -71,15 +76,7 @@ static void ssdp_client_send_msearch(struct ssdp_client_t *client)
 {
 	struct ip_interface_t *idi = ip_interface_manager_get_head();
 	while (idi) {
-#if defined(IPV6_SUPPORT)
-		if (ip_interface_is_ipv6(idi)) {
-			ssdp_client_send_msearch_internal(client, &ssdp_manager.ipv6, idi);
-			idi = slist_get_next(struct ip_interface_t, idi);
-			continue;
-		}
-#endif
-
-		ssdp_client_send_msearch_internal(client, &ssdp_manager.ipv4, idi);
+		ssdp_client_send_msearch_internal(client, idi);
 		idi = slist_get_next(struct ip_interface_t, idi);
 	}
 }

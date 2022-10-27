@@ -468,10 +468,14 @@ bool dns_responder_register_name(const char *name)
 void dns_responder_init(void)
 {
 	dns_responder.ipv4.sock = udp_socket_alloc(IP_MODE_IPV4);
-	udp_socket_listen(dns_responder.ipv4.sock, DNS_PORT, dns_responder_recv, NULL, &dns_responder.ipv4);
+	if (dns_responder.ipv4.sock) {
+		udp_socket_listen(dns_responder.ipv4.sock, DNS_PORT, dns_responder_recv, NULL, &dns_responder.ipv4);
+	}
 
 #if defined(IPV6_SUPPORT)
 	dns_responder.ipv6.sock = udp_socket_alloc(IP_MODE_IPV6);
-	udp_socket_listen(dns_responder.ipv6.sock, DNS_PORT, dns_responder_recv, NULL, &dns_responder.ipv6);
+	if (dns_responder.ipv6.sock) {
+		udp_socket_listen(dns_responder.ipv6.sock, DNS_PORT, dns_responder_recv, NULL, &dns_responder.ipv6);
+	}
 #endif
 }

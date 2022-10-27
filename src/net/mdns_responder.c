@@ -488,13 +488,17 @@ void mdns_responder_init(void)
 {
 	mdns_responder.ipv4.multicast_ip = &mdns_multicast_ipv4;
 	mdns_responder.ipv4.sock = udp_socket_alloc(IP_MODE_IPV4);
-	udp_socket_listen(mdns_responder.ipv4.sock, MDNS_PORT, mdns_responder_recv, NULL, &mdns_responder.ipv4);
-	igmp_manager_join_group(mdns_responder.ipv4.sock, &mdns_multicast_ipv4);
+	if (mdns_responder.ipv4.sock) {
+		udp_socket_listen(mdns_responder.ipv4.sock, MDNS_PORT, mdns_responder_recv, NULL, &mdns_responder.ipv4);
+		igmp_manager_join_group(mdns_responder.ipv4.sock, &mdns_multicast_ipv4);
+	}
 
 #if defined(IPV6_SUPPORT)
 	mdns_responder.ipv6.multicast_ip = &mdns_multicast_ipv6;
 	mdns_responder.ipv6.sock = udp_socket_alloc(IP_MODE_IPV6);
-	udp_socket_listen(mdns_responder.ipv6.sock, MDNS_PORT, mdns_responder_recv, NULL, &mdns_responder.ipv6);
-	igmp_manager_join_group(mdns_responder.ipv6.sock, &mdns_multicast_ipv6);
+	if (mdns_responder.ipv6.sock) {
+		udp_socket_listen(mdns_responder.ipv6.sock, MDNS_PORT, mdns_responder_recv, NULL, &mdns_responder.ipv6);
+		igmp_manager_join_group(mdns_responder.ipv6.sock, &mdns_multicast_ipv6);
+	}
 #endif
 }

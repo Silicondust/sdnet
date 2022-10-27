@@ -37,8 +37,13 @@ const struct http_parser_tag_lookup_t ssdp_service_manager_msearch_http_tag_list
 	{NULL, NULL}
 };
 
-static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, struct ssdp_manager_transport_t *transport, struct ip_interface_t *idi, bool byebye)
+static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, struct ip_interface_t *idi, bool byebye)
 {
+	struct ssdp_manager_transport_t *transport = ip_interface_is_ipv6(idi) ? &ssdp_manager.ipv6 : &ssdp_manager.ipv4;
+	if (!transport->sock) {
+		return;
+	}
+
 	ip_addr_t local_ip;
 	ip_interface_get_local_ip(idi, &local_ip);
 
@@ -93,21 +98,18 @@ static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye
 {
 	struct ip_interface_t *idi = ip_interface_manager_get_head();
 	while (idi) {
-#if defined(IPV6_SUPPORT)
-		if (ip_interface_is_ipv6(idi)) {
-			ssdp_service_send_notify_internal(service, &ssdp_manager.ipv6, idi, byebye);
-			idi = slist_get_next(struct ip_interface_t, idi);
-			continue;
-		}
-#endif
-
-		ssdp_service_send_notify_internal(service, &ssdp_manager.ipv4, idi, byebye);
+		ssdp_service_send_notify_internal(service, idi, byebye);
 		idi = slist_get_next(struct ip_interface_t, idi);
 	}
 }
 
-static void ssdp_service_send_discover_response(struct ssdp_service_t *service, struct ssdp_manager_transport_t *transport, const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
+static void ssdp_service_send_discover_response(struct ssdp_service_t *service, const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
+	struct ssdp_manager_transport_t *transport = ip_addr_is_ipv6(remote_ip) ? &ssdp_manager.ipv6 : &ssdp_manager.ipv4;
+	if (!transport->sock) {
+		return;
+	}
+
 	char uuid_str[37];
 	guid_write_string(&service->uuid, uuid_str);
 	DEBUG_TRACE("sending ssdp discover response for %s", (service->urn) ? service->urn : uuid_str);
@@ -324,8 +326,7 @@ static void ssdp_service_manager_discover_timer_callback(void *arg)
 			return;
 		}
 
-		struct ssdp_manager_transport_t *transport = ip_addr_is_ipv6(&reply->remote_ip) ? &ssdp_manager.ipv6 : &ssdp_manager.ipv4;
-		ssdp_service_send_discover_response(reply->service, transport, &reply->remote_ip, reply->remote_port, reply->ipv6_scope_id);
+		ssdp_service_send_discover_response(reply->service, &reply->remote_ip, reply->remote_port, reply->ipv6_scope_id);
 		heap_free(slist_detach_head(struct ssdp_service_discover_reply_t, &ssdp_service_manager.discover_reply_list));
 	}
 }
