@@ -63,6 +63,7 @@ typedef void(*webclient_operation_complete_callback_t)(void *arg, struct webclie
 
 extern struct webclient_t *webclient_alloc(const char *additional_header_lines, ticks_t max_idle_time);
 extern void webclient_release(struct webclient_t *webclient);
+extern void webclient_set_max_time_to_establish(struct webclient_t *webclient, ticks_t max_time_to_establish);
 extern void webclient_set_max_recv_nb_size(struct webclient_t *webclient, size_t max_recv_nb_size);
 extern void webclient_get_local_ip(struct webclient_t *webclient, ip_addr_t *result);
 

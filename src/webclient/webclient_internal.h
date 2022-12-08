@@ -44,6 +44,8 @@ struct webclient_t {
 	struct http_parser_tag_lookup_t *http_tag_list_allocated;
 	struct oneshot execute_timer;
 	struct oneshot disconnect_timer;
+	struct oneshot establish_timer;
+	ticks_t max_time_to_establish;
 	ticks_t max_idle_time;
 	size_t max_recv_nb_size;
 	uint16_t http_result;

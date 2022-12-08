@@ -20,7 +20,6 @@ extern void ip_managed_get_subnet_mask(struct ip_managed_t *ipm, ip_addr_t *resu
 
 extern void ip_managed_set_mac_addr(struct ip_managed_t *ipm, uint8_t mac_addr[6]);
 extern void ip_managed_set_ipv4_addr(struct ip_managed_t *ipm, ipv4_addr_t ip_addr, ipv4_addr_t subnet_mask, ipv4_addr_t gateway);
-extern void ip_managed_set_wifi_ap(struct ip_managed_t *ipm);
 extern void ip_managed_set_loopback(struct ip_managed_t *ipm);
 
 extern bool ip_managed_read_ethernet_mii_register(struct ip_managed_t *ipm, uint8_t reg_addr, uint16_t *presult);

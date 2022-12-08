@@ -35,7 +35,7 @@ struct timespec64 {
 extern time64_t unix_time(void);
 extern time64_t unix_time_last_set(void);
 extern time64_t unix_time_get_offset_from_native(void);
-extern void unit_time_get_timespec(struct timespec64 *tp);
+extern void unix_time_get_timespec(struct timespec64 *tp);
 extern void unix_time_set(time64_t new_time, unix_time_source_t source);
 extern char *unix_time_to_str(time64_t time_v, char *buf);
 extern void unix_time_to_tm(time64_t time_v, struct tm *tm_v);

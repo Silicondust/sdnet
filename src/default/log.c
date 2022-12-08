@@ -80,10 +80,24 @@ static void log_vappend_notify(struct log_manager_t *log_manager)
 	}
 }
 
+struct log_vappend_store_and_notify_t {
+	struct log_manager_t *log_manager;
+	char *buffer;
+};
+
+static void log_vappend_store_and_notify(struct log_vappend_store_and_notify_t *arg)
+{
+	log_vappend_store(&log_manager_trace, arg->buffer);
+	log_vappend_notify(&log_manager_trace);
+
+	if (arg->log_manager) {
+		log_vappend_store(arg->log_manager, arg->buffer);
+		log_vappend_notify(arg->log_manager);
+	}
+}
+
 static void log_vappend(struct log_manager_t *log_manager, const char *class_name, const char *fmt, va_list ap)
 {
-	DEBUG_ASSERT(thread_is_main_thread(), "log_vappend called from unsupported thread");
-
 	/*
 	 * Build text.
 	 */
@@ -111,13 +125,10 @@ static void log_vappend(struct log_manager_t *log_manager, const char *class_nam
 	/*
 	 * Add to log.
 	 */
-	log_vappend_store(&log_manager_trace, buffer);
-	log_vappend_notify(&log_manager_trace);
-
-	if (log_manager) {
-		log_vappend_store(log_manager, buffer);
-		log_vappend_notify(log_manager);
-	}
+	struct log_vappend_store_and_notify_t arg;
+	arg.log_manager = log_manager;
+	arg.buffer = buffer;
+	thread_main_execute((thread_execute_func_t)log_vappend_store_and_notify, &arg);
 }
 
 void log_error(const char *class_name, const char *fmt, ...)

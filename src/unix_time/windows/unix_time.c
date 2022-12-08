@@ -46,8 +46,8 @@ time64_t unix_time_get_offset_from_native(void)
 	return unix_time() - _time64(NULL);
 }
 
-/* WARNING: unit_time_get_timespec does not use correction value */
-void unit_time_get_timespec(struct timespec64 *tp)
+/* WARNING: unix_time_get_timespec does not use correction value */
+void unix_time_get_timespec(struct timespec64 *tp)
 {
 	struct _timespec64 native_tp;
 	_timespec64_get(&native_tp, TIME_UTC);
@@ -62,8 +62,9 @@ void unix_time_set(time64_t new_time, unix_time_source_t source)
 	}
 
 	time64_t local_ref = GetTickCount64() / 1000;
+	time64_t existing_time = local_ref + unix_time_manager.ticks_sec_to_gmt_time;
 
-	if ((source < unix_time_manager.source) && (unix_time_manager.last_set + UNIX_TIME_SOURCE_EXPIRE > local_ref + unix_time_manager.ticks_sec_to_gmt_time)) {
+	if ((source < unix_time_manager.source) && (unix_time_manager.last_set + UNIX_TIME_SOURCE_EXPIRE > existing_time)) {
 		return;
 	}
 
@@ -76,6 +77,7 @@ char *unix_time_to_str(time64_t time_v, char *buf)
 {
 	struct tm tm_v;
 	_gmtime64_s(&tm_v, &time_v);
+
 	asctime_s(buf, 26, &tm_v);
 	*strchr(buf, '\n') = 0;
 	return buf;

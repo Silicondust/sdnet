@@ -28,10 +28,7 @@ struct thread_context_t {
 	pthread_t thread_id;
 	thread_execute_func_t execute_func;
 	void *execute_arg;
-
-#if defined(DEBUG) || defined(THREAD_MAIN_TRACKING)
 	volatile uint8_t main_thread_state;
-#endif
 };
 
 struct thread_manager_t {
@@ -57,20 +54,36 @@ struct thread_public_context_t *thread_get_public_context(void)
 	return &thread_context->public_context;
 }
 
-#if defined(DEBUG) || defined(THREAD_MAIN_TRACKING)
 bool thread_is_main_thread(void)
 {
 	struct thread_context_t *thread_context = thread_get_context_internal();
 	return (thread_context->main_thread_state == THREAD_MAIN_THREAD_STATE_ACTIVE);
 }
 
+void thread_main_execute(thread_execute_func_t execute_func, void *execute_arg)
+{
+	struct thread_context_t *thread_context = thread_get_context_internal();
+	if (thread_context->main_thread_state == THREAD_MAIN_THREAD_STATE_ACTIVE) {
+		execute_func(execute_arg);
+		return;
+	}
+
+	thread_context->main_thread_state = THREAD_MAIN_THREAD_STATE_WAITING;
+	spinlock_lock(&thread_manager.thread_main_lock);
+	thread_context->main_thread_state = THREAD_MAIN_THREAD_STATE_ACTIVE;
+	thread_manager.watchdog_counter++;
+
+	execute_func(execute_arg);
+
+	thread_context->main_thread_state = THREAD_MAIN_THREAD_STATE_NONE;
+	spinlock_unlock(&thread_manager.thread_main_lock);
+}
+
 void thread_main_enter(void)
 {
 	struct thread_context_t *thread_context = thread_get_context_internal();
 	thread_context->main_thread_state = THREAD_MAIN_THREAD_STATE_WAITING;
-
 	spinlock_lock(&thread_manager.thread_main_lock);
-
 	thread_context->main_thread_state = THREAD_MAIN_THREAD_STATE_ACTIVE;
 	thread_manager.watchdog_counter++;
 }
@@ -79,21 +92,8 @@ void thread_main_exit(void)
 {
 	struct thread_context_t *thread_context = thread_get_context_internal();
 	thread_context->main_thread_state = THREAD_MAIN_THREAD_STATE_NONE;
-
 	spinlock_unlock(&thread_manager.thread_main_lock);
 }
-#else
-void thread_main_enter(void)
-{
-	spinlock_lock(&thread_manager.thread_main_lock);
-	thread_manager.watchdog_counter++;
-}
-
-void thread_main_exit(void)
-{
-	spinlock_unlock(&thread_manager.thread_main_lock);
-}
-#endif
 
 static void *thread_execute(void *arg)
 {

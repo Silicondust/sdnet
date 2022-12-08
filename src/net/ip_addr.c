@@ -324,6 +324,20 @@ bool ip_addr_is_ipv4_linklocal(const ip_addr_t *ip)
 	return ((ip->low >> 16) == 0x0000FFFFA9FEULL);
 }
 
+bool ip_addr_is_ipv4_multicast(const ip_addr_t *ip)
+{
+	if (ip->high != 0) {
+		return false;
+	}
+
+	if ((uint32_t)(ip->low >> 32) != 0x0000FFFFUL) {
+		return false;
+	}
+
+	uint8_t byte0 = (uint8_t)(ip->low >> 24);
+	return (byte0 >= 224) && (byte0 <= 239);
+}
+
 bool ip_addr_is_ipv4_broadcast(const ip_addr_t *ip)
 {
 	if (ip->high != 0) {
@@ -680,6 +694,12 @@ bool ip_addr_is_routable(const ip_addr_t *ip)
 bool ip_addr_is_ipv4_linklocal(const ip_addr_t *ip)
 {
 	return ((ip->ipv4 >> 16) == 0xA9FE);
+}
+
+bool ip_addr_is_ipv4_multicast(const ip_addr_t *ip)
+{
+	uint8_t byte0 = (uint8_t)(ip->ipv4 >> 24);
+	return (byte0 >= 224) && (byte0 <= 239);
 }
 
 bool ip_addr_is_ipv4_broadcast(const ip_addr_t *ip)

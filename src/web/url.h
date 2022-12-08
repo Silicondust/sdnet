@@ -13,6 +13,7 @@ typedef enum {
 	URL_PROTOCOL_HTTP,
 	URL_PROTOCOL_HTTPS,
 	URL_PROTOCOL_RTSP,
+	URL_PROTOCOL_RTP,
 } url_protocol_t;
 
 #define URL_FLAGS_PORT_SPECIFIED (1 << 0)

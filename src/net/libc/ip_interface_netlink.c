@@ -166,7 +166,7 @@ void ip_interface_manager_detect_execute(void)
 		return;
 	}
 
-	int nl_sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
+	int nl_sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 	int af_sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if ((nl_sock == -1) || (af_sock == -1)) {
 		DEBUG_ERROR("netlink socket failed");
@@ -213,7 +213,7 @@ void ip_interface_manager_detect_execute(void)
 
 		struct nlmsghdr *hdr = (struct nlmsghdr *)nl_buffer;
 		while (1) {
-			if (!NLMSG_OK(hdr, length)) {
+			if (!NLMSG_OK(hdr, (unsigned int)length)) {
 				break;
 			}
 

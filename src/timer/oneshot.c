@@ -119,15 +119,17 @@ ticks_t oneshot_get_ticks_remaining(struct oneshot *os)
 	return os->callback_time - current_time;
 }
 
-static ticks_t oneshot_timer_notification(void)
+static void oneshot_timer_notification(ticks_t *next_notification_time)
 {
 	struct oneshot *os = oneshot_manager.attached_list;
 	if (!os) {
-		return TICKS_INFINITE;
+		*next_notification_time = TICKS_INFINITE;
+		return;
 	}
 
 	if (os->callback_time > timer_get_ticks()) {
-		return os->callback_time;
+		*next_notification_time = os->callback_time;
+		return;
 	}
 
 	oneshot_manager.attached_list = os->next;
@@ -140,19 +142,18 @@ static ticks_t oneshot_timer_notification(void)
 
 	struct oneshot *next_os = oneshot_manager.attached_list;
 	if (!next_os) {
-		return TICKS_INFINITE;
+		*next_notification_time = TICKS_INFINITE;
+		return;
 	}
 
-	return next_os->callback_time;
+	*next_notification_time = next_os->callback_time;
 }
 
 static void oneshot_timer_thread_execute(void *arg)
 {
 	while (1) {
-		thread_main_enter();
-		ticks_t next_notification_time = oneshot_timer_notification();
-		thread_main_exit();
-
+		ticks_t next_notification_time;
+		thread_main_execute((thread_execute_func_t)oneshot_timer_notification, &next_notification_time);
 		thread_suspend_wait_for_signal_or_timestamp(oneshot_manager.signal, next_notification_time);
 	}
 }

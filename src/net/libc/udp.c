@@ -142,6 +142,19 @@ udp_error_t udp_socket_send_netbuf(struct udp_socket *us, const ip_addr_t *dest_
 	return UDP_OK;
 }
 
+struct udp_socket_notify_recv_icmp_t {
+	struct udp_socket *us;
+	ip_addr_t src_addr;
+	uint16_t src_port;
+	uint32_t ipv6_scope_id;
+};
+
+static void udp_socket_notify_recv_icmp(struct udp_socket_notify_recv_icmp_t *arg)
+{
+	struct udp_socket *us = arg->us;
+	us->recv_icmp_callback(us->callback_inst, ICMP_TYPE_ERR_DEST_UNREACHABLE, &arg->src_addr, arg->src_port, arg->ipv6_scope_id);
+}
+
 static void udp_socket_thread_icmp(struct udp_socket *us)
 {
 #if defined(MSG_ERRQUEUE)
@@ -165,33 +178,46 @@ static void udp_socket_thread_icmp(struct udp_socket *us)
 		return;
 	}
 
-	udp_recv_icmp_callback_t recv_icmp_callback = us->recv_icmp_callback;
-	if (recv_icmp_callback) {
+	if (us->recv_icmp_callback) {
+		struct udp_socket_notify_recv_icmp_t arg;
+		arg.us = us;
+
 #if defined(IPV6_SUPPORT)
-		ip_addr_t src_addr; uint16_t src_port; uint32_t ipv6_scope_id;
 		if (sock_addr.ss_family == AF_INET6) {
 			struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
-			ip_addr_set_ipv6_bytes(&src_addr, sock_addr_in->sin6_addr.s6_addr);
-			src_port = ntohs(sock_addr_in->sin6_port);
-			ipv6_scope_id = sock_addr_in->sin6_scope_id;
+			ip_addr_set_ipv6_bytes(&arg.src_addr, sock_addr_in->sin6_addr.s6_addr);
+			arg.src_port = ntohs(sock_addr_in->sin6_port);
+			arg.ipv6_scope_id = sock_addr_in->sin6_scope_id;
 		} else {
 			struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
-			ip_addr_set_ipv4(&src_addr, ntohl(sock_addr_in->sin_addr.s_addr));
-			src_port = ntohs(sock_addr_in->sin_port);
-			ipv6_scope_id = 0;
+			ip_addr_set_ipv4(&arg.src_addr, ntohl(sock_addr_in->sin_addr.s_addr));
+			arg.src_port = ntohs(sock_addr_in->sin_port);
+			arg.ipv6_scope_id = 0;
 		}
 #else
-		ip_addr_t src_addr;
-		ip_addr_set_ipv4(&src_addr, ntohl(sock_addr.sin_addr.s_addr));
-		uint16_t src_port = ntohs(sock_addr.sin_port);
-		uint32_t ipv6_scope_id = 0;
+		ip_addr_set_ipv4(&arg.src_addr, ntohl(sock_addr.sin_addr.s_addr));
+		arg.src_port = ntohs(sock_addr.sin_port);
+		arg.ipv6_scope_id = 0;
 #endif
-		thread_main_enter();
-		DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&src_addr, ipv6_scope_id);
-		recv_icmp_callback(us->callback_inst, ICMP_TYPE_ERR_DEST_UNREACHABLE, &src_addr, src_port, ipv6_scope_id);
-		thread_main_exit();
+
+		DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&arg.src_addr, arg.ipv6_scope_id);
+		thread_main_execute((thread_execute_func_t)udp_socket_notify_recv_icmp, &arg);
 	}
 #endif
+}
+
+struct udp_socket_notify_recv_t {
+	struct udp_socket *us;
+	ip_addr_t src_addr;
+	uint16_t src_port;
+	uint32_t ipv6_scope_id;
+	struct netbuf *nb;
+};
+
+static void udp_socket_notify_recv(struct udp_socket_notify_recv_t *arg)
+{
+	struct udp_socket *us = arg->us;
+	us->recv_callback(us->callback_inst, &arg->src_addr, arg->src_port, arg->ipv6_scope_id, arg->nb);
 }
 
 static void udp_socket_thread_recv(struct udp_socket *us)
@@ -224,39 +250,37 @@ static void udp_socket_thread_recv(struct udp_socket *us)
 		return;
 	}
 
+	struct udp_socket_notify_recv_t arg;
+	arg.us = us;
+	arg.nb = nb;
+
 #if defined(IPV6_SUPPORT)
-	ip_addr_t src_addr; uint16_t src_port; uint32_t ipv6_scope_id;
 	if (sock_addr.ss_family == AF_INET6) {
 		struct sockaddr_in6 *sock_addr_in = (struct sockaddr_in6 *)&sock_addr;
-		ip_addr_set_ipv6_bytes(&src_addr, sock_addr_in->sin6_addr.s6_addr);
-		src_port = ntohs(sock_addr_in->sin6_port);
-		ipv6_scope_id = sock_addr_in->sin6_scope_id;
+		ip_addr_set_ipv6_bytes(&arg.src_addr, sock_addr_in->sin6_addr.s6_addr);
+		arg.src_port = ntohs(sock_addr_in->sin6_port);
+		arg.ipv6_scope_id = sock_addr_in->sin6_scope_id;
 	} else {
 		struct sockaddr_in *sock_addr_in = (struct sockaddr_in *)&sock_addr;
-		ip_addr_set_ipv4(&src_addr, ntohl(sock_addr_in->sin_addr.s_addr));
-		src_port = ntohs(sock_addr_in->sin_port);
-		ipv6_scope_id = 0;
+		ip_addr_set_ipv4(&arg.src_addr, ntohl(sock_addr_in->sin_addr.s_addr));
+		arg.src_port = ntohs(sock_addr_in->sin_port);
+		arg.ipv6_scope_id = 0;
 }
 #else
-	ip_addr_t src_addr;
-	ip_addr_set_ipv4(&src_addr, ntohl(sock_addr.sin_addr.s_addr));
-	uint16_t src_port = ntohs(sock_addr.sin_port);
-	uint32_t ipv6_scope_id = 0;
+	ip_addr_set_ipv4(&arg.src_addr, ntohl(sock_addr.sin_addr.s_addr));
+	arg.src_port = ntohs(sock_addr.sin_port);
+	arg.ipv6_scope_id = 0;
 #endif
 
-	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&src_addr, ipv6_scope_id);
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&arg.src_addr, arg.ipv6_scope_id);
 
-	if (!ip_addr_is_zero(&src_addr) && !ip_addr_is_unicast(&src_addr)) {
+	if (!ip_addr_is_zero(&arg.src_addr) && !ip_addr_is_unicast(&arg.src_addr)) {
 		netbuf_free(nb);
 		return;
 	}
 
 	netbuf_set_end(nb, netbuf_get_pos(nb) + (size_t)length);
-
-	thread_main_enter();
-	us->recv_callback(us->callback_inst, &src_addr, src_port, ipv6_scope_id, nb);
-	thread_main_exit();
-
+	thread_main_execute((thread_execute_func_t)udp_socket_notify_recv, &arg);
 	netbuf_free(nb);
 }
 

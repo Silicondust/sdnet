@@ -67,6 +67,7 @@ extern bool ip_addr_is_public(const ip_addr_t *ip);
 extern bool ip_addr_is_multicast(const ip_addr_t *ip);
 extern bool ip_addr_is_routable(const ip_addr_t *ip);
 extern bool ip_addr_is_ipv4_linklocal(const ip_addr_t *ip);
+extern bool ip_addr_is_ipv4_multicast(const ip_addr_t *ip);
 extern bool ip_addr_is_ipv4_broadcast(const ip_addr_t *ip);
 extern bool ip_addr_is_ipv6_localhost(const ip_addr_t *ip);
 extern bool ip_addr_is_ipv6_linklocal(const ip_addr_t *ip);

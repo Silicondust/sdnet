@@ -409,13 +409,19 @@ static void tcp_connection_thread_send(struct tcp_connection *tc)
 	}
 }
 
-static void tcp_connection_notify_recv(struct tcp_connection *tc, struct netbuf *nb)
+struct tcp_connection_notify_recv_t {
+	struct tcp_connection *tc;
+	struct netbuf *nb;
+};
+
+static void tcp_connection_notify_recv(struct tcp_connection_notify_recv_t *arg)
 {
+	struct tcp_connection *tc = arg->tc;
 	if (tc->app_closed) {
 		return;
 	}
 
-	tc->recv_callback(tc->callback_inst, nb);
+	tc->recv_callback(tc->callback_inst, arg->nb);
 }
 
 static void tcp_connection_thread_recv(struct tcp_connection *tc)
@@ -450,9 +456,10 @@ static void tcp_connection_thread_recv(struct tcp_connection *tc)
 	netbuf_set_end(nb, netbuf_get_pos(nb) + (size_t)length);
 
 	if (!tc->app_closed) {
-		thread_main_enter();
-		tcp_connection_notify_recv(tc, nb);
-		thread_main_exit();
+		struct tcp_connection_notify_recv_t arg;
+		arg.tc = tc;
+		arg.nb = nb;
+		thread_main_execute((thread_execute_func_t)tcp_connection_notify_recv, &arg);
 	}
 
 	netbuf_free(nb);
@@ -731,9 +738,7 @@ static void tcp_connection_thread_execute_est(struct tcp_connection *tc, struct 
 		tcp_connection_update_recv_event_mask(tc, poll_fds);
 
 		if (tc->est_callback && !tc->app_closed) {
-			thread_main_enter();
-			tcp_connection_notify_established(tc);
-			thread_main_exit();
+			thread_main_execute((thread_execute_func_t)tcp_connection_notify_established, tc);
 		}
 
 		tcp_connection_thread_execute_active(tc, poll_fds);
@@ -786,9 +791,7 @@ void tcp_connection_thread_execute(void *arg)
 				}
 
 				if (!tc->app_closed) {
-					thread_main_enter();
-					tcp_connection_notify_close(tc);
-					thread_main_exit();
+					thread_main_execute((thread_execute_func_t)tcp_connection_notify_close, tc);
 				}
 
 				struct tcp_connection *discard = tc;

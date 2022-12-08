@@ -18,6 +18,8 @@
 
 THIS_FILE("webclient");
 
+#define WEBCLIENT_MAX_TIME_TO_ESTABLISH_DEFAULT (10 * TICK_RATE)
+
 static void webclient_execute_dns_or_connect(struct webclient_t *webclient, bool force_ipv4);
 static void webclient_execute_future(void *arg);
 static http_parser_error_t webclient_http_tag_webclient(void *arg, const char *header, struct netbuf *nb);
@@ -66,6 +68,7 @@ static int webclient_deref(struct webclient_t *webclient)
 static void webclient_close_internal(struct webclient_t *webclient)
 {
 	oneshot_detach(&webclient->disconnect_timer);
+	oneshot_detach(&webclient->establish_timer);
 
 	if (webclient->dns_lookup) {
 		dns_lookup_deref(webclient->dns_lookup);
@@ -258,6 +261,7 @@ void webclient_timeout_operation(struct webclient_t *webclient, struct webclient
 static void webclient_conn_close(void *arg, tcp_close_reason_t reason)
 {
 	struct webclient_t *webclient = (struct webclient_t *)arg;
+	oneshot_detach(&webclient->establish_timer);
 
 	if (webclient->tcp_conn) {
 		tcp_connection_deref(webclient->tcp_conn);
@@ -590,6 +594,7 @@ static bool webclient_send_header(struct webclient_t *webclient, struct webclien
 static void webclient_conn_established(void *arg)
 {
 	struct webclient_t *webclient = (struct webclient_t *)arg;
+	oneshot_detach(&webclient->establish_timer);
 	webclient->fast_retry_ipv4 = false;
 
 	struct webclient_operation_t *operation = webclient->current_operation;
@@ -609,6 +614,20 @@ static void webclient_conn_established(void *arg)
 	if (operation->post_callback && !webclient->expect_100_continue) {
 		webclient_operation_schedule_post_callback(operation);
 	}
+}
+
+static void webclient_conn_establish_timeout(void *arg)
+{
+	struct webclient_t *webclient = (struct webclient_t *)arg;
+
+	if (webclient->tcp_conn) {
+		tcp_connection_close(webclient->tcp_conn);
+	}
+	if (webclient->tls_conn) {
+		tls_client_connection_close(webclient->tls_conn);
+	}
+
+	webclient_conn_close(webclient, TCP_ERROR_FAILED);
 }
 
 static bool webclient_build_and_set_http_tag_list(struct webclient_t *webclient)
@@ -692,10 +711,13 @@ static void webclient_execute_connect(struct webclient_t *webclient, ip_addr_t *
 			tcp_connection_set_max_recv_nb_size(webclient->tcp_conn, webclient->max_recv_nb_size);
 		}
 
+		oneshot_attach(&webclient->establish_timer, webclient->max_time_to_establish, webclient_conn_establish_timeout, webclient);
+
 		if (tcp_connection_connect(webclient->tcp_conn, ip_addr, operation->url.ip_port, operation->url.ipv6_scope_id, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient) != TCP_OK) {
 			DEBUG_WARN("connect failed");
 			tcp_connection_deref(webclient->tcp_conn);
 			webclient->tcp_conn = NULL;
+			oneshot_detach(&webclient->establish_timer);
 
 			if (webclient->fast_retry_ipv4) {
 				webclient->fast_retry_ipv4 = false;
@@ -718,10 +740,13 @@ static void webclient_execute_connect(struct webclient_t *webclient, ip_addr_t *
 			return;
 		}
 
+		oneshot_attach(&webclient->establish_timer, webclient->max_time_to_establish, webclient_conn_establish_timeout, webclient);
+
 		if (!tls_client_connection_connect(webclient->tls_conn, ip_addr, operation->url.ip_port, operation->url.ipv6_scope_id, operation->url.dns_name, webclient_conn_established, webclient_conn_recv, webclient_conn_close, webclient)) {
 			DEBUG_WARN("connect failed");
 			tls_client_connection_deref(webclient->tls_conn);
 			webclient->tls_conn = NULL;
+			oneshot_detach(&webclient->establish_timer);
 
 			if (webclient->fast_retry_ipv4) {
 				webclient->fast_retry_ipv4 = false;
@@ -1052,6 +1077,11 @@ void webclient_set_max_recv_nb_size(struct webclient_t *webclient, size_t max_re
 	}
 }
 
+void webclient_set_max_time_to_establish(struct webclient_t *webclient, ticks_t max_time_to_establish)
+{
+	webclient->max_time_to_establish = max_time_to_establish;
+}
+
 struct webclient_t *webclient_alloc(const char *additional_header_lines, ticks_t max_idle_time)
 {
 	struct webclient_t *webclient = (struct webclient_t *)heap_alloc_and_zero(sizeof(struct webclient_t), PKG_OS, MEM_TYPE_OS_WEBCLIENT);
@@ -1061,9 +1091,11 @@ struct webclient_t *webclient_alloc(const char *additional_header_lines, ticks_t
 	}
 
 	webclient->refs = 1;
+	webclient->max_time_to_establish = WEBCLIENT_MAX_TIME_TO_ESTABLISH_DEFAULT;
 	webclient->max_idle_time = max_idle_time;
 	oneshot_init(&webclient->execute_timer);
 	oneshot_init(&webclient->disconnect_timer);
+	oneshot_init(&webclient->establish_timer);
 
 	webclient->http_parser = http_parser_alloc(webclient_http_event, webclient);
 	if (!webclient->http_parser) {

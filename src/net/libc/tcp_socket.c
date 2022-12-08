@@ -117,6 +117,18 @@ void tcp_socket_reject(struct tcp_socket *ts)
 	ts->accept_connection_sock = -1;
 }
 
+struct tcp_socket_notify_accept_t {
+	struct tcp_socket *ts;
+	ip_addr_t remote_addr;
+	uint32_t ipv6_scope_id;
+};
+
+static void tcp_socket_notify_accept(struct tcp_socket_notify_accept_t *arg)
+{
+	struct tcp_socket *ts = arg->ts;
+	ts->accept_callback(ts->callback_inst, &arg->remote_addr, arg->ipv6_scope_id);
+}
+
 static void tcp_socket_thread_accept(struct tcp_socket *ts)
 {
 	/* Accept connecton. */
@@ -133,11 +145,12 @@ static void tcp_socket_thread_accept(struct tcp_socket *ts)
 	}
 
 	/* Santiy check */
-	ip_addr_t remote_addr;
-	uint32_t ipv6_scope_id = tcp_socket_get_remote_addr_internal(connection_sock, &remote_addr);
-	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&remote_addr, ipv6_scope_id);
+	struct tcp_socket_notify_accept_t arg;
+	arg.ts = ts;
+	arg.ipv6_scope_id = tcp_socket_get_remote_addr_internal(connection_sock, &arg.remote_addr);
+	DEBUG_CHECK_IP_ADDR_IPV6_SCOPE_ID(&arg.remote_addr, arg.ipv6_scope_id);
 
-	if (!ip_addr_is_unicast(&remote_addr)) {
+	if (!ip_addr_is_unicast(&arg.remote_addr)) {
 		close(connection_sock);
 		return;
 	}
@@ -153,11 +166,7 @@ static void tcp_socket_thread_accept(struct tcp_socket *ts)
 
 	/* Notify connect. */
 	ts->accept_connection_sock = connection_sock;
-
-	thread_main_enter();
-	ts->accept_callback(ts->callback_inst, &remote_addr, ipv6_scope_id);
-	thread_main_exit();
-
+	thread_main_execute((thread_execute_func_t)tcp_socket_notify_accept, &arg);
 	DEBUG_ASSERT(ts->accept_connection_sock == -1, "tcp accept/reject not called");
 }
 

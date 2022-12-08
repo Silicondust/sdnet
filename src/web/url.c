@@ -39,6 +39,11 @@ bool url_to_str(struct url_t *url, char *buffer, char *end)
 		ptr = strchr(ptr, 0);
 		break;
 
+	case URL_PROTOCOL_RTP:
+		success &= sprintf_custom(ptr, end, "rtp://");
+		ptr = strchr(ptr, 0);
+		break;
+
 	default:
 		break;
 	}
@@ -88,6 +93,12 @@ static void url_parse_protocol_decode(struct url_t *output, char *protocol)
 	if (strcasecmp(protocol, "rtsp") == 0) {
 		output->protocol = URL_PROTOCOL_RTSP;
 		output->ip_port = 554;
+		return;
+	}
+
+	if (strcasecmp(protocol, "rtp") == 0) {
+		output->protocol = URL_PROTOCOL_RTP;
+		output->ip_port = 5004;
 		return;
 	}
 

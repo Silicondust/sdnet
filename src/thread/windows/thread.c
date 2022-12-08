@@ -22,10 +22,7 @@ struct thread_context_t {
 	struct thread_public_context_t public_context;
 	thread_execute_func_t execute_func;
 	void *execute_arg;
-
-#if defined(DEBUG)
 	volatile bool main_thread;
-#endif
 };
 
 struct thread_manager_t {
@@ -48,28 +45,40 @@ struct thread_public_context_t *thread_get_public_context(void)
 	return &thread_context->public_context;
 }
 
-#if defined(DEBUG)
 bool thread_is_main_thread(void)
 {
-	return thread_get_context_internal()->main_thread;
+	struct thread_context_t *thread_context = thread_get_context_internal();
+	return thread_context->main_thread;
 }
-#endif
+
+void thread_main_execute(thread_execute_func_t execute_func, void *execute_arg)
+{
+	struct thread_context_t *thread_context = thread_get_context_internal();
+	if (thread_context->main_thread) {
+		execute_func(execute_arg);
+		return;
+	}
+
+	spinlock_lock(&thread_manager.thread_main_lock);
+	thread_context->main_thread = true;
+
+	execute_func(execute_arg);
+
+	thread_context->main_thread = false;
+	spinlock_unlock(&thread_manager.thread_main_lock);
+}
 
 void thread_main_enter(void)
 {
+	struct thread_context_t *thread_context = thread_get_context_internal();
 	spinlock_lock(&thread_manager.thread_main_lock);
-
-#if defined(DEBUG)
-	thread_get_context_internal()->main_thread = true;
-#endif
+	thread_context->main_thread = true;
 }
 
 void thread_main_exit(void)
 {
-#if defined(DEBUG)
-	thread_get_context_internal()->main_thread = false;
-#endif
-
+	struct thread_context_t *thread_context = thread_get_context_internal();
+	thread_context->main_thread = false;
 	spinlock_unlock(&thread_manager.thread_main_lock);
 }
 

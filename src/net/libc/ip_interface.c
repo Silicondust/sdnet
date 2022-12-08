@@ -146,6 +146,8 @@ bool ip_interface_manager_detect_reactivate(uint32_t detect_hash)
 
 static void ip_interface_manager_detect(void)
 {
+	DEBUG_INFO("ip_interface_manager_detect");
+
 	/* move all active entries to inactive list */
 	while (1) {
 		struct ip_interface_t *idi = slist_detach_head(struct ip_interface_t, &ip_interface_manager.active_list);
@@ -449,6 +451,7 @@ void ip_interface_manager_get_local_ip_for_remote_ip(const ip_addr_t *remote_ip,
 
 void ip_interface_manager_redetect_required(void)
 {
+	DEBUG_INFO("ip_interface_manager_redetect_required");
 	ip_interface_manager.last_detect_time = 0;
 }
 

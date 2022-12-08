@@ -69,7 +69,6 @@ struct dhcp_server_client_t {
 
 struct dhcp_server_t {
 	struct udp_socket *sock;
-	struct ip_interface_t *idi;
 	ipv4_addr_t local_ip_addr;
 	ipv4_addr_t client_ip_first;
 	ipv4_addr_t client_ip_last;
@@ -524,14 +523,30 @@ void dhcp_server_load_state(uint8_t *ptr, uint8_t *end)
 	}
 }
 
-void dhcp_server_init(struct ip_interface_t *idi, ipv4_addr_t local_ip_addr, ipv4_addr_t client_ip_first, ipv4_addr_t client_ip_last, ipv4_addr_t subnet_mask)
+void dhcp_server_init(struct ip_managed_t *ipm, ipv4_addr_t local_ip_addr, ipv4_addr_t client_ip_first, ipv4_addr_t client_ip_last, ipv4_addr_t subnet_mask)
 {
-	dhcp_server.idi = idi;
+	if (client_ip_first > client_ip_last) {
+		DEBUG_ERROR("invalid client_ip range %v-%v", client_ip_first, client_ip_last);
+		return;
+	}
+
+	if ((local_ip_addr >= client_ip_first) && (local_ip_addr <= client_ip_last)) {
+		DEBUG_ERROR("invalid client_ip range %v-%v", client_ip_first, client_ip_last);
+		return;
+	}
+
+	ipv4_addr_t addr_min = (local_ip_addr & subnet_mask) + 1;
+	ipv4_addr_t addr_max = (local_ip_addr | ~subnet_mask) - 1;
+	if ((client_ip_first < addr_min) || (client_ip_last > addr_max)) {
+		DEBUG_ERROR("invalid client_ip range %v-%v", client_ip_first, client_ip_last);
+		return;
+	}
+
 	dhcp_server.local_ip_addr = local_ip_addr;
 	dhcp_server.client_ip_first = client_ip_first;
 	dhcp_server.client_ip_last = client_ip_last;
 	dhcp_server.subnet_mask = subnet_mask;
 
-	dhcp_server.sock = udp_socket_alloc(IP_MODE_IPV4);
-	udp_socket_listen_idi(dhcp_server.sock, idi, DHCP_SERVER_PORT, dhcp_server_recv, NULL, NULL);
+	dhcp_server.sock = udp_dhcp_socket_alloc();
+	udp_dhcp_socket_listen(dhcp_server.sock, ipm, DHCP_SERVER_PORT, dhcp_server_recv, NULL, NULL);
 }

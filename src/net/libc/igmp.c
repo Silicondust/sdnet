@@ -316,7 +316,7 @@ static void igmp_manager_local_ip_changed_ipv6(void)
 		}
 
 		igmp_manager_local_ip_changed_del_ip(p, &igmp_manager.igmp_ipv6_list);
-		slist_detach_pprev(struct igmp_local_ip_t, pprev, p);
+		(void)slist_detach_pprev(struct igmp_local_ip_t, pprev, p);
 		heap_free(p);
 		p = *pprev;
 	}

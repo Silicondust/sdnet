@@ -100,14 +100,12 @@ static void dir_change_notification_execute_event(struct kevent *event)
 			return;
 		}
 
-		if (!dcn->callback_main_thread) {
+		if (dcn->callback_main_thread) {
+			thread_main_execute((thread_execute_func_t)dcn->error_callback, dcn->callback_arg);
+		} else {
 			dcn->error_callback(dcn->callback_arg);
-			return;
 		}
 
-		thread_main_enter();
-		dcn->error_callback(dcn->callback_arg);
-		thread_main_exit();
 		return;
 	}
 
@@ -118,14 +116,11 @@ static void dir_change_notification_execute_event(struct kevent *event)
 		return;
 	}
 
-	if (!dcn->callback_main_thread) {
+	if (dcn->callback_main_thread) {
+		thread_main_execute((thread_execute_func_t)dcn->change_callback, dcn->callback_arg);
+	} else {
 		dcn->change_callback(dcn->callback_arg);
-		return;
 	}
-
-	thread_main_enter();
-	dcn->change_callback(dcn->callback_arg);
-	thread_main_exit();
 }
 
 static void dir_change_notification_thread_execute(void *arg)
@@ -171,16 +166,6 @@ struct dir_change_notification_t *dir_change_notification_register(const char *d
 		return NULL;
 	}
 	
-	struct kevent change;
-	memset(&change, 0, sizeof(change));
-	EV_SET(&change, dcn->dir_fd, EVFILT_VNODE, EV_ADD | EV_CLEAR | EV_ENABLE, NOTE_WRITE | NOTE_EXTEND | NOTE_DELETE | NOTE_RENAME | NOTE_REVOKE, 0, (void *)dirname);
-	if (kevent(dir_change_notification_manager.kqueue_fd, &change, 1, NULL, 0, NULL) < 0) {
-		DEBUG_ERROR("kevent add failed (%d)", errno);
-		close(dcn->dir_fd);
-		heap_free(dcn);
-		return NULL;
-	}
-
 	dcn->change_callback = change_callback;
 	dcn->error_callback = error_callback;
 	dcn->callback_arg = callback_arg;
@@ -189,6 +174,22 @@ struct dir_change_notification_t *dir_change_notification_register(const char *d
 	spinlock_lock(&dir_change_notification_manager.manager_lock);
 	slist_attach_head(struct dir_change_notification_t, &dir_change_notification_manager.dcn_list, dcn);
 	spinlock_unlock(&dir_change_notification_manager.manager_lock);
+
+	struct kevent change;
+	memset(&change, 0, sizeof(change));
+	EV_SET(&change, dcn->dir_fd, EVFILT_VNODE, EV_ADD | EV_CLEAR | EV_ENABLE, NOTE_WRITE | NOTE_EXTEND | NOTE_DELETE | NOTE_RENAME | NOTE_REVOKE, 0, (void *)dirname);
+	if (kevent(dir_change_notification_manager.kqueue_fd, &change, 1, NULL, 0, NULL) < 0) {
+		int errno_preserve = errno;
+		DEBUG_ERROR("kevent add failed (%d)", errno_preserve);
+
+		spinlock_lock(&dir_change_notification_manager.manager_lock);
+		(void)slist_detach_item(struct dir_change_notification_t, &dir_change_notification_manager.dcn_list, dcn);
+		spinlock_unlock(&dir_change_notification_manager.manager_lock);
+
+		close(dcn->dir_fd);
+		heap_free(dcn);
+		return NULL;
+	}
 
 	return dcn;
 }

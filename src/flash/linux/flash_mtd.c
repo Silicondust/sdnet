@@ -228,6 +228,15 @@ void flash_reset_stats(void)
 void flash_shutdown(struct system_crash_dump_t *crash_dump)
 {
 	flash_print_stats_internal();
+
+#if defined(SYSTEM_CRASH_DUMP_ADDR)
+	if (crash_dump) {
+		flash_erase_internal(SYSTEM_CRASH_DUMP_ADDR, sizeof(struct system_crash_dump_t));
+		flash_write_internal(SYSTEM_CRASH_DUMP_ADDR, crash_dump, sizeof(struct system_crash_dump_t));
+	}
+#endif
+
+	close(flash_mtd.fd);
 }
 
 void flash_init(void)

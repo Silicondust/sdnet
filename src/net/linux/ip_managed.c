@@ -174,10 +174,11 @@ void ip_managed_set_ipv4_addr(struct ip_managed_t *ipm, ipv4_addr_t ip_addr, ipv
 		}
 	}
 
-	if (ipm->secondary) {
-		struct ifreq ifflags;
-		ip_managed_get_ifflags(ipm, &ifflags);
-		ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
+	struct ifreq ifflags;
+	ip_managed_get_ifflags(ipm, &ifflags);
+	short existing_flags = ifflags.ifr_flags;
+	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
+	if (ifflags.ifr_flags != existing_flags) {
 		ip_managed_set_ifflags(ipm, &ifflags);
 	}
 
@@ -196,25 +197,6 @@ void ip_managed_set_ipv4_addr(struct ip_managed_t *ipm, ipv4_addr_t ip_addr, ipv
 
 	ip_interface_manager_redetect_required();
 	igmp_manager_local_ip_changed();
-}
-
-void ip_managed_set_wifi_ap(struct ip_managed_t *ipm)
-{
-	struct ifreq ifflags;
-	ip_managed_get_ifflags(ipm, &ifflags);
-	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
-	ip_managed_set_ifflags(ipm, &ifflags);
-
-	struct iwreq iwr;
-	memset(&iwr, 0, sizeof(struct iwreq));
-	strncpy(iwr.ifr_name, ipm->interface_name, IFNAMSIZ);
-
-	iwr.u.mode = IW_MODE_MASTER;
-	if (ioctl(ipm->ioctl_sock, SIOCSIWMODE, &iwr)) {
-		DEBUG_ERROR("ioctl SIOCSIWMODE failed %s %d %s", ipm->interface_name, errno, strerror(errno));
-	}
-
-	ip_interface_manager_redetect_required();
 }
 
 void ip_managed_set_loopback(struct ip_managed_t *ipm)
@@ -243,8 +225,6 @@ void ip_managed_set_loopback(struct ip_managed_t *ipm)
 	ip_managed_get_ifflags(ipm, &ifflags);
 	ifflags.ifr_flags |= (IFF_UP | IFF_RUNNING);
 	ip_managed_set_ifflags(ipm, &ifflags);
-
-	ip_interface_manager_redetect_required();
 }
 
 bool ip_managed_read_ethernet_mii_register(struct ip_managed_t *ipm, uint8_t reg_addr, uint16_t *presult)

@@ -23,9 +23,10 @@ extern void thread_suspend_wait_for_signal_or_timestamp(struct thread_signal_t *
 extern struct thread_public_context_t *thread_get_public_context(void);
 extern void thread_external_thread_init(void);
 
+extern bool thread_is_main_thread(void);
 extern void thread_main_enter(void);
 extern void thread_main_exit(void);
-extern bool thread_is_main_thread(void);
+extern void thread_main_execute(thread_execute_func_t execute_func, void *execute_arg);
 
 extern void thread_manager_init(void);
 extern void thread_manager_start(void);

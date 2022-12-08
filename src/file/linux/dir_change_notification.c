@@ -40,14 +40,14 @@ static struct dir_change_notification_manager_t dir_change_notification_manager;
 /* manager lock held */
 static void dir_change_notification_close(struct dir_change_notification_t *dcn)
 {
-	if (dcn->watch_handle == 0) {
+	if (dcn->watch_handle == -1) {
 		return;
 	}
-
+	
 	(void)slist_detach_item(struct dir_change_notification_t, &dir_change_notification_manager.dcn_list, dcn);
 
 	inotify_rm_watch(dir_change_notification_manager.inotify_fd, dcn->watch_handle);
-	dcn->watch_handle = 0;
+	dcn->watch_handle = -1;
 }
 
 /* manager lock held */
@@ -84,14 +84,12 @@ static void dir_change_notification_execute_event(struct inotify_event *event)
 			return;
 		}
 
-		if (!dcn->callback_main_thread) {
+		if (dcn->callback_main_thread) {
+			thread_main_execute((thread_execute_func_t)dcn->error_callback, dcn->callback_arg);
+		} else {
 			dcn->error_callback(dcn->callback_arg);
-			return;
 		}
 
-		thread_main_enter();
-		dcn->error_callback(dcn->callback_arg);
-		thread_main_exit();
 		return;
 	}
 
@@ -102,14 +100,11 @@ static void dir_change_notification_execute_event(struct inotify_event *event)
 		return;
 	}
 
-	if (!dcn->callback_main_thread) {
+	if (dcn->callback_main_thread) {
+		thread_main_execute((thread_execute_func_t)dcn->change_callback, dcn->callback_arg);
+	} else {
 		dcn->change_callback(dcn->callback_arg);
-		return;
 	}
-
-	thread_main_enter();
-	dcn->change_callback(dcn->callback_arg);
-	thread_main_exit();
 }
 
 static void dir_change_notification_thread_execute(void *arg)
@@ -160,15 +155,6 @@ struct dir_change_notification_t *dir_change_notification_register(const char *d
 		return NULL;
 	}
 
-	dcn->watch_handle = inotify_add_watch(dir_change_notification_manager.inotify_fd, dirname, IN_ONLYDIR | IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF);
-	if (dcn->watch_handle == -1) {
-		int errno_preserve = errno;
-		DEBUG_ERROR("inotify_add_watch failed");
-		heap_free(dcn);
-		errno = errno_preserve;
-		return NULL;
-	}
-
 	dcn->change_callback = change_callback;
 	dcn->error_callback = error_callback;
 	dcn->callback_arg = callback_arg;
@@ -177,6 +163,20 @@ struct dir_change_notification_t *dir_change_notification_register(const char *d
 	spinlock_lock(&dir_change_notification_manager.manager_lock);
 	slist_attach_head(struct dir_change_notification_t, &dir_change_notification_manager.dcn_list, dcn);
 	spinlock_unlock(&dir_change_notification_manager.manager_lock);
+
+	dcn->watch_handle = inotify_add_watch(dir_change_notification_manager.inotify_fd, dirname, IN_ONLYDIR | IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF);
+	if (dcn->watch_handle == -1) {
+		int errno_preserve = errno;
+		DEBUG_ERROR("inotify_add_watch failed (%d)", errno_preserve);
+
+		spinlock_lock(&dir_change_notification_manager.manager_lock);
+		(void)slist_detach_item(struct dir_change_notification_t, &dir_change_notification_manager.dcn_list, dcn);
+		spinlock_unlock(&dir_change_notification_manager.manager_lock);
+
+		heap_free(dcn);
+		errno = errno_preserve;
+		return NULL;
+	}
 
 	return dcn;
 }

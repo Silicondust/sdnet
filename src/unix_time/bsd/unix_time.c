@@ -49,7 +49,7 @@ time64_t unix_time_get_offset_from_native(void)
 	return unix_time() - (time64_t)time(NULL);
 }
 
-void unit_time_get_timespec(struct timespec64 *tp)
+void unix_time_get_timespec(struct timespec64 *tp)
 {
 	struct timespec native_tp;
 	clock_gettime(CLOCK_SELECTION, &native_tp);
@@ -66,8 +66,9 @@ void unix_time_set(time64_t new_time, unix_time_source_t source)
 	struct timespec tp;
 	clock_gettime(CLOCK_SELECTION, &tp);
 	time64_t local_ref = (time64_t)tp.tv_sec;
+	time64_t existing_time = local_ref + unix_time_manager.ticks_sec_to_gmt_time;
 
-	if ((source < unix_time_manager.source) && (unix_time_manager.last_set + UNIX_TIME_SOURCE_EXPIRE > local_ref + unix_time_manager.ticks_sec_to_gmt_time)) {
+	if ((source < unix_time_manager.source) && (unix_time_manager.last_set + UNIX_TIME_SOURCE_EXPIRE > existing_time)) {
 		return;
 	}
 

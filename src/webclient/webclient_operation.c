@@ -18,7 +18,7 @@
 
 THIS_FILE("webclient_operation");
 
-#define WEBCLIENT_OPERATION_TIMEOUT (30 * TICK_RATE)
+#define WEBCLIENT_OPERATION_TIMEOUT_DEFAULT (30 * TICK_RATE)
 
 struct webclient_operation_t *webclient_operation_ref(struct webclient_operation_t *operation)
 {
@@ -232,7 +232,7 @@ struct webclient_operation_t *webclient_operation_execute_post(struct webclient_
 
 	operation->stats.first_start_time = timer_get_ticks();
 	webclient_add_operation(webclient, operation);
-	webclient_operation_set_timeout(operation, WEBCLIENT_OPERATION_TIMEOUT);
+	webclient_operation_set_timeout(operation, WEBCLIENT_OPERATION_TIMEOUT_DEFAULT);
 
 	return operation;
 }

@@ -102,14 +102,12 @@ static void dir_change_notification_execute_event(struct dir_change_notification
 			return;
 		}
 
-		if (!dcn->callback_main_thread) {
+		if (dcn->callback_main_thread) {
+			thread_main_execute((thread_execute_func_t)dcn->error_callback, dcn->callback_arg);
+		} else {
 			dcn->error_callback(dcn->callback_arg);
-			return;
 		}
 
-		thread_main_enter();
-		dcn->error_callback(dcn->callback_arg);
-		thread_main_exit();
 		return;
 	}
 
@@ -120,14 +118,11 @@ static void dir_change_notification_execute_event(struct dir_change_notification
 		return;
 	}
 
-	if (!dcn->callback_main_thread) {
+	if (dcn->callback_main_thread) {
+		thread_main_execute((thread_execute_func_t)dcn->change_callback, dcn->callback_arg);
+	} else {
 		dcn->change_callback(dcn->callback_arg);
-		return;
 	}
-
-	thread_main_enter();
-	dcn->change_callback(dcn->callback_arg);
-	thread_main_exit();
 }
 
 static void dir_change_notification_update_wait_array(struct dir_change_notification_worker_t *worker)
@@ -254,6 +249,7 @@ struct dir_change_notification_t *dir_change_notification_register(const char *d
 	struct dir_change_notification_worker_t *worker = dir_change_notification_create_worker();
 	if (!worker) {
 		spinlock_unlock(&dir_change_notification_manager.manager_lock);
+
 		FindCloseChangeNotification(dcn->change_notification_handle);
 		heap_free(dcn);
 		errno = 0;
