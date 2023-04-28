@@ -30,7 +30,7 @@
 #include <thread/thread.h>
 #include <timer/timer.h>
 #include <unix_time/unix_time.h>
-#include <utils/hash32.h>
+#include <utils/hash64.h>
 #include <utils/slist.h>
 #include <utils/dlist.h>
 #include <utils/hmap.h>
@@ -53,6 +53,7 @@
 #include <net/libc/ip_interface.h>
 #include <net/igmp.h>
 #include <net/dhcp_client.h>
+#include <net/dhcp_common.h>
 #include <net/dns_lookup.h>
 #include <net/mdns_responder.h>
 #include <net/udp.h>

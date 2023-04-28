@@ -59,6 +59,9 @@ void unix_time_get_timespec(struct timespec64 *tp)
 
 void unix_time_set(time64_t new_time, unix_time_source_t source)
 {
+	if (source < UNIX_TIME_MIN_SOURCE) {
+		return;
+	}
 	if ((new_time < UNIX_TIME_MIN_VALID) || (new_time > UNIX_TIME_MAX_VALID)) {
 		return;
 	}

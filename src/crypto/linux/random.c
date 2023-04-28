@@ -18,15 +18,26 @@
 
 THIS_FILE("random");
 
+uint16_t random_get16(void)
+{
+	uint16_t result;
+	random_getbytes(&result, 2);
+	return result;
+}
+
 uint32_t random_get32(void)
+{
+	uint32_t result;
+	random_getbytes(&result, 4);
+	return result;
+}
+
+void random_getbytes(uint8_t *out, size_t length)
 {
 	struct thread_public_context_t *context = thread_get_public_context();
 
-	uint32_t result;
-	if (fread(&result, 4, 1, context->random_fp) != 1) {
+	if (fread(out, 1, length, context->random_fp) != length) {
 		fprintf(stderr, "failed to read /dev/urandom\n");
 		exit(1);
 	}
-
-	return result;
 }

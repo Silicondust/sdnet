@@ -246,7 +246,7 @@ static xml_parser_error_t upnp_descriptor_loader_xml_text_device_default(struct 
 
 static xml_parser_error_t upnp_descriptor_loader_xml_text_service_type(struct upnp_descriptor_loader_t *loader, const struct upnp_descriptor_loader_xml_text_lookup_t *lookup, struct netbuf *nb)
 {
-	loader->current_service.service_type_hash = hash32_create_nb(nb, netbuf_get_remaining(nb));
+	loader->current_service.service_type_hash = hash64_create_nb(nb, netbuf_get_remaining(nb));
 	return XML_PARSER_OK;
 }
 

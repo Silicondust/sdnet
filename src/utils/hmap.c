@@ -1,7 +1,7 @@
 /*
  * hmap.c
  *
- * Copyright © 2012 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2012-2023 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -38,11 +38,11 @@ uint32_t hmap_get_count(struct hmap_t *map)
 	return count;
 }
 
-struct hmap_prefix_t *hmap_find_impl(struct hmap_t *map, uint32_t hash)
+struct hmap_prefix_t *hmap_find_impl(struct hmap_t *map, uint64_t hash)
 {
 	DEBUG_ASSERT(map->hash_array, "hmap not initialized");
 
-	struct hmap_prefix_t *item = map->hash_array[hash & map->hash_mask];
+	struct hmap_prefix_t *item = map->hash_array[(uint32_t)hash & map->hash_mask];
 	while (item) {
 		if (item->hash == hash) {
 			return item;
@@ -54,7 +54,7 @@ struct hmap_prefix_t *hmap_find_impl(struct hmap_t *map, uint32_t hash)
 	return NULL;
 }
 
-struct hmap_prefix_t *hmap_next_impl(struct hmap_t *map, uint32_t hash)
+struct hmap_prefix_t *hmap_next_impl(struct hmap_t *map, uint64_t hash)
 {
 	DEBUG_ASSERT(map->hash_array, "hmap not initialized");
 
@@ -84,12 +84,12 @@ struct hmap_prefix_t *hmap_next_impl(struct hmap_t *map, uint32_t hash)
 	return NULL;
 }
 
-bool hmap_add_impl(struct hmap_t *map, struct hmap_prefix_t *item, uint32_t hash)
+bool hmap_add_impl(struct hmap_t *map, struct hmap_prefix_t *item, uint64_t hash)
 {
 	DEBUG_ASSERT(map->hash_array, "hmap not initialized");
 	DEBUG_ASSERT(!item->next, "item already attached?");
 
-	struct hmap_prefix_t **pprev = &map->hash_array[hash & map->hash_mask];
+	struct hmap_prefix_t **pprev = &map->hash_array[(uint32_t)hash & map->hash_mask];
 	struct hmap_prefix_t *p = *pprev;
 	while (p) {
 		if (p->hash == hash) {
@@ -106,9 +106,9 @@ bool hmap_add_impl(struct hmap_t *map, struct hmap_prefix_t *item, uint32_t hash
 	return true;
 }
 
-struct hmap_prefix_t *hmap_remove_impl(struct hmap_t *map, uint32_t hash)
+struct hmap_prefix_t *hmap_remove_impl(struct hmap_t *map, uint64_t hash)
 {
-	struct hmap_prefix_t **pprev = &map->hash_array[hash & map->hash_mask];
+	struct hmap_prefix_t **pprev = &map->hash_array[(uint32_t)hash & map->hash_mask];
 	struct hmap_prefix_t *p = *pprev;
 	while (p) {
 		if (p->hash == hash) {
@@ -140,12 +140,12 @@ struct hmap_prefix_t *hmap_remove_top_impl(struct hmap_t *map)
 	return NULL;
 }
 
-struct hmap_prefix_t *hmap_replace_impl(struct hmap_t *map, struct hmap_prefix_t *item, uint32_t hash)
+struct hmap_prefix_t *hmap_replace_impl(struct hmap_t *map, struct hmap_prefix_t *item, uint64_t hash)
 {
 	DEBUG_ASSERT(map->hash_array, "hmap not initialized");
 	DEBUG_ASSERT(!item->next, "item already attached?");
 
-	struct hmap_prefix_t **pprev = &map->hash_array[hash & map->hash_mask];
+	struct hmap_prefix_t **pprev = &map->hash_array[(uint32_t)hash & map->hash_mask];
 	struct hmap_prefix_t *p = *pprev;
 	while (p) {
 		if (p->hash == hash) {

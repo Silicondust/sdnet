@@ -156,7 +156,7 @@ static bool dns_manager_send_request(struct dns_entry_t *dns_entry, const ip_add
 		netbuf_rev_write_u8(txnb, *ptr);
 	}
 
-	dns_entry->transaction_id = (uint16_t)random_get32();
+	dns_entry->transaction_id = random_get16();
 
 	netbuf_rev_write_u16(txnb, 0); /* Additional RRs */
 	netbuf_rev_write_u16(txnb, 0); /* Authority RRs */

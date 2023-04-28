@@ -54,6 +54,21 @@ struct nvlist_entry_t *nvlist_lookup(struct slist_t *list, const char *name)
 	return NULL;
 }
 
+struct nvlist_entry_t *nvlist_lookup_prefix(struct slist_t *list, const char *name_prefix)
+{
+	struct nvlist_entry_t *entry = slist_get_head(struct nvlist_entry_t, list);
+	while (entry) {
+		int cmp = strprefixcmp(entry->name, name_prefix);
+		if (cmp >= 0) {
+			return (cmp == 0) ? entry : NULL;
+		}
+
+		entry = slist_get_next(struct nvlist_entry_t, entry);
+	}
+
+	return NULL;
+}
+
 const char *nvlist_lookup_str(struct slist_t *list, const char *name)
 {
 	struct nvlist_entry_t *entry = nvlist_lookup(list, name);
@@ -90,6 +105,20 @@ int64_t nvlist_lookup_int64(struct slist_t *list, const char *name, int64_t valu
 	}
 
 	return entry->value_int64;
+}
+
+bool nvlist_lookup_bool_strong(struct slist_t *list, const char *name)
+{
+	struct nvlist_entry_t *entry = nvlist_lookup(list, name);
+	if (!entry) {
+		return false;
+	}
+
+	if (entry->value_str) {
+		return (strcasecmp(entry->value_str, "true") == 0);
+	}
+
+	return (entry->value_int64 == 1);
 }
 
 static void nvlist_replace_internal(struct slist_t *list, struct nvlist_entry_t *entry)

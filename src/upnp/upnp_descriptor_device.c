@@ -24,7 +24,7 @@ void upnp_descriptor_device_free(struct upnp_descriptor_device_t *device)
 	heap_free(device); 
 }
 
-const char *upnp_descriptor_device_lookup_param_by_name_hash(struct upnp_descriptor_device_t *device, uint32_t name_hash)
+const char *upnp_descriptor_device_lookup_param_by_name_hash(struct upnp_descriptor_device_t *device, uint64_t name_hash)
 {
 	struct upnp_descriptor_device_param_t *param = slist_get_head(struct upnp_descriptor_device_param_t, &device->param_list);
 	while (param) {
@@ -40,13 +40,13 @@ const char *upnp_descriptor_device_lookup_param_by_name_hash(struct upnp_descrip
 
 const char *upnp_descriptor_device_lookup_param(struct upnp_descriptor_device_t *device, const char *name)
 {
-	uint32_t name_hash = hash32_create(name, strlen(name));
+	uint64_t name_hash = hash64_create(name, strlen(name));
 	return upnp_descriptor_device_lookup_param_by_name_hash(device, name_hash);
 }
 
 struct upnp_descriptor_device_service_t *upnp_descriptor_device_lookup_service(struct upnp_descriptor_device_t *device, const char *service_type)
 {
-	uint32_t service_type_hash = hash32_create(service_type, strlen(service_type));
+	uint64_t service_type_hash = hash64_create(service_type, strlen(service_type));
 
 	struct upnp_descriptor_device_service_t *service = slist_get_head(struct upnp_descriptor_device_service_t, &device->service_list);
 	while (service) {
@@ -71,7 +71,7 @@ bool upnp_descriptor_device_add_param(struct upnp_descriptor_device_t *device, c
 	}
 
 	memset(&param->slist_prefix, 0, sizeof(param->slist_prefix));
-	param->name_hash = hash32_create((void *)name, strlen(name));
+	param->name_hash = hash64_create((void *)name, strlen(name));
 
 	char *value = (char *)(param + 1);
 	netbuf_fwd_read(value_nb, value, value_len);

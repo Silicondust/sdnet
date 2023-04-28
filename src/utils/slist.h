@@ -26,6 +26,7 @@ typedef void (*slist_clear_callback_func_t)(struct slist_prefix_t *item);
  * list information.
  */
 extern uint32_t slist_get_count(struct slist_t *list);
+#define slist_contains_item(type, list, item) slist_contains_item_impl(list, (struct slist_prefix_t *)(void *)item)
 
 /*
  * list iteration.
@@ -74,6 +75,8 @@ extern uint32_t slist_get_count(struct slist_t *list);
 extern void slist_steal(struct slist_t *dst, struct slist_t *src);
 
 /* Implementation. */
+extern bool slist_contains_item_impl(struct slist_t *list, struct slist_prefix_t *item);
+
 static inline struct slist_prefix_t **slist_get_phead_impl(struct slist_t *list) { return &list->head; }
 static inline struct slist_prefix_t **slist_get_pnext_impl(struct slist_prefix_t *item) { return &item->next; }
 static inline struct slist_prefix_t *slist_get_head_impl(struct slist_t *list) { return list->head; }

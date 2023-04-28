@@ -33,7 +33,6 @@ static inline ip_type_t ip_addr_get_type_ipv4(ipv4_addr_t ipv4)
 		if (ipv4 == 0xFFFFFFFF) {
 			return IP_TYPE_IPV4_BROADCAST;
 		}
-
 		if (byte0 < 239) {
 			return (ipv4 <= 0xE00000FF) ? IP_TYPE_IPV4_MULTICAST_LINKLOCAL : IP_TYPE_IPV4_MULTICAST_PUBLIC;
 		}
@@ -94,14 +93,12 @@ ip_type_t ip_addr_get_type(const ip_addr_t *ip)
 	if ((word0 & 0xFFC0) == 0xFE80) { /* FE80::/10 */
 		return IP_TYPE_IPV6_LINKLOCAL;
 	}
-	if ((word0 & 0xFFC0) == 0xFEC0) { /* FEC0::/10 */
-		return IP_TYPE_IPV6_SITELOCAL;
-	}
 
 	if ((word0 & 0xFF00) == 0xFF00) {
 		switch (word0 & 0x000F) {
 		case 0x2:
 			return IP_TYPE_IPV6_MULTICAST_LINKLOCAL;
+		case 0x3:
 		case 0x4:
 		case 0x5:
 		case 0x8:
@@ -170,9 +167,6 @@ bool ip_addr_is_unicast(const ip_addr_t *ip)
 	if ((word0 & 0xFFC0) == 0xFE80) { /* FE80::/10 */
 		return true;
 	}
-	if ((word0 & 0xFFC0) == 0xFEC0) { /* FEC0::/10 */
-		return true;
-	}
 
 	return false;
 }
@@ -196,9 +190,6 @@ bool ip_addr_is_unicast_not_localhost(const ip_addr_t *ip)
 		return true;
 	}
 	if ((word0 & 0xFFC0) == 0xFE80) { /* FE80::/10 */
-		return true;
-	}
-	if ((word0 & 0xFFC0) == 0xFEC0) { /* FEC0::/10 */
 		return true;
 	}
 
@@ -231,9 +222,6 @@ bool ip_addr_is_sitelocal(const ip_addr_t *ip)
 
 	uint16_t word0 = (uint16_t)(ip->high >> 48);
 	if ((word0 & 0xFE00) == 0xFC00) { /* FC00::/7 */
-		return true;
-	}
-	if ((word0 & 0xFFC0) == 0xFEC0) { /* FEC0::/10 */
 		return true;
 	}
 
@@ -306,9 +294,6 @@ bool ip_addr_is_routable(const ip_addr_t *ip)
 		return true;
 	}
 	if ((word0 & 0xFE00) == 0xFC00) { /* FC00::/7 */
-		return true;
-	}
-	if ((word0 & 0xFFC0) == 0xFEC0) { /* FEC0::/10 */
 		return true;
 	}
 
@@ -560,7 +545,6 @@ ip_type_t ip_addr_get_type(const ip_addr_t *ip)
 		if (ip->ipv4 == 0xFFFFFFFF) {
 			return IP_TYPE_IPV4_BROADCAST;
 		}
-
 		if (byte0 < 239) {
 			return (ip->ipv4 <= 0xE00000FF) ? IP_TYPE_IPV4_MULTICAST_LINKLOCAL : IP_TYPE_IPV4_MULTICAST_PUBLIC;
 		}

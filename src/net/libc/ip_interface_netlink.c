@@ -137,9 +137,9 @@ static void ip_interface_manager_detect_execute_newaddr(int af_sock, struct nlms
 		DEBUG_TRACE("local ip %V / %V", &ip_addr, &subnet_mask);
 		rta = RTA_NEXT(rta, ifa_payload_length);
 
-		uint32_t detect_hash = hash32_create(&ifindex, sizeof(ifindex));
-		detect_hash = hash32_append(detect_hash, &ip_addr, sizeof(ip_addr_t));
-		detect_hash = hash32_append(detect_hash, &subnet_mask, sizeof(ip_addr_t));
+		uint64_t detect_hash = hash64_create(&ifindex, sizeof(ifindex));
+		detect_hash = hash64_append(detect_hash, &ip_addr, sizeof(ip_addr_t));
+		detect_hash = hash64_append(detect_hash, &subnet_mask, sizeof(ip_addr_t));
 
 		if (ip_interface_manager_detect_reactivate(detect_hash)) {
 			continue;

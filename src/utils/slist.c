@@ -31,6 +31,20 @@ uint32_t slist_get_count(struct slist_t *list)
 	return count;
 }
 
+bool slist_contains_item_impl(struct slist_t *list, struct slist_prefix_t *item)
+{
+	struct slist_prefix_t *p = list->head;
+	while (p) {
+		if (p == item) {
+			return true;
+		}
+
+		p = p->next;
+	}
+
+	return false;
+}
+
 struct slist_prefix_t *slist_get_tail_impl(struct slist_t *list)
 {
 	struct slist_prefix_t *p = list->head;

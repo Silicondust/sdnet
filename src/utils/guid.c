@@ -20,11 +20,7 @@ THIS_FILE("guid");
 
 void guid_create_random(struct guid *guid)
 {
-	uint32_t *data = (uint32_t *)guid;
-	data[0] = random_get32();
-	data[1] = random_get32();
-	data[2] = random_get32();
-	data[3] = random_get32();
+	random_getbytes((uint8_t *)guid, sizeof(struct guid));
 }
 
 void guid_create_ubicom(struct guid *guid, uint8_t mac_addr[6], uint8_t sequence)

@@ -105,7 +105,7 @@
     <ClCompile Include="..\utils\bcd.c" />
     <ClCompile Include="..\utils\dlist.c" />
     <ClCompile Include="..\utils\guid.c" />
-    <ClCompile Include="..\utils\hash32.c" />
+    <ClCompile Include="..\utils\hash64.c" />
     <ClCompile Include="..\utils\hmap.c" />
     <ClCompile Include="..\utils\nvlist.c" />
     <ClCompile Include="..\utils\slist.c" />

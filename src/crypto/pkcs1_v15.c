@@ -60,22 +60,21 @@ void pkcs1_v15_type2_pad(uint8_t *in, size_t in_len, uint8_t *out, size_t out_le
 	*out++ = 0x02;
 
 	size_t fill_len = out_len - in_len - 3;
+	random_getbytes(out, fill_len);
+
+	uint32_t random = 0;
 	uint8_t *fill_end = out + fill_len;
-
-	uint32_t random = random_get32();
 	while (out < fill_end) {
-		uint8_t v = random & 0xFF;
-		if (v == 0) {
-			if (random != 0) {
-				random >>= 8;
-				continue;
-			}
-
-			random = random_get32();
+		if (*out++ != 0) {
 			continue;
 		}
 
-		*out++ = v;
+		if (random == 0) {
+			random = random_get32();
+		}
+
+		out--;
+		*out = (uint8_t)random;
 		random >>= 8;
 	}
 

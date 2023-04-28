@@ -28,6 +28,8 @@ extern const char http_result_service_unavailable[];
 extern const char http_content_type_html[];
 extern const char http_content_type_xml[];
 extern const char http_content_type_json[];
+extern const char http_content_type_binary[];
+extern const char http_content_type_x509_user_cert[];
 
 struct http_header_content_range_t {
 	uint64_t start;

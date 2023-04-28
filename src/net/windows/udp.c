@@ -45,19 +45,25 @@ uint16_t udp_socket_get_port(struct udp_socket *us)
 
 static void udp_socket_set_ttl_internal(int sock, ip_mode_t ip_mode, uint8_t ttl)
 {
+	int sock_opt_ttl = (int)(unsigned int)ttl;
+
 #if defined(IPV6_SUPPORT)
 	if (ip_mode == IP_MODE_IPV6) {
-		int sock_opt_ttl = (int)(unsigned int)ttl;
 		if (setsockopt(sock, IPPROTO_IPV6, IPV6_UNICAST_HOPS, (char *)&sock_opt_ttl, sizeof(sock_opt_ttl)) < 0) {
 			DEBUG_WARN("setsockopt IPV6_UNICAST_HOPS error %d", WSAGetLastError());
+		}
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, (char *)&sock_opt_ttl, sizeof(sock_opt_ttl)) < 0) {
+			DEBUG_WARN("setsockopt IPV6_MULTICAST_HOPS error %d", WSAGetLastError());
 		}
 		return;
 	}
 #endif
 
-	int sock_opt_ttl = (int)(unsigned int)ttl;
 	if (setsockopt(sock, IPPROTO_IP, IP_TTL, (char *)&sock_opt_ttl, sizeof(sock_opt_ttl)) < 0) {
 		DEBUG_WARN("setsockopt IP_TTL error %d", WSAGetLastError());
+	}
+	if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (char *)&sock_opt_ttl, sizeof(sock_opt_ttl)) < 0) {
+		DEBUG_WARN("setsockopt IP_MULTICAST_TTL error %d", WSAGetLastError());
 	}
 }
 
@@ -295,6 +301,14 @@ void udp_socket_set_recv_netbuf_size(struct udp_socket *us, size_t recv_netbuf_s
 	us->recv_netbuf_size = recv_netbuf_size;
 }
 
+void udp_socket_allow_ipv4_broadcast(struct udp_socket *us)
+{
+	int sock_opt_broadcast = 1;
+	if (setsockopt(us->sock, SOL_SOCKET, SO_BROADCAST, (char *)&sock_opt_broadcast, sizeof(sock_opt_broadcast)) < 0) {
+		DEBUG_WARN("setsockopt SO_BROADCAST error %d", WSAGetLastError());
+	}
+}
+
 struct udp_socket *udp_socket_alloc(ip_mode_t ip_mode)
 {
 	struct udp_socket *us = (struct udp_socket *)heap_alloc_and_zero(sizeof(struct udp_socket), PKG_OS, MEM_TYPE_OS_UDP_SOCKET);
@@ -336,10 +350,6 @@ struct udp_socket *udp_socket_alloc(ip_mode_t ip_mode)
 			DEBUG_ERROR("failed to set send buffer size to %d", send_buffer_size_set);
 		}
 	}
-
-	/* Allow broadcast. */
-	int sock_opt_broadcast = 1;
-	setsockopt(us->sock, SOL_SOCKET, SO_BROADCAST, (char *)&sock_opt_broadcast, sizeof(sock_opt_broadcast));
 
 	/* Allow port reuse - required for SSDP. */
 	int sock_opt_reuseaddr = 1;

@@ -21,7 +21,7 @@ THIS_FILE("ip_interface");
 struct ip_interface_manager_t {
 	struct slist_t active_list;
 	struct slist_t inactive_list;
-	ticks_t last_detect_time;
+	ticks_t redetect_time;
 
 	struct ip_interface_t localhost_ipv4;
 	struct ip_interface_t localhost_ipv6;
@@ -117,7 +117,7 @@ void ip_interface_manager_detect_add(struct ip_interface_t *idi)
 	slist_insert_pprev(struct ip_interface_t, pprev, idi);
 }
 
-bool ip_interface_manager_detect_reactivate(uint32_t detect_hash)
+bool ip_interface_manager_detect_reactivate(uint64_t detect_hash)
 {
 	struct ip_interface_t **pprev = slist_get_phead(struct ip_interface_t, &ip_interface_manager.inactive_list);
 	struct ip_interface_t *p = slist_get_head(struct ip_interface_t, &ip_interface_manager.inactive_list);
@@ -159,7 +159,7 @@ static void ip_interface_manager_detect(void)
 	}
 
 	ip_interface_manager_detect_execute();
-	ip_interface_manager.last_detect_time = timer_get_ticks();
+	ip_interface_manager.redetect_time = timer_get_ticks() + TICK_RATE * 5;
 
 	struct ip_interface_t *p = slist_get_head(struct ip_interface_t, &ip_interface_manager.inactive_list);
 	while (p) {
@@ -199,7 +199,7 @@ static void ip_interface_manager_detect(void)
 #if defined(IPV6_SUPPORT)
 bool ip_interface_manager_has_public_ipv6(void)
 {
-	if (timer_get_ticks() >= ip_interface_manager.last_detect_time + TICK_RATE * 5) {
+	if (timer_get_ticks() >= ip_interface_manager.redetect_time) {
 		ip_interface_manager_detect();
 	}
 
@@ -218,7 +218,7 @@ bool ip_interface_manager_has_public_ipv6(void)
 
 struct ip_interface_t *ip_interface_manager_get_head(void)
 {
-	if (timer_get_ticks() >= ip_interface_manager.last_detect_time + TICK_RATE * 5) {
+	if (timer_get_ticks() >= ip_interface_manager.redetect_time) {
 		ip_interface_manager_detect();
 	}
 
@@ -228,7 +228,7 @@ struct ip_interface_t *ip_interface_manager_get_head(void)
 struct ip_interface_t *ip_interface_manager_get_by_ifindex_best_ipv6(uint32_t ifindex)
 {
 #if defined(IPV6_SUPPORT)
-	if (timer_get_ticks() >= ip_interface_manager.last_detect_time + TICK_RATE * 5) {
+	if (timer_get_ticks() >= ip_interface_manager.redetect_time) {
 		ip_interface_manager_detect();
 	}
 
@@ -255,7 +255,7 @@ struct ip_interface_t *ip_interface_manager_get_by_ifindex_best_ipv6(uint32_t if
 
 struct ip_interface_t *ip_interface_manager_get_by_ifindex_best_ipv4(uint32_t ifindex)
 {
-	if (timer_get_ticks() >= ip_interface_manager.last_detect_time + TICK_RATE * 5) {
+	if (timer_get_ticks() >= ip_interface_manager.redetect_time) {
 		ip_interface_manager_detect();
 	}
 
@@ -281,7 +281,7 @@ struct ip_interface_t *ip_interface_manager_get_by_ifindex_best_ipv4(uint32_t if
 
 struct ip_interface_t *ip_interface_manager_get_by_local_ip(const ip_addr_t *local_ip, uint32_t ipv6_scope_id)
 {
-	if (timer_get_ticks() >= ip_interface_manager.last_detect_time + TICK_RATE * 5) {
+	if (timer_get_ticks() >= ip_interface_manager.redetect_time) {
 		ip_interface_manager_detect();
 	}
 
@@ -335,7 +335,7 @@ struct ip_interface_t *ip_interface_manager_get_by_local_ip(const ip_addr_t *loc
 
 struct ip_interface_t *ip_interface_manager_get_by_remote_ip(const ip_addr_t *remote_ip, uint32_t ipv6_scope_id)
 {
-	if (timer_get_ticks() >= ip_interface_manager.last_detect_time + TICK_RATE * 5) {
+	if (timer_get_ticks() >= ip_interface_manager.redetect_time) {
 		ip_interface_manager_detect();
 	}
 
@@ -452,7 +452,7 @@ void ip_interface_manager_get_local_ip_for_remote_ip(const ip_addr_t *remote_ip,
 void ip_interface_manager_redetect_required(void)
 {
 	DEBUG_INFO("ip_interface_manager_redetect_required");
-	ip_interface_manager.last_detect_time = 0;
+	ip_interface_manager.redetect_time = 0;
 }
 
 void ip_interface_manager_register_callbacks(ip_interface_new_callback_t callback_new, ip_interface_lost_callback_t callback_lost, void *callback_arg, bool trigger_now)

@@ -37,6 +37,8 @@ const char http_result_service_unavailable[] = "503 Service Unavailable";
 const char http_content_type_html[] = "text/html; charset=\"utf-8\"";
 const char http_content_type_xml[] = "text/xml; charset=\"utf-8\"";
 const char http_content_type_json[] = "application/json; charset=\"utf-8\"";
+const char http_content_type_binary[] = "application/octet-stream";
+const char http_content_type_x509_user_cert[] = "application/x-x509-user-cert";
 
 bool  http_header_write_cache_control(struct netbuf *header_nb, uint32_t duration)
 {

@@ -128,6 +128,7 @@ udp_error_t udp_dhcp_socket_send_netbuf(struct udp_socket *us, struct ip_managed
 udp_error_t udp_dhcp_socket_listen(struct udp_socket *us, struct ip_managed_t *ipm, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst)
 {
 	DEBUG_ASSERT(ipm, "no ipm");
+	udp_socket_allow_ipv4_broadcast(us);
 
 	const char *interface_name = ip_managed_get_interface_name(ipm);
 	if (setsockopt(us->sock, SOL_SOCKET, SO_BINDTODEVICE, interface_name, strlen(interface_name) + 1) < 0) {

@@ -114,9 +114,6 @@
     <ClCompile Include="..\utils\guid.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\utils\hash32.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\utils\hmap.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -322,6 +319,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\net\libc\dns_lookup.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\hash64.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

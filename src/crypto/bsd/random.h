@@ -8,6 +8,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+extern inline uint16_t random_get16(void)
+{
+	return (uint16_t)arc4random();
+}
+
 extern inline uint32_t random_get32(void)
 {
 	return arc4random();

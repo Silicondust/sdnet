@@ -29,6 +29,7 @@ extern bool ip_interface_is_ipv6_linklocal(struct ip_interface_t *idi);
 
 extern void ip_interface_manager_init(void);
 extern void ip_interface_manager_register_callbacks(ip_interface_new_callback_t callback_new, ip_interface_lost_callback_t callback_lost, void *callback_arg, bool trigger_now);
+extern void ip_interface_manager_redetect_required(void);
 extern bool ip_interface_manager_has_public_ipv6(void);
 extern struct ip_interface_t *ip_interface_manager_get_head(void);
 extern struct ip_interface_t *ip_interface_manager_get_by_ifindex_best_ipv6(uint32_t ifindex);

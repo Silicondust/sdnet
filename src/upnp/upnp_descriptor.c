@@ -46,7 +46,7 @@ ref_t upnp_descriptor_deref(struct upnp_descriptor_t *descriptor)
 
 static struct upnp_descriptor_device_t *upnp_descriptor_find_device_by_param(struct upnp_descriptor_t *descriptor, const char *name, const char *value)
 {
-	uint32_t name_hash = hash32_create(name, strlen(name));
+	uint64_t name_hash = hash64_create(name, strlen(name));
 
 	struct upnp_descriptor_device_t *device = slist_get_head(struct upnp_descriptor_device_t, &descriptor->device_list);
 	while (device) {
@@ -87,10 +87,10 @@ void upnp_descriptor_detection_complete(struct upnp_descriptor_t *descriptor)
 
 struct upnp_descriptor_t *upnp_descriptor_manager_descriptor_alloc(struct url_t *descriptor_url)
 {
-	uint32_t device_url_hash = hash32_create(&descriptor_url->ipv6_scope_id, sizeof(descriptor_url->ipv6_scope_id));
-	device_url_hash = hash32_append(device_url_hash , &descriptor_url->ip_addr, sizeof(descriptor_url->ip_addr));
-	device_url_hash = hash32_append(device_url_hash, &descriptor_url->ip_port, sizeof(descriptor_url->ip_port));
-	device_url_hash = hash32_append(device_url_hash, descriptor_url->uri, strlen(descriptor_url->uri));
+	uint64_t device_url_hash = hash64_create(&descriptor_url->ipv6_scope_id, sizeof(descriptor_url->ipv6_scope_id));
+	device_url_hash = hash64_append(device_url_hash , &descriptor_url->ip_addr, sizeof(descriptor_url->ip_addr));
+	device_url_hash = hash64_append(device_url_hash, &descriptor_url->ip_port, sizeof(descriptor_url->ip_port));
+	device_url_hash = hash64_append(device_url_hash, descriptor_url->uri, strlen(descriptor_url->uri));
 
 	struct upnp_descriptor_t *descriptor = slist_get_head(struct upnp_descriptor_t, &upnp_descriptor_manager.descriptor_list);
 	while (descriptor) {

@@ -247,10 +247,9 @@ static bool tls_client_connection_record_send_encrypt(struct tls_client_connecti
 	if (UNLIKELY(override_iv)) {
 		netbuf_fwd_write(txnb, override_iv, AES_128_SIZE);
 	} else {
-		netbuf_fwd_write_u32(txnb, random_get32());
-		netbuf_fwd_write_u32(txnb, random_get32());
-		netbuf_fwd_write_u32(txnb, random_get32());
-		netbuf_fwd_write_u32(txnb, random_get32());
+		uint8_t iv[AES_128_SIZE];
+		random_getbytes(iv, AES_128_SIZE);
+		netbuf_fwd_write(txnb, iv, AES_128_SIZE);
 	}
 
 	/* Write HMAC & padding */
@@ -482,11 +481,7 @@ static bool tls_client_connection_send_client_hello(struct tls_client_connection
 	netbuf_rev_write_u8(txnb, 0); /* length */
 
 	/* Handshake - random */
-	uint32_t client_random[8];
-	for (int i = 0; i < 8; i++) {
-		client_random[i] = random_get32();
-	}
-	memcpy(tls_conn->client_random, client_random, 32);
+	random_getbytes(tls_conn->client_random, 32);
 	netbuf_rev_write(txnb, tls_conn->client_random, 32);
 
 	/* Handshake - client hello */
@@ -887,13 +882,9 @@ static bool tls_client_connection_handshake_long_task(void *arg)
 	}
 
 	/* Generate pre master secret  */
-	uint32_t pre_master_secret_u32be[12];
-	for (int i = 0; i < 12; i++) {
-		pre_master_secret_u32be[i] = random_get32();
-	}
-
-	uint8_t *pre_master_secret = (uint8_t *)pre_master_secret_u32be;
+	uint8_t pre_master_secret[48];
 	mem_int_write_be_u16(pre_master_secret, TLS_VERSION);
+	random_getbytes(pre_master_secret + 2, 46);
 
 	/* Generate client key exchange packet */
 	tls_conn->handshake_long_task_client_key_exchange_nb = tls_client_connection_handshake_long_task_generate_client_key_exchange(tls_conn, pre_master_secret, server_public_key);
@@ -1453,16 +1444,10 @@ struct tls_client_connection_t *tls_client_connection_alloc(void)
 	return tls_conn;
 }
 
-static void tls_client_load_certs_from_appfs_file(const char *filename, struct slist_t *certs)
+static void tls_client_load_certs_internal(uint8_t *certs_start, size_t certs_length, struct slist_t *certs)
 {
-	size_t file_length;
-	uint8_t *file_start = appfs_file_mmap(filename, "", &file_length);
-	if (!file_start) {
-		return;
-	}
-
-	uint8_t *ptr = file_start;
-	uint8_t *end = file_start + file_length;
+	uint8_t *ptr = certs_start;
+	uint8_t *end = certs_start + certs_length;
 	while (ptr < end) {
 		size_t cert_length = x509_certificate_import_length(ptr, end - ptr);
 		if (cert_length == 0) {
@@ -1471,7 +1456,7 @@ static void tls_client_load_certs_from_appfs_file(const char *filename, struct s
 
 		struct x509_certificate_t *cert = x509_certificate_import_no_copy(ptr, cert_length);
 		if (!cert) {
-			DEBUG_WARN("bad cert data in cert at 0x%08x", (unsigned int)(ptr - file_start));
+			DEBUG_WARN("bad cert data in cert at 0x%08x", (unsigned int)(ptr - certs_start));
 			ptr += cert_length;
 			continue;
 		}
@@ -1481,12 +1466,35 @@ static void tls_client_load_certs_from_appfs_file(const char *filename, struct s
 	}
 }
 
-void tls_client_set_client_cert_appfs(const char *client_crt_appfs_filename, const char *client_key_appfs_filename)
+void tls_client_set_client_cert_mem(uint8_t *cert_data, size_t cert_length, uint8_t *key_data, size_t key_length)
 {
 	if (tls_client_manager.client_key_optional) {
 		slist_clear(struct x509_certificate_t, &tls_client_manager.client_cert_chain_optional, x509_certificate_free);
 		rsa_key_free(tls_client_manager.client_key_optional);
 		tls_client_manager.client_key_optional = NULL;
+	}
+
+	tls_client_manager.client_key_optional = rsa_key_import_private(key_data, key_length);
+	if (!tls_client_manager.client_key_optional) {
+		DEBUG_ERROR("failed to load client key");
+		return;
+	}
+
+	tls_client_load_certs_internal(cert_data, cert_length, &tls_client_manager.client_cert_chain_optional);
+	if (!slist_get_head(struct x509_certificate_t, &tls_client_manager.client_cert_chain_optional)) {
+		DEBUG_ERROR("failed to load client certificate");
+		rsa_key_free(tls_client_manager.client_key_optional);
+		return;
+	}
+}
+
+void tls_client_set_client_cert_appfs(const char *client_crt_appfs_filename, const char *client_key_appfs_filename)
+{
+	size_t cert_length;
+	uint8_t *cert_data = appfs_file_mmap(client_crt_appfs_filename, "", &cert_length);
+	if (!cert_data) {
+		DEBUG_ERROR("failed to load client certificate %s", client_crt_appfs_filename);
+		return;
 	}
 
 	size_t key_length;
@@ -1496,23 +1504,17 @@ void tls_client_set_client_cert_appfs(const char *client_crt_appfs_filename, con
 		return;
 	}
 
-	tls_client_manager.client_key_optional = rsa_key_import_private(key_data, key_length);
-	if (!tls_client_manager.client_key_optional) {
-		DEBUG_ERROR("failed to load client key %s", client_key_appfs_filename);
-		return;
-	}
-
-	tls_client_load_certs_from_appfs_file(client_crt_appfs_filename, &tls_client_manager.client_cert_chain_optional);
-	if (!slist_get_head(struct x509_certificate_t, &tls_client_manager.client_cert_chain_optional)) {
-		DEBUG_ERROR("failed to load client certificate %s", client_crt_appfs_filename);
-		rsa_key_free(tls_client_manager.client_key_optional);
-		return;
-	}
+	tls_client_set_client_cert_mem(cert_data, cert_length, key_data, key_length);
 }
 
 void tls_client_init()
 {
-	tls_client_load_certs_from_appfs_file("/tls/public_root_certs", &tls_client_manager.root_certs);
+	size_t root_certs_length;
+	uint8_t *roots_certs_start = appfs_file_mmap("/tls/public_root_certs", "", &root_certs_length);
+	if (roots_certs_start) {
+		tls_client_load_certs_internal(roots_certs_start, root_certs_length, &tls_client_manager.root_certs);
+	}
+
 	DEBUG_INFO("imported %u root certs", slist_get_count(&tls_client_manager.root_certs));
 
 	size_t length;

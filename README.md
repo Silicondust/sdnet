@@ -1,4 +1,4 @@
-Copyright © 2007-2018 Silicondust USA Inc. <www.silicondust.com>.
+Copyright © 2007-2023 Silicondust USA Inc. <www.silicondust.com>.
 
 This codebase provides APIs for building network based embedded systems.
 Features include UPNP (SSDP/SOAP/GENA).

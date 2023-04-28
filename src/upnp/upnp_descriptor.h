@@ -25,13 +25,13 @@ extern struct upnp_descriptor_device_service_t *upnp_descriptor_device_lookup_se
 /* Internal */
 struct upnp_descriptor_device_param_t {
 	struct slist_prefix_t slist_prefix;
-	uint32_t name_hash;
+	uint64_t name_hash;
 	const char *value;
 };
 
 struct upnp_descriptor_device_service_t {
 	struct slist_prefix_t slist_prefix;
-	uint32_t service_type_hash;
+	uint64_t service_type_hash;
 	struct url_t control_url;
 };
 
@@ -45,7 +45,7 @@ struct upnp_descriptor_t {
 	struct slist_prefix_t slist_prefix;
 	struct slist_t device_list;
 	struct upnp_descriptor_loader_t *loader;
-	uint32_t device_url_hash;
+	uint64_t device_url_hash;
 	ref_t refs;
 };
 
@@ -60,6 +60,6 @@ extern void upnp_descriptor_loader_free(struct upnp_descriptor_loader_t *loader)
 
 extern struct upnp_descriptor_device_t *upnp_descriptor_device_alloc(void);
 extern void upnp_descriptor_device_free(struct upnp_descriptor_device_t *device);
-extern const char *upnp_descriptor_device_lookup_param_by_name_hash(struct upnp_descriptor_device_t *device, uint32_t name_hash);
+extern const char *upnp_descriptor_device_lookup_param_by_name_hash(struct upnp_descriptor_device_t *device, uint64_t name_hash);
 extern bool upnp_descriptor_device_add_param(struct upnp_descriptor_device_t *device, const char *name, struct netbuf *value_nb);
 extern bool upnp_descriptor_device_add_service(struct upnp_descriptor_device_t *device, struct upnp_descriptor_device_service_t *service_info);

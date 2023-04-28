@@ -23,6 +23,7 @@ typedef void (*udp_recv_callback_t)(void *inst, const ip_addr_t *src_addr, uint1
 typedef void (*udp_recv_icmp_callback_t)(void *inst, uint8_t icmp_type, const ip_addr_t *dest_addr, uint16_t dest_port, uint32_t ipv6_scope_id);
 
 extern struct udp_socket *udp_socket_alloc(ip_mode_t ip_mode);
+extern void udp_socket_allow_ipv4_broadcast(struct udp_socket *us);
 extern void udp_socket_set_recv_netbuf_size(struct udp_socket *us, size_t recv_netbuf_size);
 extern udp_error_t udp_socket_listen(struct udp_socket *us, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst);
 extern udp_error_t udp_socket_listen_idi(struct udp_socket *us, struct ip_interface_t *idi, uint16_t port, udp_recv_callback_t recv, udp_recv_icmp_callback_t recv_icmp, void *inst);

@@ -1,0 +1,55 @@
+/*
+ * dhcp_common.h
+ *
+ * Copyright © 2023 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#define DHCP_CLIENT_PORT 68
+#define DHCP_SERVER_PORT 67
+
+#define DHCP_BOOTP_REQUEST 0x01
+#define DHCP_BOOTP_REPLY 0x02
+
+#define DHCP_BOOTP_FLAGS_NONE 0x0000
+#define DHCP_BOOTP_FLAGS_BROADCAST 0x8000
+
+#define DHCP_MAGIC_COOKIE 0x63825363
+
+#define DHCP_TAG_PAD 0x00
+#define DHCP_TAG_SUBNET_MASK 0x01
+#define DHCP_TAG_ROUTER 0x03
+#define DHCP_TAG_TIME_SERVER 0x04
+#define DHCP_TAG_NAME_SERVER 0x05
+#define DHCP_TAG_DOMAIN_NAME_SERVER 0x06
+#define DHCP_TAG_LOG_SERVER 0x07
+#define DHCP_TAG_HOST_NAME 0x0c
+#define DHCP_TAG_DOMAIN_NAME 0x0f
+#define DHCP_TAG_BROADCAST_ADDRESS 0x1c
+#define DHCP_TAG_STATIC_ROUTE 0x21
+#define DHCP_TAG_NTP_SERVER 0x2a
+#define DHCP_TAG_REQUESTED_IP_ADDRESS 0x32
+#define DHCP_TAG_IP_ADDR_LEASE_TIME 0x33
+#define DHCP_TAG_DHCP_MESSAGE_TYPE 0x35
+#define DHCP_TAG_DHCP_SERVER_IDENTIFIER 0x36
+#define DHCP_TAG_REQUESTED_PARAMETER_LIST 0x37
+#define DHCP_TAG_RENEWAL_TIME_VALUE 0x3a
+#define DHCP_TAG_REBINDING_TIME_VALUE 0x3b
+#define DHCP_TAG_CLIENT_IDENTIFIER 0x3d
+#define DHCP_TAG_CAPTIVE_PORTAL 0x72
+#define DHCP_TAG_END 0xff
+
+#define DHCP_MESSAGE_TYPE_DISCOVER 0x01
+#define DHCP_MESSAGE_TYPE_OFFER 0x02
+#define DHCP_MESSAGE_TYPE_REQUEST 0x03
+#define DHCP_MESSAGE_TYPE_DECLINE 0x04
+#define DHCP_MESSAGE_TYPE_ACK 0x05
+#define DHCP_MESSAGE_TYPE_NACK 0x06
+#define DHCP_MESSAGE_TYPE_RELEASE 0x07
+#define DHCP_MESSAGE_TYPE_INFORM 0x08
+
+#define DHCP_HARDWARE_TYPE_ETHERNET 0x01
+

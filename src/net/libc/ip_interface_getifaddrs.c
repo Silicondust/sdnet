@@ -136,9 +136,9 @@ void ip_interface_manager_detect_execute(void)
 		 */
 		ifa = ifa->ifa_next;
 
-		uint32_t detect_hash = hash32_create(&ifindex, sizeof(ifindex));
-		detect_hash = hash32_append(detect_hash, &ip_addr, sizeof(ip_addr_t));
-		detect_hash = hash32_append(detect_hash, &subnet_mask, sizeof(ip_addr_t));
+		uint64_t detect_hash = hash64_create(&ifindex, sizeof(ifindex));
+		detect_hash = hash64_append(detect_hash, &ip_addr, sizeof(ip_addr_t));
+		detect_hash = hash64_append(detect_hash, &subnet_mask, sizeof(ip_addr_t));
 
 		if (ip_interface_manager_detect_reactivate(detect_hash)) {
 			continue;

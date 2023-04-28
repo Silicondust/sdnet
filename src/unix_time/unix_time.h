@@ -14,7 +14,11 @@
 #define UNIX_TIME_MAX_VALID 4102444799LL
 #define UNIX_TIME_SOURCE_EXPIRE (24 * 60 * 60)
 
- /* higher number = higher priority */
+#if !defined(UNIX_TIME_MIN_SOURCE)
+#define UNIX_TIME_MIN_SOURCE UNIX_TIME_SOURCE_HTTP
+#endif
+
+/* higher number = higher priority */
 typedef enum {
 	UNIX_TIME_SOURCE_NONE = 0,
 	UNIX_TIME_SOURCE_OTA = 1,

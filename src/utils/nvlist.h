@@ -18,9 +18,11 @@ struct nvlist_entry_t {
 extern void nvlist_debug_print(struct slist_t *list);
 extern void nvlist_clear_all(struct slist_t *list);
 extern struct nvlist_entry_t *nvlist_lookup(struct slist_t *list, const char *name);
+extern struct nvlist_entry_t *nvlist_lookup_prefix(struct slist_t *list, const char *name_prefix);
 extern const char *nvlist_lookup_str(struct slist_t *list, const char *name);
 extern const char *nvlist_lookup_str_with_fallback(struct slist_t *list, const char *name, const char *value_on_error);
 extern int64_t nvlist_lookup_int64(struct slist_t *list, const char *name, int64_t value_on_error);
+extern bool nvlist_lookup_bool_strong(struct slist_t *list, const char *name);
 extern const char *nvlist_set_str(struct slist_t *list, const char *name, const char *str);
 extern const char *nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, uint8_t *end);
 extern const char *nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb);

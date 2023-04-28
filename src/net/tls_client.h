@@ -28,4 +28,5 @@ extern uint32_t tls_client_connection_get_remote_addr(struct tls_client_connecti
 
 extern void tls_client_init(void);
 extern void tls_client_test(void);
+extern void tls_client_set_client_cert_mem(uint8_t *cert_data, size_t cert_length, uint8_t *key_data, size_t key_length);
 extern void tls_client_set_client_cert_appfs(const char *client_crt_appfs_filename, const char *client_key_appfs_filename);

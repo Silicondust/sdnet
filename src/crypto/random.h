@@ -8,4 +8,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+extern uint16_t random_get16(void);
 extern uint32_t random_get32(void);
+extern void random_getbytes(uint8_t *out, size_t length);
