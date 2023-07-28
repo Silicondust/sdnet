@@ -14,6 +14,7 @@ struct udp_socket {
 	int sock;
 	uint16_t port;
 	ip_mode_t ip_mode;
+	bool allow_ipv4_broadcast;
 	bool onesbcast_set;
 	uint8_t ttl_set;
 	uint8_t tos_set;

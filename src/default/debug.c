@@ -70,6 +70,43 @@ void debug_print_hex_array(const char *this_file, int line, const void *buffer, 
 	}
 }
 
+void debug_print_hex_buffer(const char *this_file, int line, const void *buffer, size_t size, size_t width)
+{
+	uint8_t *charptr = (uint8_t *)buffer;
+	uint8_t *lineptr;
+	uint8_t *end = (uint8_t *)buffer + size;
+
+	printf("%s [%d]: Address  ", this_file, line);
+	for (int i = 0; i < width ; i++) {
+		printf(" B%d",i);
+	}
+	printf("\n%s [%d]:", this_file, line);
+	for (int i = 0; i < width ; i++) {
+		printf("---");
+	}
+
+	while(charptr < end) {
+		printf("\n%s [%d]:", this_file, line);
+		lineptr = charptr;
+		uint8_t *local_end = min(end, charptr + width);
+		printf(" %p:", lineptr);
+		while (charptr < local_end) {
+			printf(" %02x", (unsigned int)(unsigned char)*charptr++);
+		}
+		printf(" | ");
+		charptr = lineptr;
+		while (charptr < local_end) {
+			if ((*charptr < 32) || (*charptr > 127)) {
+				printf(".");
+				charptr++;
+				continue;
+			}
+			printf("%c", (char)*charptr++);
+		}
+	}
+	printf("\n");
+}
+
 void debug_print_netbuf(const char *this_file, int line, struct netbuf *nb)
 {
 	printf("%s [%d]: ", this_file, line);

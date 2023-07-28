@@ -57,6 +57,10 @@ static struct udp_multipath_t *udp_socket_multipath_find_create(struct udp_socke
 		return NULL;
 	}
 
+	if (us->allow_ipv4_broadcast) {
+		udp_socket_allow_ipv4_broadcast(ump->us);
+	}
+
 	ump->addr = local_ip;
 	ump->ifindex = ifindex;
 	ump->ipv6_scope_id = ip_interface_get_ipv6_scope_id(idi);
@@ -96,6 +100,10 @@ udp_error_t udp_socket_send_multipath(struct udp_socket *us, const ip_addr_t *de
 	ip_addr_t send_addr = *dest_addr;
 	bool dest_ipv4_broadcast = ip_addr_is_ipv4_broadcast(dest_addr);
 	if (dest_ipv4_broadcast) {
+		if (!us->allow_ipv4_broadcast) {
+			return UDP_ERROR_FAILED;
+		}
+
 		ip_addr_t subnet_mask;
 		ip_interface_get_subnet_mask(idi, &subnet_mask);
 

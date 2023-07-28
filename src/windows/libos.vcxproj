@@ -122,6 +122,7 @@
     <ClCompile Include="..\web\http_server.c" />
     <ClCompile Include="..\web\json_parser.c" />
     <ClCompile Include="..\web\json_process.c" />
+    <ClCompile Include="..\web\language.c" />
     <ClCompile Include="..\web\url.c" />
     <ClCompile Include="..\web\url_params.c" />
     <ClCompile Include="..\web\url_unescape.c" />

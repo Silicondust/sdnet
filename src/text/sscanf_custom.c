@@ -321,6 +321,55 @@ static bool vsscanf_custom_parse_str(const char **pstr, char *pout, size_t size,
 	}
 }
 
+static bool vsscanf_custom_parse_mac(const char **pstr, uint8_t *mac)
+{
+	const char *str = *pstr;
+	uint8_t *mac_end = mac + 6;
+
+	uint32_t val;
+	if (!vsscanf_custom_parse_hex_char(*str++, &val)) {
+		return false;
+	}
+	*mac = (uint8_t)val << 4;
+	if (!vsscanf_custom_parse_hex_char(*str++, &val)) {
+		return false;
+	}
+	*mac++ |= (uint8_t)val;
+
+	char seperator = *str++;
+	if ((seperator != ':') && (seperator != '-')) {
+		if (!vsscanf_custom_parse_hex_char(seperator, &val)) {
+			return false;
+		}
+		seperator = 0;
+		str--;
+	}
+
+	while (1) {
+		if (!vsscanf_custom_parse_hex_char(*str++, &val)) {
+			return false;
+		}
+		*mac = (uint8_t)val << 4;
+		if (!vsscanf_custom_parse_hex_char(*str++, &val)) {
+			return false;
+		}
+		*mac++ |= (uint8_t)val;
+
+		if (mac == mac_end) {
+			*pstr = str;
+			return true;
+		}
+
+		if (!seperator) {
+			continue;
+		}
+
+		if (*str++ != seperator) {
+			return false;
+		}
+	}
+}
+
 bool vsscanf_custom_with_advance(const char **pstr, const char *fmt, va_list ap)
 {
 	const char *str = *pstr;
@@ -382,6 +431,14 @@ bool vsscanf_custom_with_advance(const char **pstr, const char *fmt, va_list ap)
 			char *pout = va_arg(ap, char *);
 			size_t size = va_arg(ap, size_t);
 			if (!vsscanf_custom_parse_str(&str, pout, size, terminating)) {
+				return false;
+			}
+			continue;
+		}
+
+		if ((fmtc == 'm') || (fmtc == 'M')) {
+			uint8_t *mac = va_arg(ap, uint8_t *);
+			if (!vsscanf_custom_parse_mac(&str, mac)) {
 				return false;
 			}
 			continue;

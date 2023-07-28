@@ -69,19 +69,33 @@ struct nvlist_entry_t *nvlist_lookup_prefix(struct slist_t *list, const char *na
 	return NULL;
 }
 
-const char *nvlist_lookup_str(struct slist_t *list, const char *name)
+struct nvlist_entry_t *nvlist_lookup_altname(struct slist_t *list, const char *name1, const char *name2)
+{
+	struct nvlist_entry_t *entry = nvlist_lookup(list, name1);
+	if (!entry) {
+		return nvlist_lookup(list, name2);
+	}
+
+	return entry;
+}
+
+const char *nvlist_lookup_str(struct slist_t *list, const char *name, const char *value_on_error)
 {
 	struct nvlist_entry_t *entry = nvlist_lookup(list, name);
 	if (!entry) {
-		return NULL;
+		return value_on_error;
+	}
+
+	if (!entry->value_str) {
+		return value_on_error;
 	}
 
 	return entry->value_str;
 }
 
-const char *nvlist_lookup_str_with_fallback(struct slist_t *list, const char *name, const char *value_on_error)
+const char *nvlist_lookup_str_altname(struct slist_t *list, const char *name1, const char *name2, const char *value_on_error)
 {
-	struct nvlist_entry_t *entry = nvlist_lookup(list, name);
+	struct nvlist_entry_t *entry = nvlist_lookup_altname(list, name1, name2);
 	if (!entry) {
 		return value_on_error;
 	}
@@ -96,6 +110,20 @@ const char *nvlist_lookup_str_with_fallback(struct slist_t *list, const char *na
 int64_t nvlist_lookup_int64(struct slist_t *list, const char *name, int64_t value_on_error)
 {
 	struct nvlist_entry_t *entry = nvlist_lookup(list, name);
+	if (!entry) {
+		return value_on_error;
+	}
+
+	if (entry->value_str) {
+		return value_on_error;
+	}
+
+	return entry->value_int64;
+}
+
+int64_t nvlist_lookup_int64_altname(struct slist_t *list, const char *name1, const char *name2, int64_t value_on_error)
+{
+	struct nvlist_entry_t *entry = nvlist_lookup_altname(list, name1, name2);
 	if (!entry) {
 		return value_on_error;
 	}
@@ -142,7 +170,7 @@ static void nvlist_replace_internal(struct slist_t *list, struct nvlist_entry_t 
 	slist_insert_pprev(struct nvlist_entry_t, pprev, entry);
 }
 
-const char *nvlist_set_str(struct slist_t *list, const char *name, const char *str)
+static struct nvlist_entry_t *nvlist_entry_alloc_str(const char *name, const char *str)
 {
 	size_t name_len = strlen(name);
 	size_t name_space = (name_len + 1 + 3) & ~3;
@@ -158,12 +186,10 @@ const char *nvlist_set_str(struct slist_t *list, const char *name, const char *s
 	memcpy(entry->name, name, name_len + 1);
 	entry->value_str = entry->name + name_space;
 	memcpy(entry->value_str, str, value_len + 1);
-
-	nvlist_replace_internal(list, entry);
-	return entry->value_str;
+	return entry;
 }
 
-const char *nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, uint8_t *end)
+static struct nvlist_entry_t *nvlist_entry_alloc_str_mem(const char *name, uint8_t *str, uint8_t *end)
 {
 	size_t name_len = strlen(name);
 	size_t name_space = (name_len + 1 + 3) & ~3;
@@ -180,12 +206,10 @@ const char *nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *
 	entry->value_str = entry->name + name_space;
 	memcpy(entry->value_str, str, value_len);
 	entry->value_str[value_len] = 0;
-
-	nvlist_replace_internal(list, entry);
-	return entry->value_str;
+	return entry;
 }
 
-const char *nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb)
+static struct nvlist_entry_t *nvlist_entry_alloc_str_nb(const char *name, struct netbuf *nb)
 {
 	size_t name_len = strlen(name);
 	size_t name_space = (name_len + 1 + 3) & ~3;
@@ -204,6 +228,53 @@ const char *nvlist_set_str_nb(struct slist_t *list, const char *name, struct net
 		netbuf_fwd_read(nb, entry->value_str, value_len);
 	}
 	entry->value_str[value_len] = 0;
+	return entry;
+}
+
+static struct nvlist_entry_t *nvlist_entry_alloc_int64(const char *name, int64_t value)
+{
+	size_t name_len = strlen(name);
+	size_t name_space = (name_len + 1 + 3) & ~3;
+
+	struct nvlist_entry_t *entry = (struct nvlist_entry_t *)heap_alloc_and_zero(sizeof(struct nvlist_entry_t) + name_space, PKG_OS, MEM_TYPE_OS_NVLIST_ENTRY);
+	if (!entry) {
+		return NULL;
+	}
+
+	entry->name = (char *)(entry + 1);
+	memcpy(entry->name, name, name_len + 1);
+	entry->value_int64 = value;
+	return entry;
+}
+
+const char *nvlist_set_str(struct slist_t *list, const char *name, const char *str)
+{
+	struct nvlist_entry_t *entry = nvlist_entry_alloc_str(name, str);
+	if (!entry) {
+		return NULL;
+	}
+
+	nvlist_replace_internal(list, entry);
+	return entry->value_str;
+}
+
+const char *nvlist_set_str_mem(struct slist_t *list, const char *name, uint8_t *str, uint8_t *end)
+{
+	struct nvlist_entry_t *entry = nvlist_entry_alloc_str_mem(name, str, end);
+	if (!entry) {
+		return NULL;
+	}
+
+	nvlist_replace_internal(list, entry);
+	return entry->value_str;
+}
+
+const char *nvlist_set_str_nb(struct slist_t *list, const char *name, struct netbuf *nb)
+{
+	struct nvlist_entry_t *entry = nvlist_entry_alloc_str_nb(name, nb);
+	if (!entry) {
+		return NULL;
+	}
 
 	nvlist_replace_internal(list, entry);
 	return entry->value_str;
@@ -211,17 +282,10 @@ const char *nvlist_set_str_nb(struct slist_t *list, const char *name, struct net
 
 void nvlist_set_int64(struct slist_t *list, const char *name, int64_t value)
 {
-	size_t name_len = strlen(name);
-	size_t name_space = (name_len + 1 + 3) & ~3;
-
-	struct nvlist_entry_t *entry = (struct nvlist_entry_t *)heap_alloc_and_zero(sizeof(struct nvlist_entry_t) + name_space, PKG_OS, MEM_TYPE_OS_NVLIST_ENTRY);
+	struct nvlist_entry_t *entry = nvlist_entry_alloc_int64(name, value);
 	if (!entry) {
 		return;
 	}
-
-	entry->name = (char *)(entry + 1);
-	memcpy(entry->name, name, name_len + 1);
-	entry->value_int64 = value;
 
 	nvlist_replace_internal(list, entry);
 }

@@ -57,6 +57,10 @@ static struct udp_multipath_t *udp_socket_multipath_find_create(struct udp_socke
 		return NULL;
 	}
 
+	if (us->allow_ipv4_broadcast) {
+		udp_socket_allow_ipv4_broadcast(ump->us);
+	}
+
 	ump->addr = local_ip;
 	ump->ifindex = ifindex;
 	ump->ipv6_scope_id = ip_interface_get_ipv6_scope_id(idi);

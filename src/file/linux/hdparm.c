@@ -89,6 +89,8 @@ static struct hdparm_smart_id_decode_t hdparm_smart_id_decode_table[] =
 	{199, "UDMA_CRC_Error_Count", hdparm_smart_id_get_value_str_raw48},
 	{200, "Multi_Zone_Error_Rate", hdparm_smart_id_get_value_str_raw48},
 	{206, "Flying_Height", hdparm_smart_id_get_value_str_raw48},
+	{218, "CRC_Error_Count", hdparm_smart_id_get_value_str_raw48},
+	{231, "SSD_Life_Left", hdparm_smart_id_get_value_str_raw48},
 	{240, "Head_Flying_Hours", hdparm_smart_id_get_value_str_raw24},
 	{241, "Total_LBAs_Written", hdparm_smart_id_get_value_str_raw48},
 	{242, "Total_LBAs_Read", hdparm_smart_id_get_value_str_raw48},

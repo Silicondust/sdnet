@@ -21,14 +21,14 @@ THIS_FILE("random");
 uint16_t random_get16(void)
 {
 	uint16_t result;
-	random_getbytes(&result, 2);
+	random_getbytes((uint8_t *)&result, 2);
 	return result;
 }
 
 uint32_t random_get32(void)
 {
 	uint32_t result;
-	random_getbytes(&result, 4);
+	random_getbytes((uint8_t *)&result, 4);
 	return result;
 }
 

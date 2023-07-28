@@ -15,6 +15,7 @@ struct udp_socket {
 	HANDLE event_handle;
 	uint16_t port;
 	ip_mode_t ip_mode;
+	bool allow_ipv4_broadcast;
 	uint8_t ttl_set;
 	size_t recv_netbuf_size;
 	udp_recv_callback_t recv_callback;

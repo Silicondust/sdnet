@@ -408,6 +408,8 @@ void udp_socket_set_recv_netbuf_size(struct udp_socket *us, size_t recv_netbuf_s
 
 void udp_socket_allow_ipv4_broadcast(struct udp_socket *us)
 {
+	us->allow_ipv4_broadcast = true;
+
 	int sock_opt_broadcast = 1;
 	if (setsockopt(us->sock, SOL_SOCKET, SO_BROADCAST, (char *)&sock_opt_broadcast, sizeof(sock_opt_broadcast)) < 0) {
 		DEBUG_WARN("setsockopt SO_BROADCAST error %d", errno);

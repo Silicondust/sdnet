@@ -72,6 +72,7 @@
 #include <web/json_process.h>
 #include <web/http_parser.h>
 #include <web/http_result.h>
+#include <web/language.h>
 #include <web/url.h>
 #include <web/url_params.h>
 #include <web/url_unescape.h>

@@ -31,6 +31,13 @@
 	} \
 }
 
+#define DEBUG_PRINT_HEX_BUFFER(buffer, size, width) \
+{ \
+	if (RUNTIME_DEBUG) { \
+		debug_print_hex_buffer(__this_file, __LINE__, buffer, size, width); \
+	} \
+}
+
 #define DEBUG_PRINT_NETBUF(nb) \
 { \
 	if (RUNTIME_DEBUG) { \
@@ -60,3 +67,4 @@ extern void debug_vprintf(const char *this_file, int line, const char *fmt, va_l
 extern void debug_print_hex_array(const char *this_file, int line, const void *buffer, size_t size);
 extern void debug_print_netbuf(const char *this_file, int line, struct netbuf *nb);
 extern void debug_print_netbuf_text(const char *this_file, int line, struct netbuf *nb, size_t len);
+extern void debug_print_hex_buffer(const char *this_file, int line, const void *buffer, size_t size, size_t width);

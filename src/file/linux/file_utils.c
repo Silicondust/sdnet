@@ -67,7 +67,7 @@ uint8_t *file_mmap(struct file_t *file, size_t *psize)
 	}
 
 	file->mmap_addr = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, file->fp, 0);
-	if (!file->mmap_addr) {
+	if (file->mmap_addr == (void *)-1) {
 		return NULL;
 	}
 

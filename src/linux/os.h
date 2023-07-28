@@ -78,6 +78,7 @@
 #include <file/linux/file_utils.h>
 #include <file/linux/hdparm.h>
 #include <file/linux/gpt.h>
+#include <file/linux/nvme.h>
 #include <file/filename_utils.h>
 #include <debug.h>
 #include <log.h>
@@ -91,6 +92,7 @@
 #include <web/json_process.h>
 #include <web/http_parser.h>
 #include <web/http_result.h>
+#include <web/language.h>
 #include <web/url.h>
 #include <web/url_params.h>
 #include <web/url_unescape.h>
@@ -106,6 +108,7 @@
 #include <upnp/gena.h>
 #include <upnp/upnp_descriptor.h>
 #include <daemon/daemon.h>
+#include <linux/dmidecode.h>
 
 #include <thread/pthread/spinlock.h>
 #include <thread/linux/thread.h>

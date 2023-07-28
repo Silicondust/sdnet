@@ -324,5 +324,8 @@
     <ClCompile Include="..\utils\hash64.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\web\language.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
