@@ -54,65 +54,115 @@ void json_process_debug_print(const char *this_file, int line, const char *prefi
 
 static void json_process_autodetect_set_value(struct json_process_t *jpi, const char *name, struct netbuf *nb)
 {
-	size_t length = netbuf_get_remaining(nb);
-	if (length == 0) {
+	if (netbuf_get_remaining(nb) == 0) {
 		nvlist_set_str(&jpi->contents, name, "");
 		return;
 	}
 
-	uint8_t c = netbuf_fwd_read_u8(nb);
-	if (c == '0') {
-		if (length > 1) {
-			netbuf_set_pos_to_start(nb);
-			nvlist_set_str_nb(&jpi->contents, name, nb);
-		}
+	addr_t end;
+	int64_t value_int64 = netbuf_fwd_strtoll(nb, &end, 10);
+	if (end == netbuf_get_end(nb)) {
+		char buffer[32];
+		sprintf_custom(buffer, buffer + sizeof(buffer), "%lld", value_int64);
 
-		nvlist_set_int64(&jpi->contents, name, 0);
-		return;
-	}
-
-	if (c == '-') {
-		if (length == 1) {
-			netbuf_set_pos_to_start(nb);
-			nvlist_set_str_nb(&jpi->contents, name, nb);
+		if (netbuf_fwd_strcmp(nb, buffer) == 0) {
+			nvlist_set_int64(&jpi->contents, name, value_int64);
 			return;
 		}
-
-		c = netbuf_fwd_read_u8(nb);
-	}
-
-	netbuf_set_pos_to_start(nb);
-
-	if ((c >= '1') && (c <= '9')) {
-		addr_t end;
-		int64_t value = netbuf_fwd_strtoll(nb, &end, 10);
-		if (end != netbuf_get_end(nb)) {
-			nvlist_set_str_nb(&jpi->contents, name, nb);
-			return;
-		}
-
-		nvlist_set_int64(&jpi->contents, name, value);
-		return;
 	}
 
 	nvlist_set_str_nb(&jpi->contents, name, nb);
 }
 
-static json_parser_error_t json_parser_apply_group_start(struct json_process_t *jpi, char tag, struct netbuf *nb)
+static char *json_process_apply_internal_name_unnamed(struct json_process_t *jpi, char *ptr, char *end)
+{
+	if (jpi->mode != JSON_PROCESS_MODE_BUILD_CONTENT) {
+		return ptr;
+	}
+	if (ptr == jpi->path) {
+		return ptr;
+	}
+	if (ptr[-1] != '[') {
+		return ptr;
+	}
+
+	if (!sprintf_custom(ptr, end, "%u", jpi->next_array_index)) {
+		DEBUG_WARN("path too long");
+		jpi->error = true;
+		return NULL;
+	}
+
+	return strchr(ptr, 0);
+}
+
+static char *json_process_apply_internal_name(struct json_process_t *jpi, struct netbuf *name_nb)
 {
 	char *ptr = strchr(jpi->path, 0);
 	char *end = jpi->path + sizeof(jpi->path);
 
-	size_t name_length = netbuf_get_remaining(nb);
-	if (ptr + name_length + 2 >= end) {
+	size_t name_length = netbuf_get_remaining(name_nb);
+	if (name_length == 0) {
+		return json_process_apply_internal_name_unnamed(jpi, ptr, end);
+	}
+
+	if (ptr + name_length + 1 >= end) {
 		DEBUG_WARN("path too long");
 		jpi->error = true;
+		return NULL;
+	}
+
+	netbuf_fwd_read(name_nb, ptr, name_length);
+	ptr += name_length;
+
+	*ptr = 0;
+	return ptr;
+}
+
+static char *json_process_apply_internal_end(struct json_process_t *jpi, char *ptr)
+{
+	jpi->next_array_index = 0;
+	char *end = ptr;
+
+	while (ptr > jpi->path) {
+		ptr--;
+
+		if (*ptr == '{') {
+			ptr++;
+			return ptr;
+		}
+
+		if (*ptr == '[') {
+			ptr++;
+
+			if (ptr == end) {
+				return ptr;
+			}
+
+			char *test;
+			uint32_t array_index = strtoul(ptr, &test, 10);
+			if (test == end) {
+				jpi->next_array_index = array_index + 1;
+			}
+
+			return ptr;
+		}
+	}
+
+	return ptr;
+}
+
+static json_parser_error_t json_process_apply_group_start(struct json_process_t *jpi, char tag, struct netbuf *name_nb)
+{
+	char *ptr = json_process_apply_internal_name(jpi, name_nb);
+	if (!ptr) {
 		return JSON_PARSER_ESTOP;
 	}
 
-	if (name_length > 0) {
-		netbuf_fwd_read(nb, ptr, name_length);
-		ptr += name_length;
+	char *end = jpi->path + sizeof(jpi->path);
+	if (ptr + 2 > end) {
+		DEBUG_WARN("path too long");
+		jpi->error = true;
+		return JSON_PARSER_ESTOP;
 	}
 
 	*ptr++ = tag;
@@ -146,7 +196,7 @@ static json_parser_error_t json_parser_apply_group_start(struct json_process_t *
 	return JSON_PARSER_OK;
 }
 
-static json_parser_error_t json_parser_apply_end_notify(struct json_process_t *jpi, char *ptr)
+static json_parser_error_t json_process_apply_end_notify(struct json_process_t *jpi, char *ptr)
 {
 	switch (jpi->mode) {
 	case JSON_PROCESS_MODE_CALLBACK_SUB_ELEMENTS:
@@ -192,7 +242,7 @@ static json_parser_error_t json_parser_apply_end_notify(struct json_process_t *j
 	}
 }
 
-static json_parser_error_t json_parser_apply_group_end(struct json_process_t *jpi, char tag)
+static json_parser_error_t json_process_apply_group_end(struct json_process_t *jpi, char tag)
 {
 	char *ptr = strchr(jpi->path, 0);
 
@@ -208,15 +258,9 @@ static json_parser_error_t json_parser_apply_group_end(struct json_process_t *jp
 		return JSON_PARSER_ESTOP;
 	}
 
-	while (ptr > jpi->path) {
-		ptr--;
-		if ((*ptr == '{') || (*ptr == '[')) {
-			ptr++;
-			break;
-		}
-	}
+	ptr = json_process_apply_internal_end(jpi, ptr);
 
-	json_parser_error_t ret = json_parser_apply_end_notify(jpi, ptr);
+	json_parser_error_t ret = json_process_apply_end_notify(jpi, ptr);
 	if (ret != JSON_PARSER_OK) {
 		return ret;
 	}
@@ -225,44 +269,21 @@ static json_parser_error_t json_parser_apply_group_end(struct json_process_t *jp
 	return JSON_PARSER_OK;
 }
 
-static json_parser_error_t json_parser_apply_element_name(struct json_process_t *jpi, struct netbuf *nb)
+static json_parser_error_t json_process_apply_element_str(struct json_process_t *jpi, struct netbuf *name_nb, struct netbuf *value_nb)
 {
-	char *ptr = strchr(jpi->path, 0);
-	char *end = jpi->path + sizeof(jpi->path);
-
-	size_t name_length = netbuf_get_remaining(nb);
-	if (ptr + name_length + 1 >= end) {
-		DEBUG_WARN("path too long");
-		jpi->error = true;
+	char *ptr = json_process_apply_internal_name(jpi, name_nb);
+	if (!ptr) {
 		return JSON_PARSER_ESTOP;
 	}
 
-	if (name_length > 0) {
-		netbuf_fwd_read(nb, ptr, name_length);
-		ptr += name_length;
-	}
-
-	*ptr = 0;
-	return JSON_PARSER_OK;
-}
-
-static json_parser_error_t json_parser_apply_element_value_str(struct json_process_t *jpi, struct netbuf *nb)
-{
 	if (jpi->mode != JSON_PROCESS_MODE_IGNORE_ELEMENT) {
 		const char *name = (jpi->path_match_ptr) ? jpi->path_match_ptr : "";
-		nvlist_set_str_nb(&jpi->contents, name, nb);
+		nvlist_set_str_nb(&jpi->contents, name, value_nb);
 	}
 
-	char *ptr = strchr(jpi->path, 0);
-	while (ptr > jpi->path) {
-		ptr--;
-		if ((*ptr == '{') || (*ptr == '[')) {
-			ptr++;
-			break;
-		}
-	}
+	ptr = json_process_apply_internal_end(jpi, ptr);
 
-	json_parser_error_t ret = json_parser_apply_end_notify(jpi, ptr);
+	json_parser_error_t ret = json_process_apply_end_notify(jpi, ptr);
 	if (ret != JSON_PARSER_OK) {
 		return ret;
 	}
@@ -271,23 +292,21 @@ static json_parser_error_t json_parser_apply_element_value_str(struct json_proce
 	return JSON_PARSER_OK;
 }
 
-static json_parser_error_t json_parser_apply_element_value_unquoted(struct json_process_t *jpi, struct netbuf *nb)
+static json_parser_error_t json_process_apply_element_unquoted(struct json_process_t *jpi, struct netbuf *name_nb, struct netbuf *value_nb)
 {
+	char *ptr = json_process_apply_internal_name(jpi, name_nb);
+	if (!ptr) {
+		return JSON_PARSER_ESTOP;
+	}
+
 	if (jpi->mode != JSON_PROCESS_MODE_IGNORE_ELEMENT) {
 		const char *name = (jpi->path_match_ptr) ? jpi->path_match_ptr : "";
-		json_process_autodetect_set_value(jpi, name, nb);
+		json_process_autodetect_set_value(jpi, name, value_nb);
 	}
 
-	char *ptr = strchr(jpi->path, 0);
-	while (ptr > jpi->path) {
-		ptr--;
-		if ((*ptr == '{') || (*ptr == '[')) {
-			ptr++;
-			break;
-		}
-	}
+	ptr = json_process_apply_internal_end(jpi, ptr);
 
-	json_parser_error_t ret = json_parser_apply_end_notify(jpi, ptr);
+	json_parser_error_t ret = json_process_apply_end_notify(jpi, ptr);
 	if (ret != JSON_PARSER_OK) {
 		return ret;
 	}
@@ -296,31 +315,28 @@ static json_parser_error_t json_parser_apply_element_value_unquoted(struct json_
 	return JSON_PARSER_OK;
 }
 
-static json_parser_error_t json_process_parser_callback(void *arg, json_parser_event_t json_event, struct netbuf *nb)
+static json_parser_error_t json_process_parser_callback(void *arg, json_parser_event_t json_event, struct netbuf *name_nb, struct netbuf *value_nb)
 {
 	struct json_process_t *jpi = (struct json_process_t *)arg;
 
 	switch (json_event) {
 	case JSON_PARSER_EVENT_ARRAY_START:
-		return json_parser_apply_group_start(jpi, '[', nb);
+		return json_process_apply_group_start(jpi, '[', name_nb);
 
 	case JSON_PARSER_EVENT_ARRAY_END:
-		return json_parser_apply_group_end(jpi, '[');
+		return json_process_apply_group_end(jpi, '[');
 
 	case JSON_PARSER_EVENT_OBJECT_START:
-		return json_parser_apply_group_start(jpi, '{', nb);
+		return json_process_apply_group_start(jpi, '{', name_nb);
 
 	case JSON_PARSER_EVENT_OBJECT_END:
-		return json_parser_apply_group_end(jpi, '{');
+		return json_process_apply_group_end(jpi, '{');
 
-	case JSON_PARSER_EVENT_ELEMENT_NAME:
-		return json_parser_apply_element_name(jpi, nb);
+	case JSON_PARSER_EVENT_ELEMENT_STR:
+		return json_process_apply_element_str(jpi, name_nb, value_nb);
 
-	case JSON_PARSER_EVENT_ELEMENT_VALUE_STR:
-		return json_parser_apply_element_value_str(jpi, nb);
-
-	case JSON_PARSER_EVENT_ELEMENT_VALUE_UNQUOTED:
-		return json_parser_apply_element_value_unquoted(jpi, nb);
+	case JSON_PARSER_EVENT_ELEMENT_UNQUOTED:
+		return json_process_apply_element_unquoted(jpi, name_nb, value_nb);
 
 	case JSON_PARSER_EVENT_PARSE_ERROR:
 		DEBUG_WARN("json parse error");
@@ -363,6 +379,7 @@ void json_process_reset(struct json_process_t *jpi)
 	nvlist_clear_all(&jpi->contents);
 
 	jpi->mode = JSON_PROCESS_MODE_CALLBACK_SUB_ELEMENTS;
+	jpi->next_array_index = 0;
 	jpi->error = false;
 	jpi->path[0] = 0;
 	jpi->path_match_ptr = NULL;

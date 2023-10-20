@@ -40,6 +40,15 @@ static inline void spinlock_lock(struct spinlock *lock)
 	} \
 }
 
+static inline bool spinlock_trylock(struct spinlock *lock)
+{
+	if (pthread_mutex_trylock(&lock->mutex) == 0) {
+		lock->start_time = timer_get_fast_ticks();
+		return true;
+	}
+	return false;
+}
+
 #else
 
 struct spinlock {
@@ -59,6 +68,11 @@ static inline void spinlock_lock(struct spinlock *lock)
 static inline void spinlock_unlock(struct spinlock *lock)
 {
 	pthread_mutex_unlock(&lock->mutex);
+}
+
+static inline bool spinlock_trylock(struct spinlock *lock)
+{
+	return (pthread_mutex_trylock(&lock->mutex) == 0);
 }
 
 #endif

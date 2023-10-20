@@ -16,9 +16,8 @@ typedef enum {
 	JSON_PARSER_EVENT_ARRAY_END,
 	JSON_PARSER_EVENT_OBJECT_START,
 	JSON_PARSER_EVENT_OBJECT_END,
-	JSON_PARSER_EVENT_ELEMENT_NAME,
-	JSON_PARSER_EVENT_ELEMENT_VALUE_STR,
-	JSON_PARSER_EVENT_ELEMENT_VALUE_UNQUOTED,
+	JSON_PARSER_EVENT_ELEMENT_STR,
+	JSON_PARSER_EVENT_ELEMENT_UNQUOTED,
 
 } json_parser_event_t;
 
@@ -30,7 +29,7 @@ typedef enum {
 
 struct json_parser_t;
 
-typedef json_parser_error_t (*json_parser_callback_t)(void *app_data, json_parser_event_t json_event, struct netbuf *nb);
+typedef json_parser_error_t (*json_parser_callback_t)(void *app_data, json_parser_event_t json_event, struct netbuf *name_nb, struct netbuf *value_nb);
 
 extern struct json_parser_t *json_parser_alloc(json_parser_callback_t callback, void *callback_arg);
 extern struct json_parser_t *json_parser_ref(struct json_parser_t *jpi);
@@ -46,7 +45,8 @@ typedef json_parser_error_t (*json_parser_parse_func_t)(struct json_parser_t *jp
 struct json_parser_t {
 	json_parser_parse_func_t parse_func;
 	struct netbuf *partial_nb;
-	struct netbuf *output_nb;
+	struct netbuf *name_nb;
+	struct netbuf *value_nb;
 	ref_t refs;
 
 	json_parser_callback_t callback;

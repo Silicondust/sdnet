@@ -52,6 +52,7 @@ struct json_process_t {
 	ref_t refs;
 
 	json_process_mode_t mode;
+	uint32_t next_array_index;
 	bool error;
 	struct slist_t contents;
 	char path[256];

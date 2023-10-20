@@ -64,6 +64,10 @@ ref_t http_parser_deref(struct http_parser_t *hpi) {
 		netbuf_free(hpi->partial_nb);
 	}
 
+	if (hpi->header_name) {
+		heap_free(hpi->header_name);
+	}
+
 	heap_free(hpi);
 	return 0;
 }
@@ -173,16 +177,20 @@ static http_parser_error_t http_parser_callback_with_nb(struct http_parser_t *hp
 	return HTTP_PARSER_OK;
 }
 
-static const struct http_parser_tag_lookup_t *http_parser_lookup_list_entry(const struct http_parser_tag_lookup_t *list, const char *lookup)
+static const struct http_parser_tag_lookup_t *http_parser_lookup_list_entry(const struct http_parser_tag_lookup_t *list, const char *header_name)
 {
 	const struct http_parser_tag_lookup_t *entry = list;
 
-	while (entry->header) {
-		if (strcasecmp(entry->header, lookup) == 0) {
-			return entry;
+	while (entry->name) {
+		if (strcasecmp(entry->name, header_name) == 0) {
+			break;
 		}
 
 		entry++;
+	}
+
+	if (entry->func) {
+		return entry;
 	}
 
 	return NULL;
@@ -190,37 +198,42 @@ static const struct http_parser_tag_lookup_t *http_parser_lookup_list_entry(cons
 
 static http_parser_error_t http_parser_callback_headers_name(struct http_parser_t *hpi, struct netbuf *nb, addr_t begin, addr_t end, http_parser_parse_func_t next_parse_func)
 {
-	size_t length = end - begin;
-
-	char lookup[64];
-	if ((length == 0) || (length >= sizeof(lookup))) {
-		hpi->internal_list_entry = NULL;
-		hpi->app_list_entry = NULL;
-		hpi->parse_func = next_parse_func;
-		return HTTP_PARSER_OK;
+	if (hpi->header_name) {
+		DEBUG_ERROR("state error");
+		return http_parser_callback_internal_error(hpi);
 	}
 
-	addr_t bookmark = netbuf_get_pos(nb);
-	netbuf_set_pos(nb, begin);
-	netbuf_fwd_read(nb, lookup, length);
-	netbuf_set_pos(nb, bookmark);
-	lookup[length] = 0;
+	size_t length = end - begin;
+	hpi->header_name = heap_alloc(length + 1, PKG_OS, MEM_TYPE_OS_HTTP_PARSER_HEADER_NAME);
+	if (!hpi->header_name) {
+		DEBUG_ERROR("out of memory");
+		return http_parser_callback_internal_error(hpi);
+	}
 
-	hpi->internal_list_entry = http_parser_lookup_list_entry(http_parser_tag_list, lookup);
-	hpi->app_list_entry = (hpi->app_list) ? http_parser_lookup_list_entry(hpi->app_list, lookup) : NULL;
+	if (length > 0) {
+		addr_t bookmark = netbuf_get_pos(nb);
+		netbuf_set_pos(nb, begin);
+		netbuf_fwd_read(nb, hpi->header_name, length);
+		netbuf_set_pos(nb, bookmark);
+	}
 
+	hpi->header_name[length] = 0;
 	hpi->parse_func = next_parse_func;
 	return HTTP_PARSER_OK;
 }
 
 static http_parser_error_t http_parser_callback_headers_value(struct http_parser_t *hpi, struct netbuf *nb, addr_t begin, addr_t end, http_parser_parse_func_t next_parse_func)
 {
-	const struct http_parser_tag_lookup_t *internal_list_entry = hpi->internal_list_entry;
-	const struct http_parser_tag_lookup_t *app_list_entry = hpi->app_list_entry;
-	hpi->internal_list_entry = NULL;
-	hpi->app_list_entry = NULL;
+	if (!hpi->header_name) {
+		DEBUG_ERROR("state error");
+		return http_parser_callback_internal_error(hpi);
+	}
 
+	const struct http_parser_tag_lookup_t *internal_list_entry = http_parser_lookup_list_entry(http_parser_tag_list, hpi->header_name);
+	const struct http_parser_tag_lookup_t *app_list_entry = (hpi->app_list) ? http_parser_lookup_list_entry(hpi->app_list, hpi->header_name) : NULL;
 	if (!internal_list_entry && !app_list_entry) {
+		heap_free(hpi->header_name);
+		hpi->header_name = NULL;
 		hpi->parse_func = next_parse_func;
 		return HTTP_PARSER_OK;
 	}
@@ -239,19 +252,25 @@ static http_parser_error_t http_parser_callback_headers_value(struct http_parser
 	}
 
 	if (internal_list_entry) {
-		internal_list_entry->func(hpi, internal_list_entry->header, callback_nb);
-
-		if (!app_list_entry) {
-			netbuf_free(callback_nb);
-			hpi->parse_func = next_parse_func;
-			return HTTP_PARSER_OK;
-		}
-
+		internal_list_entry->func(hpi, hpi->header_name, callback_nb);
 		netbuf_set_pos_to_start(callback_nb);
 	}
 
-	http_parser_error_t ret = app_list_entry->func(hpi->app_list_callback_arg, app_list_entry->header, callback_nb);
+	if (!app_list_entry) {
+		netbuf_free(callback_nb);
+		heap_free(hpi->header_name);
+		hpi->header_name = NULL;
+		hpi->parse_func = next_parse_func;
+		return HTTP_PARSER_OK;
+	}
+
+	http_parser_error_t ret = app_list_entry->func(hpi->app_list_callback_arg, hpi->header_name, callback_nb);
 	netbuf_free(callback_nb);
+
+	if (hpi->header_name) {
+		heap_free(hpi->header_name);
+		hpi->header_name = NULL;
+	}
 
 	if (hpi->parse_func == http_parser_parse_start) { /* http_parser_reset called */
 		return HTTP_PARSER_ESTOP;
@@ -924,9 +943,12 @@ void http_parser_reset(struct http_parser_t *hpi)
 		hpi->partial_nb = NULL;
 	}
 
+	if (hpi->header_name) {
+		heap_free(hpi->header_name);
+		hpi->header_name = NULL;
+	}
+
 	hpi->parse_func = http_parser_parse_start;
-	hpi->internal_list_entry = NULL;
-	hpi->app_list_entry = NULL;
 	hpi->length_remaining = 0xFFFFFFFFFFFFFFFFULL;
 	hpi->chunked_encoding = false;
 }

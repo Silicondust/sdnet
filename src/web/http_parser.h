@@ -34,7 +34,7 @@ typedef http_parser_error_t (*http_parser_func_t)(void *app_data, const char *he
 typedef http_parser_error_t (*http_parser_event_callback_t)(void *app_data, http_parser_event_t header_event, struct netbuf *nb);
 
 struct http_parser_tag_lookup_t {
-	const char *header;
+	const char *name;
 	http_parser_func_t func;
 };
 
@@ -43,10 +43,12 @@ struct http_parser_t;
 extern struct http_parser_t *http_parser_alloc(http_parser_event_callback_t event_callback, void *callback_arg);
 extern struct http_parser_t *http_parser_ref(struct http_parser_t *hpi);
 extern ref_t http_parser_deref(struct http_parser_t *hpi);
-extern void http_parser_set_tag_list(struct http_parser_t *hpi, const struct http_parser_tag_lookup_t *hle, void *callback_arg);
 extern void http_parser_recv_netbuf(struct http_parser_t *hpi, struct netbuf *nb);
 extern bool http_parser_is_valid_complete(struct http_parser_t *hpi);
-extern void http_parser_reset(struct http_parser_t *hpi); 
+extern void http_parser_reset(struct http_parser_t *hpi);
+
+/* http_parser_set_tag_list() - the table must end with a NULL-name entry. The NULL-name entry may specify a callback function to handle unknown tag names. */
+extern void http_parser_set_tag_list(struct http_parser_t *hpi, const struct http_parser_tag_lookup_t *hle, void *callback_arg);
 
 /* Internal */
 typedef http_parser_error_t (*http_parser_parse_func_t)(struct http_parser_t *hpi, struct netbuf *nb);
@@ -56,8 +58,7 @@ struct http_parser_t {
 	struct netbuf *partial_nb;
 	ref_t refs;
 
-	const struct http_parser_tag_lookup_t *internal_list_entry;
-	const struct http_parser_tag_lookup_t *app_list_entry;
+	char *header_name;
 	uint64_t length_remaining;
 	bool chunked_encoding;
 

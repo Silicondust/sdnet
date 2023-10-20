@@ -327,12 +327,16 @@ static http_parser_error_t webclient_http_tag_passthrough(void *arg, const char 
 	}
 
 	const struct http_parser_tag_lookup_t *entry = operation->http_tag_list;
-	while (entry->header) {
-		if (strcasecmp(entry->header, header) == 0) {
-			return entry->func(operation->callback_arg, header, nb);
+	while (entry->name) {
+		if (strcasecmp(entry->name, header) == 0) {
+			break;
 		}
 
 		entry++;
+	}
+
+	if (entry->func) {
+		return entry->func(operation->callback_arg, header, nb);
 	}
 
 	return HTTP_PARSER_OK;
@@ -641,7 +645,7 @@ static bool webclient_build_and_set_http_tag_list(struct webclient_t *webclient)
 
 	uint32_t operation_entry_count = 0;
 	const struct http_parser_tag_lookup_t *operation_entry = operation->http_tag_list;
-	while (operation_entry->header) {
+	while (operation_entry->name) {
 		operation_entry_count++;
 		operation_entry++;
 	}
@@ -653,7 +657,7 @@ static bool webclient_build_and_set_http_tag_list(struct webclient_t *webclient)
 
 	uint32_t webclient_entry_count = 0;
 	const struct http_parser_tag_lookup_t *webclient_entry = webclient_http_tag_list;
-	while (webclient_entry->header) {
+	while (webclient_entry->name) {
 		webclient_entry_count++;
 		webclient_entry++;
 	}
@@ -670,15 +674,15 @@ static bool webclient_build_and_set_http_tag_list(struct webclient_t *webclient)
 	new_entry += webclient_entry_count;
 
 	operation_entry = operation->http_tag_list;
-	while (operation_entry->header) {
-		new_entry->header = operation_entry->header;
+	while (operation_entry->name) {
+		new_entry->name = operation_entry->name;
 		new_entry->func = webclient_http_tag_passthrough;
 		new_entry++;
 		operation_entry++;
 	}
 
-	new_entry->header = NULL;
-	new_entry->func = NULL;
+	new_entry->name = NULL;
+	new_entry->func = (operation_entry->func) ? webclient_http_tag_passthrough : NULL;
 
 	webclient->http_tag_list_allocated = http_tag_list_allocated;
 	http_parser_set_tag_list(webclient->http_parser, http_tag_list_allocated, webclient);
