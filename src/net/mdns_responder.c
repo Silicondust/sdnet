@@ -23,6 +23,7 @@ THIS_FILE("mdns_responder");
 #define DNS_RECORD_TYPE_A 0x0001
 #define DNS_RECORD_TYPE_AAAA 0x001C
 #define DNS_RECORD_CLASS_IN 0x0001
+#define DNS_RECORD_CACHE_FLUSH 0x8000
 
 struct mdns_responder_name_t {
 	struct slist_prefix_t slist_prefix;
@@ -234,73 +235,26 @@ static bool mdns_responser_lookup_name(struct ip_interface_t *idi, uint16_t dns_
 }
 
 struct mdns_responder_output_state {
-	struct netbuf *question_nb;
-	struct netbuf *answer_nb;
-	uint16_t question_count;
+	struct netbuf *txnb;
 	uint16_t answer_count;
 };
 
-static bool mdns_responder_output_question(struct mdns_responder_output_state *state, uint16_t dns_type, char *name)
-{
-	if (!state->question_nb) {
-		state->question_nb = netbuf_alloc();
-		if (!state->question_nb) {
-			DEBUG_ERROR("out of memory");
-			return false;
-		}
-	}
-
-	size_t encoded_name_length = 1 + strlen(name) + 1;
-
-	if (!netbuf_fwd_make_space(state->question_nb, encoded_name_length + 4)) {
-		DEBUG_ERROR("out of memory");
-		return false;
-	}
-
-	while (1) {
-		char *ptr = strchr(name, '.');
-		if (!ptr) {
-			ptr = strchr(name, 0);
-		}
-
-		size_t length = ptr - name;
-		if ((length == 0) || (length > 63)) {
-			DEBUG_ERROR("invalid name");
-			return false;
-		}
-
-		netbuf_fwd_write_u8(state->question_nb, (uint8_t)length);
-		netbuf_fwd_write(state->question_nb, name, length);
-
-		if (*ptr == 0) {
-			break;
-		}
-
-		name = ptr + 1;
-	}
-
-	netbuf_fwd_write_u8(state->question_nb, 0);
-	netbuf_fwd_write_u16(state->question_nb, dns_type);
-	netbuf_fwd_write_u16(state->question_nb, DNS_RECORD_CLASS_IN);
-
-	state->question_count++;
-	return true;
-}
-
 static bool mdns_responder_output_answer(struct mdns_responder_output_state *state, uint16_t dns_type, char *name, const ip_addr_t *answer_ip)
 {
-	if (!state->answer_nb) {
-		state->answer_nb = netbuf_alloc();
-		if (!state->answer_nb) {
+	struct netbuf *txnb = state->txnb;
+	if (!txnb) {
+		txnb = netbuf_alloc();
+		if (!txnb) {
 			DEBUG_ERROR("out of memory");
 			return false;
 		}
+		state->txnb = txnb;
 	}
 
 	size_t encoded_name_length = 1 + strlen(name) + 1;
 	size_t ip_addr_len = (dns_type == DNS_RECORD_TYPE_AAAA) ? 16 : 4;
 
-	if (!netbuf_fwd_make_space(state->answer_nb, encoded_name_length + 10 + ip_addr_len)) {
+	if (!netbuf_fwd_make_space(txnb, encoded_name_length + 10 + ip_addr_len)) {
 		DEBUG_ERROR("out of memory");
 		return false;
 	}
@@ -317,8 +271,8 @@ static bool mdns_responder_output_answer(struct mdns_responder_output_state *sta
 			return false;
 		}
 
-		netbuf_fwd_write_u8(state->answer_nb, (uint8_t)length);
-		netbuf_fwd_write(state->answer_nb, name, length);
+		netbuf_fwd_write_u8(txnb, (uint8_t)length);
+		netbuf_fwd_write(txnb, name, length);
 
 		if (*ptr == 0) {
 			break;
@@ -327,22 +281,22 @@ static bool mdns_responder_output_answer(struct mdns_responder_output_state *sta
 		name = ptr + 1;
 	}
 
-	netbuf_fwd_write_u8(state->answer_nb, 0);
+	netbuf_fwd_write_u8(txnb, 0);
 
 	if (dns_type == DNS_RECORD_TYPE_AAAA) {
 		uint8_t ip_addr_bytes[16];
 		ip_addr_get_ipv6_bytes(answer_ip, ip_addr_bytes);
-		netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_TYPE_AAAA);
-		netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_CLASS_IN);
-		netbuf_fwd_write_u32(state->answer_nb, 600); /* time to live */
-		netbuf_fwd_write_u16(state->answer_nb, 16); /* data length */
-		netbuf_fwd_write(state->answer_nb, ip_addr_bytes, 16);
+		netbuf_fwd_write_u16(txnb, DNS_RECORD_TYPE_AAAA);
+		netbuf_fwd_write_u16(txnb, DNS_RECORD_CLASS_IN | DNS_RECORD_CACHE_FLUSH);
+		netbuf_fwd_write_u32(txnb, 600); /* time to live */
+		netbuf_fwd_write_u16(txnb, 16); /* data length */
+		netbuf_fwd_write(txnb, ip_addr_bytes, 16);
 	} else {
-		netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_TYPE_A);
-		netbuf_fwd_write_u16(state->answer_nb, DNS_RECORD_CLASS_IN);
-		netbuf_fwd_write_u32(state->answer_nb, 600); /* time to live */
-		netbuf_fwd_write_u16(state->answer_nb, 4); /* data length */
-		netbuf_fwd_write_u32(state->answer_nb, ip_addr_get_ipv4(answer_ip));
+		netbuf_fwd_write_u16(txnb, DNS_RECORD_TYPE_A);
+		netbuf_fwd_write_u16(txnb, DNS_RECORD_CLASS_IN | DNS_RECORD_CACHE_FLUSH);
+		netbuf_fwd_write_u32(txnb, 600); /* time to live */
+		netbuf_fwd_write_u16(txnb, 4); /* data length */
+		netbuf_fwd_write_u32(txnb, ip_addr_get_ipv4(answer_ip));
 	}
 
 	state->answer_count++;
@@ -399,11 +353,6 @@ static void mdns_responder_recv(void *inst, const ip_addr_t *src_addr, uint16_t 
 			continue;
 		}
 
-		if (!mdns_responder_output_question(&state, dns_type, name)) {
-			success = false;
-			break;
-		}
-
 		ip_addr_t answer_ip;
 		if (!mdns_responser_lookup_name(idi, dns_type, name, &answer_ip)) {
 			continue;
@@ -415,57 +364,38 @@ static void mdns_responder_recv(void *inst, const ip_addr_t *src_addr, uint16_t 
 		}
 	}
 
-	if (!success || !state.question_nb) {
-		if (state.answer_nb) {
-			netbuf_free(state.answer_nb);
-		}
-		if (state.question_nb) {
-			netbuf_free(state.question_nb);
-		}
-		return;
-	}
-
-	netbuf_set_pos_to_start(state.question_nb);
-	size_t question_length = netbuf_get_remaining(state.question_nb);
-
-	size_t answer_length = 0;
-	if (state.answer_nb) {
-		netbuf_set_pos_to_start(state.answer_nb);
-		answer_length = netbuf_get_remaining(state.answer_nb);
-	}
-
-	struct netbuf *txnb = netbuf_alloc_with_rev_space(12 + question_length + answer_length);
+	struct netbuf *txnb = state.txnb;
 	if (!txnb) {
-		DEBUG_ERROR("out of memory");
-		if (state.answer_nb) {
-			netbuf_free(state.answer_nb);
-		}
-		netbuf_free(state.question_nb);
 		return;
 	}
 
-	if (answer_length > 0) {
-		netbuf_rev_copy(txnb, state.answer_nb, answer_length);
+	if (!success) {
+		netbuf_free(txnb);
+		return;
 	}
-	netbuf_rev_copy(txnb, state.question_nb, question_length);
+
+	netbuf_set_pos_to_start(txnb);
+	if (!netbuf_rev_make_space(txnb, 12)) {
+		DEBUG_ERROR("out of memory");
+		netbuf_free(txnb);
+		return;
+	}
+
 	netbuf_rev_write_u16(txnb, 0); /* additional */
 	netbuf_rev_write_u16(txnb, 0); /* authority */
 	netbuf_rev_write_u16(txnb, state.answer_count);
-	netbuf_rev_write_u16(txnb, state.question_count);
+	netbuf_rev_write_u16(txnb, 0); /* question count*/
 	netbuf_rev_write_u16(txnb, 0x8400); /* flags */
 	netbuf_rev_write_u16(txnb, transaction_id);
 
+	uint8_t ttl = 255; /* RFC6762 section 11 paragraph 1 */
 	if (src_port == MDNS_PORT) {
-		udp_socket_send_multipath(transport->sock, transport->multicast_ip, MDNS_PORT, idi, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+		udp_socket_send_multipath(transport->sock, transport->multicast_ip, MDNS_PORT, idi, ttl, UDP_TOS_DEFAULT, txnb);
 	} else {
-		udp_socket_send_netbuf(transport->sock, src_addr, src_port, ipv6_scope_id, UDP_TTL_DEFAULT, UDP_TOS_DEFAULT, txnb);
+		udp_socket_send_netbuf(transport->sock, src_addr, src_port, ipv6_scope_id, ttl, UDP_TOS_DEFAULT, txnb);
 	}
 
 	netbuf_free(txnb);
-	if (state.answer_nb) {
-		netbuf_free(state.answer_nb);
-	}
-	netbuf_free(state.question_nb);
 }
 
 bool mdns_responder_register_name(const char *name)

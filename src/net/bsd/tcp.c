@@ -21,7 +21,9 @@ THIS_FILE("tcp");
 void tcp_set_sock_nosigpipe(int sock)
 {
 	int set = 1;
-	setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, (char *)&set, sizeof(set));
+	if (setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, (char *)&set, sizeof(set)) < 0) {
+		DEBUG_WARN("setsockopt SO_NOSIGPIPE error %d", errno);
+	}
 }
 
 void tcp_set_sock_send_buffer_size(int sock, size_t size)

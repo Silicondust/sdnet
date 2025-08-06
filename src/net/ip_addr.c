@@ -120,15 +120,15 @@ uint8_t ip_addr_compute_score(const ip_addr_t *ip)
 		return 0; /* highest priority */
 	case IP_TYPE_IPV4_LOCALHOST:
 		return 1;
-	case IP_TYPE_IPV6_PUBLIC:
-		return 2;
-	case IP_TYPE_IPV6_SITELOCAL:
-		return 3;
-	case IP_TYPE_IPV6_LINKLOCAL:
-		return 4;
 	case IP_TYPE_IPV4_PUBLIC:
-		return 5;
+		return 2;
 	case IP_TYPE_IPV4_SITELOCAL:
+		return 3;
+	case IP_TYPE_IPV6_PUBLIC:
+		return 4;
+	case IP_TYPE_IPV6_SITELOCAL:
+		return 5;
+	case IP_TYPE_IPV6_LINKLOCAL:
 		return 6;
 	case IP_TYPE_IPV4_LINKLOCAL:
 		return 7;

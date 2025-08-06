@@ -327,5 +327,8 @@
     <ClCompile Include="..\web\language.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\web\xml_element.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

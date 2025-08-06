@@ -216,7 +216,7 @@ struct tcp_socket *tcp_socket_alloc(ip_mode_t ip_mode)
 
 	/* Create socket. */
 	int af_inet = (ip_mode == IP_MODE_IPV6) ? AF_INET6 : AF_INET;
-	ts->sock = (int)socket(af_inet, SOCK_STREAM, 0);
+	ts->sock = (int)socket(af_inet, SOCK_STREAM, IPPROTO_TCP);
 	if (ts->sock == -1) {
 		DEBUG_ERROR("failed to allocate socket");
 		heap_free(ts);
@@ -236,7 +236,9 @@ struct tcp_socket *tcp_socket_alloc(ip_mode_t ip_mode)
 #if defined(IPV6_SUPPORT)
 	if (ip_mode == IP_MODE_IPV6) {
 		int sock_opt_ipv6only = 1;
-		setsockopt(ts->sock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&sock_opt_ipv6only, sizeof(sock_opt_ipv6only));
+		if (setsockopt(ts->sock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&sock_opt_ipv6only, sizeof(sock_opt_ipv6only)) < 0) {
+			DEBUG_WARN("setsockopt IPV6_V6ONLY error %d", WSAGetLastError());
+		}
 	}
 #endif
 

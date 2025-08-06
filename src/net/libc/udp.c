@@ -356,12 +356,22 @@ udp_error_t udp_socket_listen_idi(struct udp_socket *us, struct ip_interface_t *
 	if (idi) {
 #if defined(IPV6_SUPPORT)
 		if (us->ip_mode == IP_MODE_IPV6) {
-			setsockopt(us->sock, IPPROTO_IPV6, IPV6_MULTICAST_IF, (char *)&ifindex, sizeof(ifindex));
+			if (setsockopt(us->sock, IPPROTO_IPV6, IPV6_MULTICAST_IF, (char *)&ifindex, sizeof(ifindex)) < 0) {
+				DEBUG_WARN("setsockopt IPV6_MULTICAST_IF error %d", errno);
+			}
 		} else {
-			setsockopt(us->sock, IPPROTO_IP, IP_MULTICAST_IF, (char *)&ifindex, sizeof(ifindex));
+			struct in_addr local_in_addr;
+			local_in_addr.s_addr = htonl(ip_addr_get_ipv4(&local_ip));
+			if (setsockopt(us->sock, IPPROTO_IP, IP_MULTICAST_IF, (char *)&local_in_addr, sizeof(local_in_addr)) < 0) {
+				DEBUG_WARN("setsockopt IP_MULTICAST_IF error %d", errno);
+			}
 		}
 #else
-		setsockopt(us->sock, IPPROTO_IP, IP_MULTICAST_IF, (char *)&ifindex, sizeof(ifindex));
+		struct in_addr local_in_addr;
+		local_in_addr.s_addr = htonl(ip_addr_get_ipv4(&local_ip));
+		if (setsockopt(us->sock, IPPROTO_IP, IP_MULTICAST_IF, (char *)&local_in_addr, sizeof(local_in_addr)) < 0) {
+			DEBUG_WARN("setsockopt IP_MULTICAST_IF error %d", errno);
+		}
 #endif
 	}
 
@@ -428,7 +438,7 @@ struct udp_socket *udp_socket_alloc(ip_mode_t ip_mode)
 
 	/* Create socket. */
 	int af_inet = (ip_mode == IP_MODE_IPV6) ? AF_INET6 : AF_INET;
-	us->sock = (int)socket(af_inet, SOCK_DGRAM, 0);
+	us->sock = (int)socket(af_inet, SOCK_DGRAM, IPPROTO_UDP);
 	if (us->sock == -1) {
 		DEBUG_ERROR("failed to allocate socket error %d", errno);
 		heap_free(us);
@@ -463,7 +473,9 @@ struct udp_socket *udp_socket_alloc(ip_mode_t ip_mode)
 #if defined(IPV6_SUPPORT)
 	if (ip_mode == IP_MODE_IPV6) {
 		int sock_opt_ipv6only = 1;
-		setsockopt(us->sock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&sock_opt_ipv6only, sizeof(sock_opt_ipv6only));
+		if (setsockopt(us->sock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&sock_opt_ipv6only, sizeof(sock_opt_ipv6only)) < 0) {
+			DEBUG_WARN("setsockopt IPV6_V6ONLY error %d", errno);
+		}
 	}
 #endif
 

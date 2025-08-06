@@ -19,10 +19,24 @@ THIS_FILE("ssdp_manager");
 
 static const ip_addr_t ssdp_multicast_ipv4 = IP_ADDR_INIT_IPV4(0xEFFFFFFA);
 #if defined(IPV6_SUPPORT)
-static const ip_addr_t ssdp_multicast_ipv6 = IP_ADDR_INIT_IPV6(0xFF02, 0, 0, 0, 0, 0, 0, 0xC);
+static const ip_addr_t ssdp_multicast_ipv6_linklocal = IP_ADDR_INIT_IPV6(0xFF02, 0, 0, 0, 0, 0, 0, 0xC);
+static const ip_addr_t ssdp_multicast_ipv6_sitelocal = IP_ADDR_INIT_IPV6(0xFF05, 0, 0, 0, 0, 0, 0, 0xC);
 #endif
 
 struct ssdp_manager_t ssdp_manager;
+
+struct ssdp_manager_transport_t *ssdp_manager_get_transport(struct ip_interface_t *idi)
+{
+	if (ip_interface_is_ipv6_linklocal(idi)) {
+		return &ssdp_manager.ipv6_linklocal;
+	}
+
+	if (ip_interface_is_ipv6(idi)) {
+		return &ssdp_manager.ipv6_sitelocal;
+	}
+
+	return &ssdp_manager.ipv4;
+}
 
 static http_parser_error_t ssdp_manager_http_event(void *arg, http_parser_event_t event, struct netbuf *nb)
 {
@@ -117,11 +131,18 @@ void ssdp_manager_init(uint16_t webserver_port)
 	}
 
 #if defined(IPV6_SUPPORT)
-	ssdp_manager.ipv6.multicast_ip = &ssdp_multicast_ipv6;
-	ssdp_manager.ipv6.sock = udp_socket_alloc(IP_MODE_IPV6);
-	if (ssdp_manager.ipv6.sock) {
-		udp_socket_listen(ssdp_manager.ipv6.sock, SSDP_SERVICE_PORT, ssdp_manager_sock_recv, NULL, NULL);
-		igmp_manager_join_group(ssdp_manager.ipv6.sock, &ssdp_multicast_ipv6);
+	ssdp_manager.ipv6_linklocal.multicast_ip = &ssdp_multicast_ipv6_linklocal;
+	ssdp_manager.ipv6_linklocal.sock = udp_socket_alloc(IP_MODE_IPV6);
+	if (ssdp_manager.ipv6_linklocal.sock) {
+		udp_socket_listen(ssdp_manager.ipv6_linklocal.sock, SSDP_SERVICE_PORT, ssdp_manager_sock_recv, NULL, NULL);
+		igmp_manager_join_group(ssdp_manager.ipv6_linklocal.sock, &ssdp_multicast_ipv6_linklocal);
+	}
+
+	ssdp_manager.ipv6_sitelocal.multicast_ip = &ssdp_multicast_ipv6_sitelocal;
+	ssdp_manager.ipv6_sitelocal.sock = udp_socket_alloc(IP_MODE_IPV6);
+	if (ssdp_manager.ipv6_sitelocal.sock) {
+		udp_socket_listen(ssdp_manager.ipv6_sitelocal.sock, SSDP_SERVICE_PORT, ssdp_manager_sock_recv, NULL, NULL);
+		igmp_manager_join_group(ssdp_manager.ipv6_sitelocal.sock, &ssdp_multicast_ipv6_sitelocal);
 	}
 #endif
 }

@@ -39,7 +39,7 @@ const struct http_parser_tag_lookup_t ssdp_service_manager_msearch_http_tag_list
 
 static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, struct ip_interface_t *idi, bool byebye)
 {
-	struct ssdp_manager_transport_t *transport = ip_interface_is_ipv6(idi) ? &ssdp_manager.ipv6 : &ssdp_manager.ipv4;
+	struct ssdp_manager_transport_t *transport = ssdp_manager_get_transport(idi);
 	if (!transport->sock) {
 		return;
 	}
@@ -96,16 +96,37 @@ static void ssdp_service_send_notify_internal(struct ssdp_service_t *service, st
 
 static void ssdp_service_send_notify(struct ssdp_service_t *service, bool byebye)
 {
+	/* only announce using the primary ipv4 address of each network interface */
+	uint32_t last_ifindex = 0;
+	bool sent_ipv4 = false;
+
 	struct ip_interface_t *idi = ip_interface_manager_get_head();
 	while (idi) {
-		ssdp_service_send_notify_internal(service, idi, byebye);
+		uint32_t ifindex = ip_interface_get_ifindex(idi);
+		if (ifindex != last_ifindex) {
+			last_ifindex = ifindex;
+			sent_ipv4 = false;
+		}
+
+		if (ip_interface_is_ipv6(idi)) {
+			ssdp_service_send_notify_internal(service, idi, byebye);
+		} else if (!sent_ipv4) {
+			ssdp_service_send_notify_internal(service, idi, byebye);
+			sent_ipv4 = true;
+		}
+
 		idi = slist_get_next(struct ip_interface_t, idi);
 	}
 }
 
 static void ssdp_service_send_discover_response(struct ssdp_service_t *service, const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id)
 {
-	struct ssdp_manager_transport_t *transport = ip_addr_is_ipv6(remote_ip) ? &ssdp_manager.ipv6 : &ssdp_manager.ipv4;
+	struct ip_interface_t *idi = ip_interface_manager_get_by_remote_ip(remote_ip, ipv6_scope_id);
+	if (!idi) {
+		return;
+	}
+
+	struct ssdp_manager_transport_t *transport = ssdp_manager_get_transport(idi);
 	if (!transport->sock) {
 		return;
 	}
@@ -131,7 +152,7 @@ static void ssdp_service_send_discover_response(struct ssdp_service_t *service, 
 	}
 
 	ip_addr_t local_ip;
-	ip_interface_manager_get_local_ip_for_remote_ip(remote_ip, ipv6_scope_id, &local_ip);
+	ip_interface_get_local_ip(idi, &local_ip);
 	success &= netbuf_sprintf(txnb, "Location: http://%V:%u%s\r\n", &local_ip, ssdp_manager.webserver_port, service->device_xml_uri);
 	success &= http_header_write_cache_control(txnb, 1800);
 

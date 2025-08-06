@@ -1,7 +1,7 @@
 /*
  * xml_process.c
  *
- * Copyright © 2019 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
+ * Copyright © 2019-2024 Silicondust USA Inc. <www.silicondust.com>.  All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -31,265 +31,195 @@ ref_t xml_process_deref(struct xml_process_t *xpi)
 		return xpi->refs;
 	}
 
+	xml_element_free_attributes_and_children(&xpi->document);
+	xml_element_free_attributes_and_children(&xpi->attributes);
 	xml_parser_deref(xpi->xml_parser);
 	heap_free(xpi);
 	return 0;
 }
 
-void xml_process_debug_print(const char *this_file, int line, const char *prefix, const char *path, struct slist_t *contents)
-{
-	debug_printf(this_file, line, "%s %s", prefix, path);
-
-	struct nvlist_entry_t *entry = slist_get_head(struct nvlist_entry_t, contents);
-	while (entry) {
-		if (entry->value_str) {
-			debug_printf(this_file, line, "\t%s=%s", entry->name, entry->value_str);
-		} else {
-			debug_printf(this_file, line, "\t%s=%lld", entry->name, entry->value_int64);
-		}
-
-		entry = slist_get_next(struct nvlist_entry_t, entry);
-	}
-}
-
-static void xml_process_autodetect_set_value(struct xml_process_t *xpi, const char *name, struct netbuf *nb)
-{
-	if (netbuf_get_remaining(nb) == 0) {
-		nvlist_set_str(&xpi->contents, name, "");
-		return;
-	}
-
-	addr_t end;
-	int64_t value_int64 = netbuf_fwd_strtoll(nb, &end, 10);
-	if (end == netbuf_get_end(nb)) {
-		char buffer[32];
-		sprintf_custom(buffer, buffer + sizeof(buffer), "%lld", value_int64);
-
-		if (netbuf_fwd_strcmp(nb, buffer) == 0) {
-			nvlist_set_int64(&xpi->contents, name, value_int64);
-			return;
-		}
-	}
-
-	nvlist_set_str_nb(&xpi->contents, name, nb);
-}
-
-static xml_parser_error_t xml_process_apply_element_start_name(struct xml_process_t *xpi, struct netbuf *nb)
+static bool xml_process_path_push(struct xml_process_t *xpi, const char *name)
 {
 	char *ptr = strchr(xpi->path, 0);
 	char *end = xpi->path + sizeof(xpi->path);
+	return sprintf_custom(ptr, end, "|%s", name);
+}
 
-	if ((xpi->mode == XML_PROCESS_MODE_CALLBACK_SUB_ELEMENTS) && xpi->element_found) {
-		if (xpi->open_element_callback) {
-			xml_process_ref(xpi);
-			xpi->mode = xpi->open_element_callback(xpi->callback_arg, xpi->path, &xpi->contents);
-			if (xml_process_deref(xpi) <= 0) {
-				return XML_PARSER_ESTOP;
+static bool xml_process_path_pop(struct xml_process_t *xpi)
+{
+	char *ptr = strrchr(xpi->path, '|');
+	if (!ptr) {
+		return false;
+	}
+
+	*ptr = 0;
+	return true;
+}
+
+static xml_process_callback_t xml_process_find_callback(struct xml_process_t *xpi, bool *pdispose)
+{
+	if (!xpi->callbacks) {
+		*pdispose = true;
+		return NULL;
+	}
+
+	const char *path = xpi->path + 1; /* skip leading '|' */
+	const struct xml_process_callback_entry_t *entry = xpi->callbacks;
+	while (entry->path) {
+		if (strprefixcmp(path, entry->path) == 0) {
+			if (strcmp(path, entry->path) == 0) {
+				*pdispose = true;
+				return entry->callback;
 			}
+
+			*pdispose = false;
+			return NULL;
 		}
 
-		switch (xpi->mode) {
-		case XML_PROCESS_MODE_CALLBACK_SUB_ELEMENTS:
-			nvlist_clear_all(&xpi->contents);
-			break;
+		entry++;
+	}
 
-		case XML_PROCESS_MODE_BUILD_CONTENT:
-			xpi->path_match_ptr = ptr;
-			break;
+	*pdispose = true;
+	return NULL;
+}
 
-		case XML_PROCESS_MODE_IGNORE_ELEMENT:
-			nvlist_clear_all(&xpi->contents);
-			xpi->path_match_ptr = ptr;
-			break;
+static xml_parser_error_t xml_process_event_element_start_name(struct xml_process_t *xpi, struct netbuf *nb)
+{
+	if (xpi->element_name[0]) {
+		xpi->current_element = xml_element_append_container(xpi->current_container, xpi->element_name);
+		if (!xpi->current_element) {
+			DEBUG_ERROR("out of memory");
+			xpi->error = true;
+			return XML_PARSER_ESTOP;
 		}
+
+		slist_steal(&xpi->current_element->attributes, &xpi->attributes.attributes);
+		xpi->element_name[0] = 0;
+
+		xpi->current_container = xpi->current_element;
+		xpi->current_element = NULL;
 	}
 
 	size_t name_length = netbuf_get_remaining(nb);
 	if (name_length == 0) {
-		DEBUG_WARN("empty name");
+		DEBUG_WARN("element name empty");
+		xpi->error = true;
+		return XML_PARSER_ESTOP;
+	}
+	if (name_length >= sizeof(xpi->attribute_name)) {
+		DEBUG_WARN("element name too long");
 		xpi->error = true;
 		return XML_PARSER_ESTOP;
 	}
 
-	if (ptr + name_length + 2 >= end) {
+	netbuf_fwd_read(nb, xpi->element_name, name_length);
+	xpi->element_name[name_length] = 0;
+
+	if (!xml_process_path_push(xpi, xpi->element_name)) {
 		DEBUG_WARN("path too long");
 		xpi->error = true;
 		return XML_PARSER_ESTOP;
 	}
 
-	if (ptr > xpi->path) {
-		*ptr++ = '|';
-	}
-
-	netbuf_fwd_read(nb, ptr, name_length);
-	ptr[name_length] = 0;
-
-	xpi->element_found = true;
 	return XML_PARSER_OK;
 }
 
-static xml_parser_error_t xml_process_apply_element_end_notify(struct xml_process_t *xpi, char *ptr)
+static xml_parser_error_t xml_process_event_element_end_name(struct xml_process_t *xpi, struct netbuf *nb)
 {
-	switch (xpi->mode) {
-	case XML_PROCESS_MODE_CALLBACK_SUB_ELEMENTS:
-		if (xpi->completed_element_callback) {
-			xml_process_ref(xpi);
-			xpi->completed_element_callback(xpi->callback_arg, xpi->path, &xpi->contents);
-			if (xml_process_deref(xpi) <= 0) {
-				return XML_PARSER_ESTOP;
-			}
-		}
-
-		nvlist_clear_all(&xpi->contents);
-		return XML_PARSER_OK;
-
-	case XML_PROCESS_MODE_BUILD_CONTENT:
-		if (ptr < xpi->path_match_ptr) {
-			if (xpi->completed_element_callback) {
-				xml_process_ref(xpi);
-				xpi->completed_element_callback(xpi->callback_arg, xpi->path, &xpi->contents);
-				if (xml_process_deref(xpi) <= 0) {
-					return XML_PARSER_ESTOP;
-				}
-			}
-
-			xpi->mode = XML_PROCESS_MODE_CALLBACK_SUB_ELEMENTS;
-			xpi->path_match_ptr = NULL;
-			nvlist_clear_all(&xpi->contents);
-		}
-
-		return XML_PARSER_OK;
-
-	case XML_PROCESS_MODE_IGNORE_ELEMENT:
-		if (ptr < xpi->path_match_ptr) {
-			xpi->mode = XML_PROCESS_MODE_CALLBACK_SUB_ELEMENTS;
-			xpi->path_match_ptr = NULL;
-			nvlist_clear_all(&xpi->contents);
-		}
-
-		return XML_PARSER_OK;
-
-	default:
-		return XML_PARSER_OK;
-	}
-}
-
-static xml_parser_error_t xml_process_apply_element_end_name(struct xml_process_t *xpi, struct netbuf *nb)
-{
-	size_t name_length = netbuf_get_remaining(nb);
-	if (name_length == 0) {
-		DEBUG_WARN("empty name");
-		xpi->error = true;
-		return XML_PARSER_ESTOP;
-	}
-
-	char *end = strchr(xpi->path, 0);
-	char *ptr = end - name_length;
-	if (ptr < xpi->path) {
-		DEBUG_WARN("close miss-match: %s", xpi->path);
-		xpi->error = true;
-		return XML_PARSER_ESTOP;
-	}
-
-	if (netbuf_fwd_memcmp(nb, ptr, name_length) != 0) {
-		DEBUG_WARN("close miss-match: %s", xpi->path);
-		xpi->error = true;
-		return XML_PARSER_ESTOP;
-	}
-
-	if (ptr > xpi->path) {
-		ptr--;
-		if (*ptr != '|') {
-			DEBUG_WARN("close miss-match: %s", xpi->path);
+	if (xpi->element_name[0]) {
+		xpi->current_element = xml_element_append_name_value_blank(xpi->current_container, xpi->element_name);
+		if (!xpi->current_element) {
+			DEBUG_ERROR("out of memory");
 			xpi->error = true;
+			return XML_PARSER_ESTOP;
+		}
+
+		slist_steal(&xpi->current_element->attributes, &xpi->attributes.attributes);
+		xpi->element_name[0] = 0;
+	}
+
+	struct xml_element_t *callback_element;
+
+	if (xpi->current_element) {
+		/* close of a non-container element */
+		callback_element = xpi->current_element;
+		xpi->current_element = NULL;
+	} else {
+		/* close of a container - move up one level making its parent the new current */
+		callback_element = xpi->current_container;
+		xpi->current_container = xpi->current_container->parent;
+	}
+
+	bool dispose = false;
+	xml_process_callback_t callback = xml_process_find_callback(xpi, &dispose);
+	if (callback) {
+		xml_process_ref(xpi);
+		callback(xpi->callback_arg, callback_element);
+		if (xml_process_deref(xpi) <= 0) {
 			return XML_PARSER_ESTOP;
 		}
 	}
 
-	xml_parser_error_t ret = xml_process_apply_element_end_notify(xpi, ptr);
-	if (ret != XML_PARSER_OK) {
-		return ret;
-	}
-
-	*ptr = 0;
-	xpi->element_found = false;
-	return XML_PARSER_OK;
-}
-
-static xml_parser_error_t xml_process_apply_element_self_close(struct xml_process_t *xpi)
-{
-	char *ptr = strrchr(xpi->path, '|');
-	if (!ptr) {
-		ptr = xpi->path;
-	}
-
-	if (xpi->mode != XML_PROCESS_MODE_IGNORE_ELEMENT) {
-		const char *name = (xpi->path_match_ptr) ? xpi->path_match_ptr + 1 : "";
-		nvlist_set_str(&xpi->contents, name, "");
-	}
-
-	xml_parser_error_t ret = xml_process_apply_element_end_notify(xpi, ptr);
-	if (ret != XML_PARSER_OK) {
-		return ret;
-	}
-
-	*ptr = 0;
-	xpi->element_found = false;
-	return XML_PARSER_OK;
-}
-
-static xml_parser_error_t xml_process_apply_element_text(struct xml_process_t *xpi, struct netbuf *nb)
-{
-	if (xpi->mode != XML_PROCESS_MODE_IGNORE_ELEMENT) {
-		const char *name = (xpi->path_match_ptr) ? xpi->path_match_ptr + 1 : "";
-		xml_process_autodetect_set_value(xpi, name, nb);
-	}
-
-	return XML_PARSER_OK;
-}
-
-static xml_parser_error_t xml_process_apply_attribute_name(struct xml_process_t *xpi, struct netbuf *nb)
-{
-	size_t name_length = netbuf_get_remaining(nb);
-	if (name_length == 0) {
-		DEBUG_WARN("empty name");
-		xpi->error = true;
-		return XML_PARSER_ESTOP;
-	}
-
-	char *ptr = strchr(xpi->path, 0);
-	char *end = xpi->path + sizeof(xpi->path);
-
-	if (ptr + name_length + 3 >= end) {
-		DEBUG_WARN("path too long");
-		xpi->error = true;
-		return XML_PARSER_ESTOP;
-	}
-
-	*ptr++ = '|';
-	*ptr++ = '@';
-
-	netbuf_fwd_read(nb, ptr, name_length);
-	ptr[name_length] = 0;
-
-	return XML_PARSER_OK;
-}
-
-static xml_parser_error_t xml_process_apply_attribute_value(struct xml_process_t *xpi, struct netbuf *nb)
-{
-	char *ptr = strrchr(xpi->path, '|');
-	if (!ptr) {
+	if (!xml_process_path_pop(xpi)) {
 		DEBUG_WARN("path error");
 		xpi->error = true;
 		return XML_PARSER_ESTOP;
 	}
 
-	if (xpi->mode != XML_PROCESS_MODE_IGNORE_ELEMENT) {
-		const char *name = (xpi->path_match_ptr) ? xpi->path_match_ptr + 1 : ptr + 1;
-		xml_process_autodetect_set_value(xpi, name, nb);
+	if (dispose) {
+		xml_element_detach_from_parent(callback_element);
+		xml_element_free(callback_element);
 	}
 
-	*ptr = 0;
+	return XML_PARSER_OK;
+}
+
+static xml_parser_error_t xml_process_event_element_text(struct xml_process_t *xpi, struct netbuf *nb)
+{
+	DEBUG_ASSERT(xpi->element_name[0], "element state error");
+
+	xpi->current_element = xml_element_append_name_value_nb(xpi->current_container, xpi->element_name, nb);
+	if (!xpi->current_element) {
+		DEBUG_ERROR("out of memory");
+		xpi->error = true;
+		return XML_PARSER_ESTOP;
+	}
+
+	slist_steal(&xpi->current_element->attributes, &xpi->attributes.attributes);
+	xpi->element_name[0] = 0;
+	return XML_PARSER_OK;
+}
+
+static xml_parser_error_t xml_process_event_attribute_name(struct xml_process_t *xpi, struct netbuf *nb)
+{
+	DEBUG_ASSERT(xpi->attribute_name[0] == 0, "attribute state error");
+
+	size_t name_length = netbuf_get_remaining(nb);
+	if (name_length == 0) {
+		DEBUG_WARN("attribute name empty");
+		return XML_PARSER_ESTOP;
+	}
+	if (name_length >= sizeof(xpi->attribute_name)) {
+		DEBUG_WARN("attribute name too long");
+		return XML_PARSER_ESTOP;
+	}
+
+	netbuf_fwd_read(nb, xpi->attribute_name, name_length);
+	xpi->attribute_name[name_length] = 0;
+	return XML_PARSER_OK;
+}
+
+static xml_parser_error_t xml_process_event_attribute_value(struct xml_process_t *xpi, struct netbuf *nb)
+{
+	DEBUG_ASSERT(xpi->attribute_name[0], "attribute state error");
+
+	if (!xml_element_append_attribute_nb(&xpi->attributes, xpi->attribute_name, nb)) {
+		DEBUG_ERROR("out of memory");
+		xpi->error = true;
+		return XML_PARSER_ESTOP;
+	}
+
+	xpi->attribute_name[0] = 0;
 	return XML_PARSER_OK;
 }
 
@@ -298,28 +228,27 @@ static xml_parser_error_t xml_process_parser_callback(void *arg, xml_parser_even
 	struct xml_process_t *xpi = (struct xml_process_t *)arg;
 
 	switch (xml_event) {
+	default:
 	case XML_PARSER_EVENT_ELEMENT_START_NAMESPACE:
 	case XML_PARSER_EVENT_ELEMENT_END_NAMESPACE:
 	case XML_PARSER_EVENT_ATTRIBUTE_NAMESPACE:
 		return XML_PARSER_OK;
 
 	case XML_PARSER_EVENT_ELEMENT_START_NAME:
-		return xml_process_apply_element_start_name(xpi, nb);
+		return xml_process_event_element_start_name(xpi, nb);
 
 	case XML_PARSER_EVENT_ELEMENT_END_NAME:
-		return xml_process_apply_element_end_name(xpi, nb);
-
 	case XML_PARSER_EVENT_ELEMENT_SELF_CLOSE:
-		return xml_process_apply_element_self_close(xpi);
+		return xml_process_event_element_end_name(xpi, nb);
 
 	case XML_PARSER_EVENT_ELEMENT_TEXT:
-		return xml_process_apply_element_text(xpi, nb);
+		return xml_process_event_element_text(xpi, nb);
 
 	case XML_PARSER_EVENT_ATTRIBUTE_NAME:
-		return xml_process_apply_attribute_name(xpi, nb);
+		return xml_process_event_attribute_name(xpi, nb);
 
 	case XML_PARSER_EVENT_ATTRIBUTE_VALUE:
-		return xml_process_apply_attribute_value(xpi, nb);
+		return xml_process_event_attribute_value(xpi, nb);
 
 	case XML_PARSER_EVENT_PARSE_ERROR:
 		DEBUG_WARN("xml parse error");
@@ -330,9 +259,6 @@ static xml_parser_error_t xml_process_parser_callback(void *arg, xml_parser_even
 		DEBUG_WARN("xml internal error");
 		xpi->error = true;
 		return XML_PARSER_ESTOP;
-
-	default:
-		return XML_PARSER_OK;
 	}
 }
 
@@ -353,25 +279,26 @@ bool xml_process_recv_str(struct xml_process_t *xpi, const char *str)
 
 bool xml_process_verify_success(struct xml_process_t *xpi)
 {
-	return !xpi->error && (xpi->path[0] == 0);
+	return !xpi->error && (xpi->current_container == &xpi->document);
 }
 
 void xml_process_reset(struct xml_process_t *xpi)
 {
 	xml_parser_reset(xpi->xml_parser);
-	nvlist_clear_all(&xpi->contents);
+	xml_element_free_attributes_and_children(&xpi->document);
+	xml_element_free_attributes_and_children(&xpi->attributes);
 
-	xpi->mode = XML_PROCESS_MODE_CALLBACK_SUB_ELEMENTS;
 	xpi->error = false;
-	xpi->element_found = false;
+	xpi->current_container = &xpi->document;
+	xpi->current_element = NULL;
+	xpi->element_name[0] = 0;
+	xpi->attribute_name[0] = 0;
 	xpi->path[0] = 0;
-	xpi->path_match_ptr = NULL;
 }
 
-void xml_process_register_callbacks(struct xml_process_t *xpi, xml_process_open_element_callback_t open_element_callback, xml_process_completed_element_callback_t completed_element_callback, void *callback_arg)
+void xml_process_register_callbacks(struct xml_process_t *xpi, const struct xml_process_callback_entry_t callbacks[], void *callback_arg)
 {
-	xpi->open_element_callback = open_element_callback;
-	xpi->completed_element_callback = completed_element_callback;
+	xpi->callbacks = callbacks;
 	xpi->callback_arg = callback_arg;
 }
 
@@ -388,6 +315,7 @@ struct xml_process_t *xml_process_alloc(void)
 		return NULL;
 	}
 
+	xpi->current_container = &xpi->document;
 	xpi->refs = 1;
 	return xpi;
 }

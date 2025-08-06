@@ -488,7 +488,7 @@ tcp_error_t tcp_connection_connect(struct tcp_connection *tc, const ip_addr_t *d
 	tc->ip_mode = ip_addr_is_ipv6(dest_addr) ? IP_MODE_IPV6 : IP_MODE_IPV4;
 
 	int af_inet = (tc->ip_mode == IP_MODE_IPV6) ? AF_INET6 : AF_INET;
-	int sock = (int)socket(af_inet, SOCK_STREAM, 0);
+	int sock = (int)socket(af_inet, SOCK_STREAM, IPPROTO_TCP);
 	if (sock == -1) {
 		DEBUG_ERROR("failed to allocate socket");
 		return TCP_ERROR_FAILED;

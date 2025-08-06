@@ -101,7 +101,9 @@ void tcp_connection_reset(struct tcp_connection *tc)
 static void tcp_set_sock_send_buffer_size(int sock, size_t size)
 {
 	int send_buffer_size_set = (int)size;
-	setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&send_buffer_size_set, (int)sizeof(send_buffer_size_set));
+	if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&send_buffer_size_set, (int)sizeof(send_buffer_size_set)) < 0) {
+		DEBUG_WARN("setsockopt SO_SNDBUF error %d", WSAGetLastError());
+	}
 
 	if (RUNTIME_DEBUG) {
 		int send_buffer_size = 0;
@@ -551,7 +553,7 @@ tcp_error_t tcp_connection_connect(struct tcp_connection *tc, const ip_addr_t *d
 	tc->ip_mode = ip_addr_is_ipv6(dest_addr) ? IP_MODE_IPV6 : IP_MODE_IPV4;
 
 	int af_inet = (tc->ip_mode == IP_MODE_IPV6) ? AF_INET6 : AF_INET;
-	int sock = (int)socket(af_inet, SOCK_STREAM, 0);
+	int sock = (int)socket(af_inet, SOCK_STREAM, IPPROTO_TCP);
 	if (sock == -1) {
 		DEBUG_ERROR("failed to allocate socket");
 		return TCP_ERROR_FAILED;

@@ -126,6 +126,7 @@
     <ClCompile Include="..\web\url.c" />
     <ClCompile Include="..\web\url_params.c" />
     <ClCompile Include="..\web\url_unescape.c" />
+    <ClCompile Include="..\web\xml_element.c" />
     <ClCompile Include="..\web\xml_parser.c" />
     <ClCompile Include="..\web\xml_process.c" />
     <ClCompile Include="os.c">

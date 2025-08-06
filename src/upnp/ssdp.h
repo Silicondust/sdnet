@@ -96,7 +96,8 @@ struct ssdp_manager_transport_t {
 
 struct ssdp_manager_t {
 	struct ssdp_manager_transport_t ipv4;
-	struct ssdp_manager_transport_t ipv6;
+	struct ssdp_manager_transport_t ipv6_linklocal;
+	struct ssdp_manager_transport_t ipv6_sitelocal;
 	struct http_parser_t *http_parser;
 	uint16_t webserver_port;
 	bool running;
@@ -108,6 +109,7 @@ extern struct ssdp_manager_t ssdp_manager;
 extern void ssdp_service_manager_init(void);
 extern void ssdp_service_manager_network_start(void);
 extern void ssdp_service_manager_network_stop(void);
+extern struct ssdp_manager_transport_t *ssdp_manager_get_transport(struct ip_interface_t *idi);
 extern void ssdp_service_manager_msearch_recv_complete(const ip_addr_t *remote_ip, uint16_t remote_port, uint32_t ipv6_scope_id);
 extern const struct http_parser_tag_lookup_t ssdp_service_manager_msearch_http_tag_list[];
 

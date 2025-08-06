@@ -41,7 +41,7 @@ const struct http_parser_tag_lookup_t ssdp_client_manager_response_http_tag_list
 
 static void ssdp_client_send_msearch_internal(struct ssdp_client_t *client, struct ip_interface_t *idi)
 {
-	struct ssdp_manager_transport_t *transport = ip_interface_is_ipv6(idi) ? &ssdp_manager.ipv6 : &ssdp_manager.ipv4;
+	struct ssdp_manager_transport_t *transport = ssdp_manager_get_transport(idi);
 	if (!transport->sock) {
 		return;
 	}

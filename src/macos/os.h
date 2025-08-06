@@ -84,6 +84,7 @@
 #include <web/url_params.h>
 #include <web/url_unescape.h>
 #include <web/xml_parser.h>
+#include <web/xml_element.h>
 #include <web/xml_process.h>
 #include <web/http_server.h>
 #include <webclient/webclient.h>

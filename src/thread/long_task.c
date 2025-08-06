@@ -17,6 +17,14 @@
 
 THIS_FILE("long_task");
 
+#if !defined(LONG_TASK_MAX_QUEUE_DEPTH)
+#define LONG_TASK_MAX_QUEUE_DEPTH 32
+#endif
+
+#if !defined(LONG_TASK_THREAD_COUNT)
+#define LONG_TASK_THREAD_COUNT 1
+#endif
+
 struct long_task_manager_t
 {
 	struct mqueue_t *mqueue;
@@ -104,11 +112,13 @@ bool long_task_inline(long_task_execute_func_t execute, long_task_result_func_t 
 
 void long_task_manager_start(void)
 {
-	thread_start(long_task_thread_start, NULL);
+	for (int i = 0; i < LONG_TASK_THREAD_COUNT; i++) {
+		thread_start(long_task_thread_start, NULL);
+	}
 }
 
 void long_task_manager_init(void)
 {
 	long_task_manager.signal = thread_signal_alloc();
-	long_task_manager.mqueue = mqueue_alloc(32, long_task_manager.signal);
+	long_task_manager.mqueue = mqueue_alloc(LONG_TASK_MAX_QUEUE_DEPTH, long_task_manager.signal);
 }

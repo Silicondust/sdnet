@@ -342,7 +342,7 @@ static json_parser_error_t json_parser_parse_estop(struct json_parser_t *jpi, st
 static json_parser_error_t json_parser_parse_start(struct json_parser_t *jpi, struct netbuf *nb)
 {
 	jpi->parse_func = json_parser_parse_name_or_value;
-	return json_parser_parse_name_or_value(jpi, nb);
+	return json_parser_parse_value(jpi, nb);
 }
 
 static json_parser_error_t json_parser_parse_name_or_value(struct json_parser_t *jpi, struct netbuf *nb)

@@ -239,40 +239,6 @@ static bool gpt_write_partition_array(struct file_t *dev_file, struct gpt_state_
 	return true;
 }
 
-static bool gpt_write_partition_cleanup(struct file_t *dev_file, struct gpt_state_t *gpt_state)
-{
-	uint8_t zero[512];
-	memset(zero, 0, 512);
-
-	/* wipe area between usable start and partition 1, plus the fist 16k of the partition */
-	if (!file_seek_set(dev_file, gpt_state->usable_begin * 512)) {
-		DEBUG_ERROR("seek failed (%d)", errno);
-		return false;
-	}
-
-	for (uint64_t i = gpt_state->usable_begin; i < gpt_state->partition_begin + 32; i++) {
-		if (file_write(dev_file, zero, 512) != 512) {
-			DEBUG_ERROR("write failed (%d)", errno);
-			return false;
-		}
-	}
-
-	/* wipe area between partition 1 end and usable end, plus the last 16k of the partition */
-	if (!file_seek_set(dev_file, (gpt_state->partition_end - 32) * 512)) {
-		DEBUG_ERROR("seek failed (%d)", errno);
-		return false;
-	}
-
-	for (uint64_t i = gpt_state->partition_end - 32; i < gpt_state->usable_end; i++) {
-		if (file_write(dev_file, zero, 512) != 512) {
-			DEBUG_ERROR("write failed (%d)", errno);
-			return false;
-		}
-	}
-
-	return true;
-}
-
 bool gpt_create_with_one_partition(struct file_t *dev_file)
 {
 	struct gpt_state_t gpt_state;
@@ -301,13 +267,15 @@ bool gpt_create_with_one_partition(struct file_t *dev_file)
 	gpt_state.usable_end = gpt_state.secondary_array_location;
 
 	gpt_state.partition_begin = 2048;
-	gpt_state.partition_end = (gpt_state.usable_end / 2048) * 2048;
+	gpt_state.partition_end = gpt_state.usable_end;
 
 #if defined(GPT_MAX_PARTITION_SIZE_SECTORS)
 	if (gpt_state.partition_end - gpt_state.partition_begin > GPT_MAX_PARTITION_SIZE_SECTORS) {
 		gpt_state.partition_end = gpt_state.partition_begin + GPT_MAX_PARTITION_SIZE_SECTORS;
 	}
 #endif
+
+	gpt_state.partition_end = (gpt_state.partition_end / 8) * 8; /* 4K align */
 
 	/* Write GPT partition array */
 	uint32_t partition_array_crc;
@@ -317,11 +285,6 @@ bool gpt_create_with_one_partition(struct file_t *dev_file)
 
 	/* Write GPT partition header */
 	if (!gpt_write_partition_header(dev_file, &gpt_state, partition_array_crc)) {
-		return false;
-	}
-
-	/* Wipe gaps and old filesystem headers */
-	if (!gpt_write_partition_cleanup(dev_file, &gpt_state)) {
 		return false;
 	}
 
