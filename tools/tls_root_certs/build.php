@@ -75,7 +75,7 @@ function process()
 {
 	unlink('public_root_certs');
 
-	file_put_contents('public_root_certs.csv', fopen('https://ccadb-public.secure.force.com/mozilla/IncludedCACertificateReportPEMCSV', 'r'));
+	file_put_contents('public_root_certs.csv', fopen('https://ccadb.my.salesforce-sites.com/mozilla/IncludedCACertificateReportPEMCSV', 'r'));
 
 	$fp = fopen('public_root_certs.csv', 'r');
 	if (!$fp) {
